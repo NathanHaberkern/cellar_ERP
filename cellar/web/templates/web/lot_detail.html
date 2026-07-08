@@ -1,0 +1,23 @@
+{% extends "web/base.html" %}
+{% block title %}{{ lot.code }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow"><a href="{% url 'lots' %}">Lots</a> / #{{ lot.pk }}</p>
+    <h1><span class="lot-code" style="font-size:20px">{{ lot.code }}</span></h1>
+  </div>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="on" hx-get="{% url 'lot-composition' lot.pk %}" hx-target="#lot-panel"
+          onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Composition</button>
+  <button hx-get="{% url 'lot-oak' lot.pk %}" hx-target="#lot-panel"
+          onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Oak</button>
+  <button hx-get="{% url 'lot-cost' lot.pk %}" hx-target="#lot-panel"
+          onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Cost</button>
+</div>
+<!-- first panel loads on page ready -->
+<div id="lot-panel" class="panel" hx-get="{% url 'lot-composition' lot.pk %}" hx-trigger="load">
+  <div class="empty">Loading…</div>
+</div>
+{% endblock %}

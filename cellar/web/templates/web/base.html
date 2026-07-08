@@ -1,0 +1,45 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Cellar{% endblock %} · St. Amant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'web/app.css' %}">
+  <!-- HTMX via CDN. To self-host: download htmx.min.js into static/web/ and swap this src. -->
+  <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
+</head>
+<!-- CSRF token rides every HTMX request so session-authenticated POSTs pass Django's CSRF check -->
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% if user.is_authenticated %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="wordmark">ST. AMANT</span>
+      <span class="brand-sub">Cellar</span>
+    </div>
+    <nav>
+      <a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}on{% endif %}">Dashboard</a>
+      <a href="{% url 'lots' %}" class="{% if nav == 'lots' %}on{% endif %}">Lots</a>
+      <a href="{% url 'move' %}" class="{% if nav == 'move' %}on{% endif %}">Move</a>
+      <a href="{% url 'reports' %}" class="{% if nav == 'reports' %}on{% endif %}">Reports</a>
+      <a href="{% url 'ledger' %}" class="{% if nav == 'ledger' %}on{% endif %}">Ledger</a>
+      <a href="{% url 'additives' %}" class="{% if nav == 'reference' %}on{% endif %}">Reference</a>
+    </nav>
+    <form class="signout" method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <div class="who">{{ user.get_username }}</div>
+      <button type="submit">Sign out</button>
+    </form>
+  </aside>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+  {% block auth_content %}{% endblock %}
+{% endif %}
+</body>
+</html>

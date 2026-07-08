@@ -1,0 +1,28 @@
+{% extends "web/base.html" %}
+{% block title %}{{ label }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{% url 'ledger' %}">Ledger</a></p><h1>{{ label }}</h1></div>
+  {% if can_void %}
+  <label class="inline">
+    <input type="checkbox" name="hide_voided" value="1"
+           hx-get="{% url 'ledger-rows' slug %}" hx-target="#ledger-rows" hx-swap="innerHTML"
+           hx-trigger="change" {% if hide_voided %}checked{% endif %}>
+    Hide voided
+  </label>
+  {% endif %}
+</div>
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:1%">ID</th>
+      {% for h in headers %}<th>{{ h }}</th>{% endfor %}
+      <th style="width:1%">Status</th>
+      <th style="width:1%"></th>
+    </tr></thead>
+    <tbody id="ledger-rows">
+      {% include "web/_ledger_rows.html" %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "web/base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Compliance</p><h1>Reports</h1></div></div>
+
+<div class="card" style="max-width:680px;margin-bottom:20px">
+  <div class="row">
+    <div style="flex:2 1 220px">
+      <label for="report">Report</label>
+      <select name="report" id="report" form="report-form"
+              onchange="reportNeeds(this.value)">
+        {% for key, title, needs in reports %}<option value="{{ key }}" data-needs="{{ needs }}">{{ title }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="flex:0 1 100px"><label for="year">Year</label>
+      <input type="number" name="year" id="year" form="report-form" placeholder="2025"></div>
+    <div id="fld-month" style="flex:0 1 90px"><label for="month">Month</label>
+      <input type="number" name="month" id="month" form="report-form" placeholder="10" min="1" max="12"></div>
+  </div>
+  <div class="row" id="fld-dates" style="margin-top:10px;display:none">
+    <div><label for="start">Period start</label>
+      <input type="text" name="start" id="start" form="report-form" placeholder="2025-10-01"></div>
+    <div><label for="end">Period end</label>
+      <input type="text" name="end" id="end" form="report-form" placeholder="2026-01-01"></div>
+  </div>
+  <form id="report-form" hx-post="{% url 'report-run' %}" hx-target="#report-out" hx-swap="innerHTML"
+        style="margin-top:14px">
+    <button class="btn" type="submit">Run report</button>
+    <span id="report-hint" style="color:var(--muted);font-size:12px;margin-left:10px"></span>
+  </form>
+</div>
+
+<div id="report-out"></div>
+
+<script>
+function reportNeeds(v){
+  var opt = document.querySelector('#report option[value="'+v+'"]');
+  var needs = opt ? opt.dataset.needs : 'year_month';
+  document.getElementById('fld-month').style.display = (needs==='year_month') ? '' : 'none';
+  document.getElementById('fld-dates').style.display = (needs==='year_dates') ? 'flex' : 'none';
+  var hints = {year_month:'Year and month.', year_dates:'Year plus period start/end (excise).', year:'Year only.'};
+  document.getElementById('report-hint').textContent = hints[needs] || '';
+}
+reportNeeds(document.getElementById('report').value);
+</script>
+{% endblock %}

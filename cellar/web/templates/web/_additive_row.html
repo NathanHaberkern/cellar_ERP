@@ -1,0 +1,11 @@
+{% if error %}
+  <tr><td colspan="5"><div class="msg err">{{ error }}</div></td></tr>
+{% elif additive %}
+  <tr id="additive-{{ additive.pk }}">
+    <td style="color:var(--muted)">{{ additive.pk }}</td>
+    <td>{{ additive.name }}</td>
+    <td>{{ additive.get_category_display }}</td>
+    <td>{{ additive.unit }}</td>
+    <td>{% if additive.unit_cost != None %}{{ additive.unit_cost }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
+  </tr>
+{% endif %}

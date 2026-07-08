@@ -1,0 +1,12 @@
+{% load web_extras %}
+{% if error %}
+  <div class="msg err">{{ error }}</div>
+  <p class="verify">The panel couldn't compute for this lot (likely no recorded data yet).</p>
+{% else %}
+  <h3 style="margin:0 0 12px">{{ title }}</h3>
+  {% if value|is_listy and not value %}
+    <div class="empty">Nothing recorded yet.</div>
+  {% else %}
+    {% include "web/_generic.html" with value=value %}
+  {% endif %}
+{% endif %}

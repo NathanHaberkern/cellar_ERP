@@ -1,0 +1,18 @@
+{% extends "web/base.html" %}
+{% block title %}Ledger{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Append-only</p><h1>Ledger</h1></div></div>
+<p style="color:var(--muted);max-width:62ch;margin:0 0 20px">
+  These are insert-only records. Nothing here is edited or deleted — to correct a
+  mistake you <strong>void</strong> the row (it stays, struck through) and add a new
+  one. Aggregates and reports exclude voided rows.
+</p>
+<div class="cards">
+  {% for it in items %}
+    <a class="card" href="{% url 'ledger-list' it.slug %}" style="color:inherit">
+      <div class="n" style="font-size:26px">{{ it.count }}</div>
+      <div class="l">{{ it.label }}{% if not it.voidable %} · read-only{% endif %} &rarr;</div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% if obj %}
+  <div class="found ok">
+    <div class="found-name">{{ label }}</div>
+    {% if kind == 'barrel' %}
+      <div class="found-sub">
+        {% if current_rack %}On <strong>{{ current_rack }}</strong>{% if current_location %} · {{ current_location }}{% endif %}
+        {% else %}<span class="muted">No current rack on record</span>{% endif %}
+      </div>
+    {% else %}
+      <div class="found-sub">{% if current_location %}Location: <strong>{{ current_location }}</strong>{% else %}<span class="muted">No location set on this rack</span>{% endif %}</div>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="found miss">No {{ kind }} matches that barcode. Check the scan and try again.</div>
+{% endif %}

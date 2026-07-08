@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block auth_content %}
+<div class="login-wrap">
+  <form class="login-card" method="post" action="{% url 'login' %}">
+    {% csrf_token %}
+    <div class="wordmark">ST. AMANT</div>
+    <div class="brand-sub">Cellar</div>
+    {% if form.errors %}
+      <div class="msg err" style="margin-bottom:14px">That username and password don't match. Try again.</div>
+    {% endif %}
+    <div class="field">
+      <label for="id_username">Username</label>
+      <input type="text" name="username" id="id_username" autofocus autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="id_password">Password</label>
+      <input type="password" name="password" id="id_password" autocomplete="current-password">
+    </div>
+    <button class="btn" type="submit">Sign in</button>
+    <input type="hidden" name="next" value="{{ next }}">
+  </form>
+</div>
+{% endblock %}

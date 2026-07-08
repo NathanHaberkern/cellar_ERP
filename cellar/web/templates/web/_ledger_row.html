@@ -1,0 +1,27 @@
+<tr id="row-{{ slug }}-{{ row.pk }}"{% if row.voided %} class="voided-row"{% endif %}>
+  <td class="muted">{{ row.pk }}</td>
+  {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+  <td>
+    {% if row.voided %}
+      <span class="badge voided" title="Voided {{ row.voided_at }}">Voided</span>
+    {% else %}
+      <span class="badge live">Active</span>
+    {% endif %}
+    {% if error %}<div class="msg err" style="margin-top:6px">{{ error }}</div>{% endif %}
+  </td>
+  <td class="actions">
+    {% if not row.voided and can_void %}
+      <button class="btn ghost sm danger"
+        hx-post="{% url 'ledger-void' slug row.pk %}"
+        hx-target="#row-{{ slug }}-{{ row.pk }}" hx-swap="outerHTML"
+        hx-confirm="Void this record? It stays in the ledger, struck through — you add a new row to correct it.">Void</button>
+    {% endif %}
+    {% for f in row.open_closes %}
+      <button class="btn ghost sm"
+        hx-post="{% url 'ledger-close' slug row.pk %}"
+        hx-vals='{"field": "{{ f }}"}'
+        hx-target="#row-{{ slug }}-{{ row.pk }}" hx-swap="outerHTML"
+        hx-confirm="Set {{ f }} to now? This can only be done once.">Close {{ f|cut:"_at"|cut:"_" }}</button>
+    {% endfor %}
+  </td>
+</tr>

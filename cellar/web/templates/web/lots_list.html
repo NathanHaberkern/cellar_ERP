@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% block title %}Lots{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Spine</p><h1>Lots</h1></div>
+</div>
+<div style="max-width:360px;margin-bottom:14px">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search lot code…"
+         autocomplete="off"
+         hx-get="{% url 'lots-search' %}"
+         hx-trigger="input changed delay:250ms, search"
+         hx-target="#lot-rows" hx-swap="innerHTML">
+</div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:1%">ID</th><th>Lot code</th><th style="width:1%"></th></tr></thead>
+    <tbody id="lot-rows">
+      {% include "web/_lots_rows.html" %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

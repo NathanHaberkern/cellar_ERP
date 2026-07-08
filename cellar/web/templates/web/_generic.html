@@ -1,0 +1,23 @@
+{% load web_extras %}
+{% if value|is_mapping %}
+  <table class="kv">
+    {% for k, v in value.items %}
+      <tr><th>{{ k|humanize_key }}</th><td>{% include "web/_generic.html" with value=v %}</td></tr>
+    {% endfor %}
+  </table>
+{% elif value|all_mappings %}
+  <div class="table-wrap"><table>
+    <thead><tr>{% for col in value|column_keys %}<th>{{ col|humanize_key }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in value %}
+        <tr>{% for col in value|column_keys %}<td>{% include "web/_generic.html" with value=row|get:col %}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+{% elif value|is_listy %}
+  <ul style="margin:0;padding-left:18px">
+    {% for item in value %}<li>{% include "web/_generic.html" with value=item %}</li>{% endfor %}
+  </ul>
+{% else %}
+  {% if value == None %}<span style="color:var(--muted)">—</span>{% else %}{{ value }}{% endif %}
+{% endif %}

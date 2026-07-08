@@ -1,0 +1,19 @@
+{% load web_extras %}
+{% if error %}
+  <div class="msg err">{{ error }}</div>
+{% else %}
+  <div class="page-head" style="margin-bottom:12px">
+    <div><p class="eyebrow">{% if period.year %}{{ period.year }}{% endif %}</p>
+      <h2 style="margin:0">{{ title }}</h2></div>
+    {% if download %}<a class="btn ghost sm" href="{{ download }}">Download PDF</a>{% endif %}
+  </div>
+  {% if value == None %}
+    <div class="empty">No data returned for this period.</div>
+  {% else %}
+    {% include "web/_generic.html" with value=value %}
+  {% endif %}
+  {% if totals %}
+    <h3 style="margin:20px 0 8px">Totals</h3>
+    {% include "web/_generic.html" with value=totals %}
+  {% endif %}
+{% endif %}

@@ -1,0 +1,3 @@
+{% for row in rows %}{% include "web/_ledger_row.html" %}{% empty %}
+<tr><td colspan="{{ headers|length|add:3 }}"><div class="empty">No records yet.</div></td></tr>
+{% endfor %}

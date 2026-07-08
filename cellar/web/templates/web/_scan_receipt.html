@@ -1,0 +1,15 @@
+{% if error %}
+  <div class="msg err">{{ error }}</div>
+{% else %}
+  <div class="receipt">
+    <div class="receipt-head">Moved · {{ when }}</div>
+    <div class="receipt-body">
+      <span class="lot-code">{{ container }}</span>
+      <span class="arrow">
+        {% if from_rack %}{{ from_rack }} →{% endif %} <strong>{{ to_rack }}</strong>{% if to_position %} · pos {{ to_position }}{% endif %}
+      </span>
+      {% if to_location %}<div class="found-sub">Location: {{ to_location }}</div>{% endif %}
+    </div>
+    <div class="receipt-foot">Recorded in the ledger. Scan the next barrel to continue.</div>
+  </div>
+{% endif %}

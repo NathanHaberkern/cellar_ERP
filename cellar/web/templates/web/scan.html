@@ -1,0 +1,43 @@
+{% extends "web/base.html" %}
+{% block title %}Move{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Cellar</p><h1>Scan to move</h1></div></div>
+<p style="color:var(--muted);max-width:60ch;margin:0 0 20px">
+  Scan the barrel, then the destination rack, then book the move. Location follows
+  the rack, so this is how a barrel's location changes. Each move is recorded in the
+  ledger and can be voided there.
+</p>
+
+<div class="scan-grid">
+  <form id="move-form" onsubmit="return false">
+    <div class="scan-step">
+      <label for="c-bar">1 · Barrel barcode</label>
+      <input type="text" id="c-bar" name="container_barcode" autofocus autocomplete="off"
+             inputmode="none" placeholder="Scan or type…"
+             hx-get="{% url 'scan-resolve-container' %}" hx-target="#c-info"
+             hx-trigger="change, keyup[key=='Enter'] throttle:150ms"
+             hx-params="*" hx-vals='js:{barcode: document.getElementById("c-bar").value}'>
+      <div id="c-info" class="scan-info"></div>
+    </div>
+
+    <div class="scan-step">
+      <label for="r-bar">2 · Destination rack barcode</label>
+      <input type="text" id="r-bar" name="rack_barcode" autocomplete="off"
+             inputmode="none" placeholder="Scan or type…"
+             hx-get="{% url 'scan-resolve-rack' %}" hx-target="#r-info"
+             hx-trigger="change, keyup[key=='Enter'] throttle:150ms"
+             hx-vals='js:{barcode: document.getElementById("r-bar").value}'>
+      <div id="r-info" class="scan-info"></div>
+    </div>
+
+    <button class="btn scan-book" type="button"
+            hx-post="{% url 'scan-book' %}" hx-include="#move-form"
+            hx-target="#move-result" hx-swap="innerHTML"
+            hx-on::after-request="if(event.detail.successful){this.closest('form').reset();document.getElementById('c-info').innerHTML='';document.getElementById('r-info').innerHTML='';document.getElementById('c-bar').focus();}">
+      Book move
+    </button>
+  </form>
+
+  <div id="move-result" class="scan-result" aria-live="polite"></div>
+</div>
+{% endblock %}

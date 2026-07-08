@@ -1,0 +1,34 @@
+{% extends "web/base.html" %}
+{% block title %}Additives{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Reference</p><h1>Additives</h1></div></div>
+
+<div class="card" style="max-width:720px;margin-bottom:18px">
+  <form hx-post="{% url 'additive-create' %}" hx-target="#add-rows" hx-swap="afterbegin"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="row">
+      <div style="flex:2 1 200px"><label for="a-name">Name</label>
+        <input type="text" name="name" id="a-name" placeholder="e.g. Potassium metabisulfite"></div>
+      <div><label for="a-cat">Category</label>
+        <select name="category" id="a-cat">
+          {% for val, lbl in categories %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div style="flex:0 1 90px"><label for="a-unit">Unit</label>
+        <input type="text" name="unit" id="a-unit" placeholder="g, mL, kg"></div>
+      <div style="flex:0 1 110px"><label for="a-cost">Unit cost</label>
+        <input type="number" step="0.0001" name="unit_cost" id="a-cost" placeholder="0.0000"></div>
+      <div style="flex:0 0 auto"><button class="btn" type="submit">Add</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:1%">ID</th><th>Name</th><th>Category</th><th>Unit</th><th style="width:16%">Unit cost</th></tr></thead>
+    <tbody id="add-rows">
+      {% for additive in additives %}{% include "web/_additive_row.html" %}{% endfor %}
+      {% if not additives %}<tr><td colspan="5"><div class="empty">No additives yet. Add one above.</div></td></tr>{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ today|date:"l, F j, Y" }}</p>
+    <h1>Dashboard</h1>
+  </div>
+</div>
+<div class="cards">
+  <div class="card"><div class="n">{{ active_lots }}</div><div class="l">Active lots</div></div>
+  <a class="card" href="{% url 'reports' %}" style="color:inherit">
+    <div class="n" style="color:var(--red)">5120.17</div><div class="l">Run monthly report &rarr;</div></a>
+  <a class="card" href="{% url 'lots' %}" style="color:inherit">
+    <div class="n" style="font-size:22px;padding-top:6px">Lots</div><div class="l">Browse &amp; search &rarr;</div></a>
+</div>
+<p style="color:var(--muted);max-width:60ch">
+  This is the in-house cellar console. Lots, compliance reports, and reference data
+  live in the nav at left. Everything reads from the same append-only ledger the
+  filings are built from.
+</p>
+{% endblock %}
