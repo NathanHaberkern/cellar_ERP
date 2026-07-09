@@ -18,8 +18,12 @@ class Severity(models.TextChoices):
 
 class DestemmingEvent(AppendOnly):
     class Path(models.TextChoices):
-        A = "A", "Path A"; B = "B", "Path B"; C = "C", "Path C"
-        D = "D", "Path D"; E = "E", "Path E"; F = "F", "Path F"
+        A = "A", "A · White (destemmed)"
+        B = "B", "B · Rosé (destemmed)"
+        C = "C", "C · Rosé (direct press)"
+        D = "D", "D · Red (destemmed)"
+        E = "E", "E · Red (whole cluster)"
+        F = "F", "F · White (whole cluster)"
 
     class Fruit(models.TextChoices):
         DESTEMMED = "destemmed", "Destemmed"

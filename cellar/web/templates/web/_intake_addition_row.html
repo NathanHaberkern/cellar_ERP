@@ -1,0 +1,10 @@
+{% if error %}
+  <tr><td colspan="4"><div class="msg err">{{ error }}</div></td></tr>
+{% elif a %}
+  <tr>
+    <td>{{ a.additive.name }}</td>
+    <td>{{ a.target }}</td>
+    <td><strong>{{ a.computed_dose }}</strong></td>
+    <td style="color:var(--muted)">{{ a.quantity|floatformat:"-2" }} {{ a.additive.unit }}</td>
+  </tr>
+{% endif %}

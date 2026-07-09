@@ -1,0 +1,51 @@
+{% if error %}
+  <div class="msg err" style="margin-bottom:16px">{{ error }}</div>
+{% else %}
+<div class="card" style="max-width:860px;margin-bottom:16px;border-color:#cdd0a2">
+  <p class="eyebrow">Lot created</p>
+  <h2 style="margin:.15em 0 .4em"><span class="lot-code" style="font-size:16px">{{ r.code }}</span></h2>
+  <table class="kv">
+    <tr><th>Fruit</th><td>{{ r.tons }} tons</td></tr>
+    <tr><th>Intake estimate</th><td><strong>{{ r.intake_volume_est_gal }} gal</strong></td></tr>
+    <tr><th>Press-yield estimate</th><td>{{ r.press_yield_est_gal }} gal</td></tr>
+    <tr><th>Vessel{{ r.vessels|length|pluralize }}</th>
+        <td>{% for v in r.vessels %}<span class="lot-code">{{ v.code }}</span> {% endfor %}</td></tr>
+    {% if r.target_inoc_date %}
+    <tr><th>Inoculate by</th><td>{{ r.target_inoc_date }} <span style="color:var(--muted)">· cold soak</span></td></tr>
+    {% endif %}
+  </table>
+</div>
+
+<div class="card" style="max-width:860px">
+  <p class="eyebrow" style="margin-bottom:10px">Crusher additions</p>
+  <form hx-post="{% url 'intake-addition' lot.pk %}"
+        hx-target="#add-rows-{{ lot.pk }}" hx-swap="afterbegin"
+        hx-on::after-request="if(event.detail.successful){this.reset();document.getElementById('dose-{{ lot.pk }}').innerHTML='';}">
+    <input type="hidden" name="lot" value="{{ lot.pk }}">
+    <div class="row">
+      <div style="flex:2 1 240px"><label>Additive</label>
+        <select name="additive"
+                hx-get="{% url 'intake-dose' %}" hx-target="#dose-{{ lot.pk }}"
+                hx-trigger="change" hx-include="closest form">
+          <option value="">— choose —</option>
+          {% for a in additives %}<option value="{{ a.pk }}">{{ a.name }} · {{ a.get_category_display }}</option>{% endfor %}
+        </select></div>
+      <div style="flex:0 1 180px"><label>Rate / ppm <span style="color:var(--muted)">(blank = default)</span></label>
+        <input type="number" step="any" name="amount"
+               hx-get="{% url 'intake-dose' %}" hx-target="#dose-{{ lot.pk }}"
+               hx-trigger="input changed delay:300ms" hx-include="closest form"></div>
+      <div style="flex:0 0 auto"><button class="btn" type="submit">Add</button></div>
+    </div>
+  </form>
+  <div id="dose-{{ lot.pk }}"></div>
+
+  <div class="table-wrap" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Additive</th><th>Target</th><th>Computed dose</th><th style="width:16%">Qty</th></tr></thead>
+      <tbody id="add-rows-{{ lot.pk }}">
+        {% for a in additions %}{% include "web/_intake_addition_row.html" with a=a %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

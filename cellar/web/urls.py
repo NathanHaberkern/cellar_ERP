@@ -10,6 +10,7 @@ from django.contrib.auth import views as auth_views
 from . import views
 from . import ledger
 from . import scan
+from . import intake
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -19,6 +20,13 @@ urlpatterns = [
 
     # app
     path("", views.dashboard, name="dashboard"),
+
+    # guided receiving-fruit intake
+    path("intake/", intake.intake_index, name="intake"),
+    path("intake/estimate/", intake.intake_estimate, name="intake-estimate"),      # HTMX
+    path("intake/destem/", intake.intake_destem, name="intake-destem"),            # HTMX
+    path("intake/dose/", intake.dose_preview, name="intake-dose"),                 # HTMX
+    path("intake/<int:lot_pk>/addition/", intake.intake_addition, name="intake-addition"),  # HTMX
 
     path("lots/", views.lots_list, name="lots"),
     path("lots/search/", views.lots_search, name="lots-search"),          # HTMX

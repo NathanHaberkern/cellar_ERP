@@ -1,0 +1,8 @@
+{% if err %}
+  <div class="msg err" style="margin-top:10px">{{ err }}</div>
+{% elif d %}
+  <div class="msg" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
+    <span style="color:var(--muted)">Default {{ default_amt }} {{ unit_hint }} · target {{ d.target }}</span>
+    &nbsp;→&nbsp; <strong>{{ d.computed }}</strong>
+  </div>
+{% endif %}

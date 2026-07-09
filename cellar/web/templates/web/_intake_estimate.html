@@ -1,0 +1,6 @@
+{% if est %}
+  <div class="msg" style="background:#f4f6e6;border:1px solid #cdd0a2;color:var(--olive)">
+    Estimated {{ tons }} tons → <strong>{{ est }} gal</strong> to fermentation
+    <span style="color:var(--muted)">({% if path == 'D' or path == 'E' %}red · 170{% else %}white/rosé · 160{% endif %} gal/ton)</span>
+  </div>
+{% endif %}

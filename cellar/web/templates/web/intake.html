@@ -1,0 +1,97 @@
+{% extends "web/base.html" %}
+{% block title %}Intake{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Crush</p><h1>Receiving Fruit</h1></div></div>
+
+<div id="intake-result"></div>
+
+<div class="card" style="max-width:860px">
+  <form hx-post="{% url 'intake-destem' %}" hx-target="#intake-result" hx-swap="innerHTML">
+
+    <p class="eyebrow" style="margin-bottom:10px">1 · Fruit &amp; lot</p>
+    <div class="row">
+      <div style="flex:2 1 200px"><label for="i-var">Variety</label>
+        <select name="variety" id="i-var" required>
+          {% for v in varieties %}<option value="{{ v.pk }}">{{ v.name }}</option>{% endfor %}
+        </select></div>
+      <div><label for="i-prog">Program</label>
+        <select name="program" id="i-prog">
+          {% for val, lbl in programs %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div style="flex:0 1 90px"><label for="i-vin">Vintage</label>
+        <input type="number" name="vintage" id="i-vin" value="{{ default_vintage }}"></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div style="flex:2 1 240px"><label for="i-path">Processing path (SOP)</label>
+        <select name="path" id="i-path" required
+                hx-get="{% url 'intake-estimate' %}" hx-target="#est-box"
+                hx-trigger="change" hx-include="[name='net_lbs']">
+          <option value="">— choose —</option>
+          {% for val, lbl in paths %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div style="flex:2 1 240px"><label for="i-block">Block <span style="color:var(--muted)">(for the code / new tag)</span></label>
+        <select name="block" id="i-block">
+          <option value="">—</option>
+          {% for b in blocks %}<option value="{{ b.pk }}">{{ b }}</option>{% endfor %}
+        </select></div>
+    </div>
+
+    <p class="eyebrow" style="margin:18px 0 10px">2 · Weigh tag</p>
+    <div class="row">
+      <div style="flex:2 1 220px"><label for="i-wt">Existing weigh tag</label>
+        <select name="weigh_tag" id="i-wt">
+          <option value="">— or create new →</option>
+          {% for wt in weigh_tags %}<option value="{{ wt.pk }}">{{ wt.weigh_tag_number }} · {{ wt.remaining_lbs }} lb left</option>{% endfor %}
+        </select></div>
+      <div style="flex:1 1 160px"><label for="i-newtag">New tag #</label>
+        <input type="text" name="new_tag_number" id="i-newtag" placeholder="e.g. MZ-0912"></div>
+      <div style="flex:0 1 150px"><label for="i-lbs">Net pounds</label>
+        <input type="number" step="1" name="net_lbs" id="i-lbs" required placeholder="15380"
+               hx-get="{% url 'intake-estimate' %}" hx-target="#est-box"
+               hx-trigger="input changed delay:300ms" hx-include="[name='path']"></div>
+    </div>
+    <div id="est-box" style="margin-top:10px"></div>
+
+    <p class="eyebrow" style="margin:18px 0 10px">3 · Vessel</p>
+    <div class="row">
+      <div style="flex:0 1 150px"><label for="i-into">Into</label>
+        <select name="into" id="i-into" onchange="toggleVessel()">
+          <option value="tank">Tank</option>
+          <option value="bins">Macro bins</option>
+        </select></div>
+      <div id="tank-group" style="flex:1 1 180px"><label for="i-tank">Tank</label>
+        <select name="tank_code" id="i-tank">
+          {% for t in tanks %}<option value="{{ t.code }}">{{ t.code }} · {{ t.capacity_gal|floatformat:0 }} gal{% if t.volume_method == 'pressure_sensor' %} · sensor{% endif %}</option>{% endfor %}
+        </select></div>
+      <div id="bins-count" style="flex:0 1 110px;display:none"><label for="i-bc"># bins</label>
+        <input type="number" name="bin_count" id="i-bc" min="1" value="3"></div>
+      <div id="bins-size" style="flex:0 1 130px;display:none"><label for="i-bs">Bin size</label>
+        <select name="bin_size" id="i-bs">
+          <option value="1">1 ton</option><option value="0.5">½ ton</option>
+        </select></div>
+    </div>
+
+    <p class="eyebrow" style="margin:18px 0 10px">4 · Destem details</p>
+    <div class="row">
+      <div style="flex:0 1 150px"><label for="i-temp">Initial temp °F</label>
+        <input type="number" step="0.1" name="initial_temp_f" id="i-temp" placeholder="60"></div>
+      <div style="flex:0 1 170px"><label for="i-dt">Destem date/time</label>
+        <input type="datetime-local" name="destem_at" id="i-dt" value="{{ now_local }}"></div>
+      <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="crusher_enabled" checked> Crusher on</label></div>
+      <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="foot_tread"> Foot tread</label></div>
+    </div>
+
+    <div style="margin-top:18px"><button class="btn" type="submit">Destem &amp; create lot</button></div>
+  </form>
+</div>
+
+<script>
+function toggleVessel(){
+  var bins = document.getElementById('i-into').value === 'bins';
+  document.getElementById('tank-group').style.display = bins ? 'none' : '';
+  document.getElementById('bins-count').style.display = bins ? '' : 'none';
+  document.getElementById('bins-size').style.display  = bins ? '' : 'none';
+}
+</script>
+{% endblock %}
