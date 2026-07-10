@@ -40,18 +40,41 @@
     <p class="eyebrow" style="margin:18px 0 10px">2 · Weigh tag</p>
     <div class="row">
       <div style="flex:2 1 220px"><label for="i-wt">Existing weigh tag</label>
-        <select name="weigh_tag" id="i-wt">
-          <option value="">— or create new →</option>
+        <select name="weigh_tag" id="i-wt"
+                hx-get="{% url 'intake-tag-bins' %}" hx-target="#tag-bins"
+                hx-trigger="change" hx-include="this">
+          <option value="">— or create new below —</option>
           {% for wt in weigh_tags %}<option value="{{ wt.pk }}">{{ wt.weigh_tag_number }} · {{ wt.remaining_lbs }} lb left</option>{% endfor %}
         </select></div>
-      <div style="flex:1 1 160px"><label for="i-newtag">New tag #</label>
-        <input type="text" name="new_tag_number" id="i-newtag" placeholder="e.g. MZ-0912"></div>
-      <div style="flex:0 1 150px"><label for="i-lbs">Net pounds</label>
-        <input type="number" step="1" name="net_lbs" id="i-lbs" required placeholder="15380"
+      <div style="flex:0 1 170px"><label for="i-lbs">Net pounds <span style="color:var(--muted)">(net-only)</span></label>
+        <input type="number" step="1" name="net_lbs" id="i-lbs" placeholder="15380"
                hx-get="{% url 'intake-estimate' %}" hx-target="#est-box"
                hx-trigger="input changed delay:300ms" hx-include="[name='path']"></div>
     </div>
+    <div id="tag-bins"></div>
     <div id="est-box" style="margin-top:10px"></div>
+
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:var(--olive);font-weight:600">Create a new weigh tag</summary>
+      <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-top:8px">
+        <div class="row">
+          <div style="flex:1 1 190px"><label for="i-newtag">Tag # <span style="color:var(--muted)">(blank = auto: block-MMDDYY)</span></label>
+            <input type="text" name="new_tag_number" id="i-newtag" placeholder="422-091226"></div>
+          <div style="flex:0 1 120px"><label for="i-mog">MOG</label>
+            <select name="mog_severity" id="i-mog">{% for val, lbl in severities %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}</select></div>
+          <div style="flex:0 1 120px"><label for="i-rot">Rot</label>
+            <select name="rot_severity" id="i-rot">{% for val, lbl in severities %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}</select></div>
+          <div style="flex:1 1 130px"><label for="i-rott">Rot type</label>
+            <input type="text" name="rot_type" id="i-rott" placeholder="botrytis"></div>
+        </div>
+        <p class="eyebrow" style="margin:12px 0 6px">Bin lines
+          <span style="color:var(--muted)">(estate — all new lines get assigned to this lot; leave empty for net-only)</span></p>
+        <div id="wtbin-rows"></div>
+        <button type="button" class="btn ghost sm" onclick="addBin()" style="margin-top:6px">+ Bin line</button>
+        <div style="margin-top:10px"><label for="i-tnotes">Notes</label>
+          <textarea name="tag_notes" id="i-tnotes" rows="2" placeholder="other relevant notes for this delivery"></textarea></div>
+      </div>
+    </details>
 
     <p class="eyebrow" style="margin:18px 0 10px">3 · Vessel</p>
     <div class="row">
@@ -79,7 +102,9 @@
       <div style="flex:0 1 170px"><label for="i-dt">Destem date/time</label>
         <input type="datetime-local" name="destem_at" id="i-dt" value="{{ now_local }}"></div>
       <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="crusher_enabled" checked> Crusher on</label></div>
-      <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="foot_tread"> Foot tread</label></div>
+      <div style="flex:0 1 150px"><label for="i-ft">Foot tread %</label>
+        <input type="number" min="0" max="100" step="1" name="foot_tread_pct" id="i-ft"
+               placeholder="0" title="% of the lot foot-tread, by bin count (3 of 6 bins → 50)"></div>
     </div>
 
     <p class="eyebrow" style="margin:18px 0 10px">5 · Crusher additions
@@ -138,6 +163,18 @@ function fillDefault(sel){
   var opt = sel.options[sel.selectedIndex];
   var amt = sel.closest('.add-row').querySelector('input[name="amount"]');
   if (opt && opt.dataset.default && !amt.value) amt.value = opt.dataset.default;
+}
+
+function addBin(){
+  var w = document.createElement('div');
+  w.className = 'row'; w.style.marginBottom = '6px';
+  w.innerHTML =
+    '<div style="flex:1 1 140px"><input type="text" name="bin_label" placeholder="bin # e.g. 22/142"></div>'
+    + '<div style="flex:0 1 120px"><input type="number" step="1" name="bin_gross" placeholder="gross lb"></div>'
+    + '<div style="flex:0 1 96px"><input type="number" min="1" name="bin_ct" value="2" title="bins in this weighing"></div>'
+    + '<div style="flex:0 0 auto;align-self:flex-end"><button type="button" class="btn ghost sm" '
+    +   'onclick="this.closest(\'.row\').remove()">&times;</button></div>';
+  document.getElementById('wtbin-rows').appendChild(w);
 }
 
 addRow();
