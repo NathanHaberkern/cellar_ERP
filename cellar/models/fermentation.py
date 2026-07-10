@@ -56,6 +56,10 @@ class TankAssignment(AppendOnly):
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="tank_assignments")
     vessel = models.ForeignKey("cellar.Vessel", on_delete=models.PROTECT, related_name="+")
     assigned_at = models.DateTimeField()
+    # Set when the lot leaves this vessel (moved / pressed / racked out). The tank map
+    # reads a vessel's current lot as its assignment with emptied_at still null.
+    emptied_at = models.DateTimeField(null=True, blank=True)
+    CLOSE_FIELDS = ("emptied_at",)
 
     def __str__(self):
         return f"{self.lot} → {self.vessel}"
