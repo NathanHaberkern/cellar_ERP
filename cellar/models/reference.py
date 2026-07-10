@@ -85,6 +85,11 @@ class Vessel(models.Model):
         GPI_STRAP = "gpi_strap", "GPI strap (low confidence)"
         NONE = "none", "Not gaugeable"
 
+    class Room(models.TextChoices):
+        OLD_TANK = "old_tank", "Old Tank Room"
+        NEW_TANK = "new_tank", "New Tank Room"
+        NEW_BARREL = "new_barrel", "New Barrel Room"
+
     code = models.CharField(max_length=30, unique=True)
     type = models.CharField(max_length=12, choices=Type.choices)
     capacity_gal = models.DecimalField(max_digits=8, decimal_places=1)
@@ -97,6 +102,11 @@ class Vessel(models.Model):
                                      default=VolumeMethod.NONE)
     gal_per_inch = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     sensor_calibration = models.CharField(max_length=120, blank=True)
+    # Dashboard tank-map placement (data-driven; seeded by `seed_vessel_layout`).
+    # Bins carry no fixed placement — they surface in the barrel-room strip only while filled.
+    room = models.CharField(max_length=12, choices=Room.choices, blank=True)
+    map_row = models.PositiveSmallIntegerField(null=True, blank=True)
+    map_col = models.PositiveSmallIntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.code

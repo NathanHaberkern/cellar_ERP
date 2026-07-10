@@ -29,6 +29,7 @@ from cellar.services import costing as costing_svc
 from cellar.services import reporting as reporting_svc
 from cellar.services import excise as excise_svc
 from cellar.services import crush_report as crush_svc
+from .tankmap import build_tank_map
 
 
 def _htmx(request):
@@ -48,10 +49,13 @@ def _safe(fn, *args, **kwargs):
 @login_required
 def dashboard(request):
     active_lots = Lot.objects.count()
+    tank_map, tank_map_error = _safe(build_tank_map)
     ctx = {
         "nav": "dashboard",
         "active_lots": active_lots,
         "today": timezone.localdate(),
+        "tank_map": tank_map or [],
+        "tank_map_error": tank_map_error,
     }
     return render(request, "web/dashboard.html", ctx)
 

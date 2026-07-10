@@ -1,0 +1,63 @@
+{# Dashboard tank map. Three rooms; circles for tanks, squares for the barrel
+   room. Empty vessels are outlined; cold-soak / fermenting / pressed get their
+   own color. Bins appear only while filled. #}
+<section class="tankmap">
+  <div class="tankmap-head">
+    <h2>Tank map</h2>
+    <div class="tankmap-legend">
+      <span class="lg-dot cold"></span>Cold soak
+      <span class="lg-dot ferment"></span>Fermenting
+      <span class="lg-dot pressed"></span>Pressed
+      <span class="lg-dot other"></span>Other
+      <span class="lg-dot empty"></span>Empty
+    </div>
+  </div>
+
+  {% if tank_map_error %}
+    <div class="msg err">Tank map unavailable: {{ tank_map_error }}</div>
+  {% endif %}
+
+  <div class="rooms">
+    {% for room in tank_map %}
+    <div class="room room--{{ room.key }}">
+      <div class="room-name">{{ room.label }}</div>
+      <div class="room-grid"
+           style="grid-template-columns:repeat({{ room.cols }},1fr);grid-template-rows:repeat({{ room.rows }},auto)">
+        {% for c in room.cells %}
+        <div class="vessel v-{{ c.shape }} sz-{{ c.size }} st-{{ c.status_class }}"
+             style="grid-row:{{ c.row|add:1 }};grid-column:{{ c.col|add:1 }}"
+             title="{{ c.code }} — {{ c.status_label }}{% if c.lot_code %} ({{ c.lot_code }}){% endif %}">
+          <span class="v-id">{{ c.code }}</span>
+          {% if c.occupied %}
+            <span class="v-lot">{{ c.lot_code }}</span>
+            <span class="v-status">{{ c.status_label }}</span>
+          {% else %}
+            <span class="v-status muted">Empty</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if room.key == 'new_barrel' %}
+      <div class="bin-strip">
+        <div class="bin-strip-label">Bin ferments</div>
+        {% if room.bins %}
+          <div class="bin-row">
+            {% for b in room.bins %}
+            <div class="vessel v-square sz-sm st-{{ b.status_class }}"
+                 title="{{ b.code }} — {{ b.status_label }} ({{ b.lot_code }})">
+              <span class="v-id">{{ b.code }}</span>
+              <span class="v-lot">{{ b.lot_code }}</span>
+              <span class="v-status">{{ b.status_label }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="bin-empty">No bins currently filled</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

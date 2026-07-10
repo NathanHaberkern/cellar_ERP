@@ -168,3 +168,64 @@ label.inline input{width:auto}
 .receipt-body{padding:14px}
 .receipt-body .arrow{display:inline-block;margin-left:8px;font-size:15px;color:var(--ink)}
 .receipt-foot{padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+/* ---- dashboard tank map ---------------------------------------------------
+   Circles = tanks (old/new tank rooms), squares = barrel room. Red stays
+   reserved for actions, so status uses cold/olive/brown + neutral gray.        */
+:root{
+  --st-cold:#5b7f99; --st-cold-bg:#eaf1f5;
+  --st-ferment:var(--olive); --st-ferment-bg:#f4f6e6;
+  --st-pressed:var(--brown); --st-pressed-bg:#f5ece2;
+  --st-other:#7a746a; --st-other-bg:#f2ede2;
+}
+.tankmap{margin-top:26px}
+.tankmap-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.tankmap-head h2{margin:0;font-size:18px;font-weight:700}
+.tankmap-legend{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.tankmap-legend .lg-dot{width:11px;height:11px;border-radius:50%;display:inline-block;margin-left:10px;border:1px solid var(--line-strong)}
+.lg-dot.cold{background:var(--st-cold);border-color:var(--st-cold)}
+.lg-dot.ferment{background:var(--st-ferment);border-color:var(--st-ferment)}
+.lg-dot.pressed{background:var(--st-pressed);border-color:var(--st-pressed)}
+.lg-dot.other{background:var(--st-other);border-color:var(--st-other)}
+.lg-dot.empty{background:#fff}
+
+.rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.room{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px 18px}
+.room-name{font:700 11px/1 "Roboto";letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:16px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.room-grid{display:grid;gap:14px;justify-items:center;align-items:center}
+
+/* vessel shape + state */
+.vessel{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  border:2px solid var(--line-strong);background:#fff;text-align:center;padding:4px;
+  line-height:1.15;overflow:hidden;
+}
+.v-circle{border-radius:50%}
+.v-square{border-radius:8px}
+.sz-lg{width:118px;height:118px}
+.sz-md{width:94px;height:94px}
+.sz-sm{width:74px;height:74px}
+.vessel .v-id{font:700 14px "Roboto Condensed";letter-spacing:.02em;color:var(--ink)}
+.sz-sm .v-id{font-size:12px}
+.vessel .v-lot{font-family:var(--mono);font-size:10px;color:var(--ink);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vessel .v-status{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:700}
+.vessel .v-status.muted{color:var(--gray);font-weight:500}
+
+.st-cold{border-color:var(--st-cold);background:var(--st-cold-bg)}
+.st-cold .v-status{color:var(--st-cold)}
+.st-ferment{border-color:var(--st-ferment);background:var(--st-ferment-bg)}
+.st-ferment .v-status{color:var(--st-ferment)}
+.st-pressed{border-color:var(--st-pressed);background:var(--st-pressed-bg)}
+.st-pressed .v-status{color:var(--st-pressed)}
+.st-other{border-color:var(--st-other);background:var(--st-other-bg)}
+.st-other .v-status{color:var(--st-other)}
+.st-empty{border-style:dashed;border-color:var(--line-strong);background:#fdfcf9}
+.st-empty .v-id{color:var(--muted)}
+
+/* barrel-room bin strip */
+.bin-strip{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line-strong)}
+.bin-strip-label{font:700 10px/1 "Roboto";letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.bin-row{display:flex;flex-wrap:wrap;gap:12px}
+.bin-empty{font-size:12px;color:var(--gray);font-style:italic}
