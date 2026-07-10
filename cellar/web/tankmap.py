@@ -29,15 +29,39 @@ _ROOM_ORDER = [
 ]
 
 
+# Explicit map-display size per vessel code, layered over the capacity default.
+# The drawing sizes aren't a pure function of capacity — SS-6/SS-7 read biggest,
+# and SS-12/13/14 are drawn to match SS-8..11 even though they gauge smaller. Any
+# code not listed here falls back to the capacity bucket below.
+DISPLAY_SIZE = {
+    "SS-6": "xl", "SS-7": "xl",
+    "SS-2": "lg", "SS-3": "lg", "SS-4": "lg", "SS-5": "lg",
+    "SS-8": "lg", "SS-9": "lg", "SS-10": "lg", "SS-11": "lg",
+    "SS-12": "lg", "SS-13": "lg", "SS-14": "lg",
+    "SS-1": "md", "T-101": "md", "T-102": "md", "T-103": "md",
+    "SS-Tote 1": "sm", "SS-Tote 2": "sm", "Titan": "sm",
+}
+
+
 def _size_bucket(capacity_gal):
     if not capacity_gal:
         return "md"
     cap = float(capacity_gal)
+    if cap >= 2500:
+        return "xl"
     if cap >= 2000:
         return "lg"
     if cap >= 900:
         return "md"
     return "sm"
+
+
+def _display_size(vessel):
+    """Explicit override if set for this code, else the capacity bucket."""
+    override = DISPLAY_SIZE.get(vessel.code)
+    if override is None:
+        override = DISPLAY_SIZE.get((vessel.code or "").strip())
+    return override or _size_bucket(vessel.capacity_gal)
 
 
 def _open_assignments():
@@ -60,7 +84,7 @@ def _vessel_cell(vessel, shape, lot):
     return {
         "code": vessel.code,
         "shape": shape,
-        "size": _size_bucket(vessel.capacity_gal),
+        "size": _display_size(vessel),
         "row": vessel.map_row,
         "col": vessel.map_col,
         "occupied": occupied,

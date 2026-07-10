@@ -73,6 +73,17 @@ def assign_lot_to_vessel(lot, vessel, at, *, allow_blend=False):
     return TankAssignment.objects.create(lot=lot, vessel=vessel, assigned_at=at)
 
 
+def transfer_lot(lot, to_vessel, at, *, allow_blend=False):
+    """Book a tank move for a lot: close its open tank assignment(s) by stamping
+    emptied_at (a CLOSE_FIELD), then open a new assignment on `to_vessel`. This is
+    how a lot's location changes — there's no separate TankTransfer row. Returns
+    the new TankAssignment; raises if the destination is occupied (unless blend)."""
+    (TankAssignment.objects
+     .filter(lot=lot, voided_at__isnull=True, emptied_at__isnull=True)
+     .update(emptied_at=at))
+    return assign_lot_to_vessel(lot, to_vessel, at, allow_blend=allow_blend)
+
+
 def generate_weigh_tag_number(block, harvest_date) -> str:
     """Human-readable tag id: '<block>-MMDDYY' (e.g. block 422 picked 09/12/26 →
     '422-091226'). If that exact id is already taken (same block picked again the

@@ -168,6 +168,33 @@ class LotDesignation(models.Model):
         return render_designation(self)
 
 
+class LotSectionNote(models.Model):
+    """Mutable free-form scratchpad for a lot, one per page section (overview +
+    the six detail sub-pages). Unlike the append-only ledger rows, this is a
+    living note the cellar edits in place — so it's a plain model, upserted by
+    (lot, section)."""
+    class Section(models.TextChoices):
+        OVERVIEW = "overview", "Overview"
+        ADDITIONS = "additions", "Additions"
+        LABS = "labs", "Labs"
+        MOVEMENT = "movement", "Movement"
+        COMPOSITION = "composition", "Composition"
+        OAK = "oak", "Oak"
+
+    lot = models.ForeignKey(Lot, on_delete=models.CASCADE, related_name="section_notes")
+    section = models.CharField(max_length=16, choices=Section.choices)
+    body = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        unique_together = [("lot", "section")]
+
+    def __str__(self):
+        return f"{self.lot} · {self.get_section_display()} note"
+
+
 class WeighTagAllocation(AppendOnly):
     """Many-to-many between weigh tags and lots, carrying allocated pounds."""
     weigh_tag = models.ForeignKey(WeighTag, on_delete=models.PROTECT, related_name="allocations")

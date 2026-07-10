@@ -1,0 +1,10 @@
+{# Reusable editable scratchpad note. Swaps itself out on save. #}
+<form class="note-form" hx-post="{% url 'lot-note-save' lot.pk section %}"
+      hx-target="this" hx-swap="outerHTML">
+  <label>Notes
+    {% if saved %}<span class="saved">saved</span>{% endif %}
+    {% if note_error %}<span class="err-inline">{{ note_error }}</span>{% endif %}
+  </label>
+  <textarea name="body" rows="3" placeholder="Free-form notes…">{{ note }}</textarea>
+  <div class="note-actions"><button class="btn sm ghost" type="submit">Save notes</button></div>
+</form>

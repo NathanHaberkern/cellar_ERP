@@ -1,0 +1,28 @@
+{% load web_extras %}
+<h3 style="margin:0 0 12px">Oak</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+<div class="cards oak-tiers">
+  <div class="card"><div class="l">% New oak</div><div class="n">{{ oak.tiers|get:"New" }}%</div></div>
+  <div class="card"><div class="l">% 1st use</div><div class="n">{{ oak.tiers|get:"1st use" }}%</div></div>
+  <div class="card"><div class="l">% 2nd use</div><div class="n">{{ oak.tiers|get:"2nd use" }}%</div></div>
+  <div class="card"><div class="l">% Neutral</div><div class="n">{{ oak.tiers|get:"Neutral" }}%</div></div>
+</div>
+<p class="muted oak-context">{{ oak.barrel_count }} barrel{{ oak.barrel_count|pluralize }} · {{ oak.total_oak_gallons }} gal in oak</p>
+
+<h4 class="sub">Current barrels</h4>
+{% if oak.barrels %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Barrel</th><th>Size</th><th>Tier</th><th>Location</th></tr></thead>
+  <tbody>{% for b in oak.barrels %}<tr><td>{{ b.container_id }}</td><td>{{ b.size }}</td><td>{{ b.tier }}</td><td>{{ b.location }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty">No barrels currently holding this lot.</div>{% endif %}
+
+<h4 class="sub">Current racks</h4>
+{% if oak.racks %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Rack</th><th>Location</th></tr></thead>
+  <tbody>{% for r in oak.racks %}<tr><td>{{ r.rack_id }}</td><td>{{ r.location }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty">No racks currently holding this lot.</div>{% endif %}
+
+{% include "web/_lot_note.html" with section="oak" note=note %}

@@ -32,9 +32,19 @@ urlpatterns = [
     path("lots/", views.lots_list, name="lots"),
     path("lots/search/", views.lots_search, name="lots-search"),          # HTMX
     path("lots/<int:pk>/", views.lot_detail, name="lot-detail"),
-    path("lots/<int:pk>/composition/", views.lot_composition, name="lot-composition"),  # HTMX
-    path("lots/<int:pk>/oak/", views.lot_oak, name="lot-oak"),            # HTMX
-    path("lots/<int:pk>/cost/", views.lot_cost, name="lot-cost"),        # HTMX
+    # lot detail sub-panels (HTMX fragments swapped into #lot-panel)
+    path("lots/<int:pk>/additions/", views.lot_additions, name="lot-additions"),
+    path("lots/<int:pk>/labs/", views.lot_labs, name="lot-labs"),
+    path("lots/<int:pk>/movement/", views.lot_movement, name="lot-movement"),
+    path("lots/<int:pk>/composition/", views.lot_composition, name="lot-composition"),
+    path("lots/<int:pk>/oak/", views.lot_oak, name="lot-oak"),
+    path("lots/<int:pk>/cost/", views.lot_cost, name="lot-cost"),
+    path("lots/<int:pk>/tasks/", views.lot_tasks, name="lot-tasks"),
+    # section scratchpad note + on-page entry actions
+    path("lots/<int:pk>/note/<slug:section>/", views.lot_note_save, name="lot-note-save"),
+    path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),
+    path("lots/<int:pk>/labs/add/", views.lot_lab_create, name="lot-lab-create"),
+    path("lots/<int:pk>/movement/transfer/", views.lot_transfer_create, name="lot-transfer-create"),
 
     path("reports/", views.reports_index, name="reports"),
     path("reports/run/", views.report_run, name="report-run"),           # HTMX

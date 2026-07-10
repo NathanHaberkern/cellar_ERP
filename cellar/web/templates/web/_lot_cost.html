@@ -1,0 +1,11 @@
+<h3 style="margin:0 0 12px">Cost</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+<table class="kv cost-kv"><tbody>
+  <tr><th>Fruit</th><td>${{ cost.fruit|floatformat:2 }}</td></tr>
+  <tr><th>Additions</th><td>${{ cost.additions|floatformat:2 }}</td></tr>
+  <tr><th>Spirit</th><td>${{ cost.spirit|floatformat:2 }}</td></tr>
+  <tr><th>Oak depreciation</th><td>${{ cost.oak_depreciation|floatformat:2 }}</td></tr>
+  <tr class="total"><th>Total</th><td>${{ cost.total|floatformat:2 }}</td></tr>
+  <tr><th>Per gallon</th><td>{% if cost.per_gal is not None %}${{ cost.per_gal|floatformat:4 }}{% else %}—{% endif %}</td></tr>
+</tbody></table>
+<p class="verify">Fruit + additions + spirit + barrel depreciation, including cost inherited from parent lots.</p>

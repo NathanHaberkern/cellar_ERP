@@ -1,0 +1,15 @@
+<h3 style="margin:0 0 12px">Composition</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if composition %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Leaf lot</th><th>% composition</th></tr></thead>
+  <tbody>
+  {% for leaf, pct in composition.items %}
+    <tr><td>{{ leaf }}</td><td>{% if pct is not None %}{{ pct }}%{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">No composition recorded yet.</div>{% endif %}
+<p class="verify">Computed from lot genealogy (blends, splits, topping) — read-only.</p>
+
+{% include "web/_lot_note.html" with section="composition" note=note %}

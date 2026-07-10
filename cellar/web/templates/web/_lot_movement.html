@@ -1,0 +1,39 @@
+<h3 style="margin:0 0 12px">Movement</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if form_error %}<div class="msg err">{{ form_error }}</div>{% endif %}
+{% if rows %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Type</th><th>Date</th><th>Start</th><th>End</th><th>Gallons</th><th>Note</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><span class="mv mv-{{ r.type|slugify }}">{{ r.type }}</span></td>
+      <td>{{ r.date|date:"Y-m-d" }}</td>
+      <td>{{ r.start }}</td>
+      <td>{{ r.end }}</td>
+      <td>{% if r.gallons is not None %}{{ r.gallons }}{% else %}—{% endif %}</td>
+      <td>{{ r.note }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">No movements recorded yet.</div>{% endif %}
+<p class="verify">Derived from the ledger — topping loss/gain rows are the same records 5120.17 reads.</p>
+
+<details class="add-form">
+  <summary>Book a transfer (tank move)</summary>
+  <form hx-post="{% url 'lot-transfer-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>To vessel</label>
+        <select name="to_vessel">
+          {% for t in tanks %}<option value="{{ t.pk }}">{{ t.code }}</option>{% endfor %}
+        </select></div>
+      <div><label>When</label><input type="datetime-local" name="moved_at" value="{{ now_local }}"></div>
+    </div>
+    <label class="inline"><input type="checkbox" name="allow_blend"> Allow co-occupancy (blend into an occupied tank)</label>
+    <label>Note</label><textarea name="note" rows="2"></textarea>
+    <div class="note-actions"><button class="btn sm" type="submit">Book transfer</button></div>
+  </form>
+</details>
+
+{% include "web/_lot_note.html" with section="movement" note=note %}

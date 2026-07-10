@@ -1,0 +1,48 @@
+<h3 style="margin:0 0 12px">Labs</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if form_error %}<div class="msg err">{{ form_error }}</div>{% endif %}
+{% if groups %}
+  {% for g in groups %}
+    <div class="lab-group">
+      <div class="lab-sample">Sample ID · <b>{{ g.sample_id }}</b></div>
+      {% for r in g.results %}
+        <div class="lab-result">
+          <div class="lab-meta">{{ r.date|date:"Y-m-d" }} · {{ r.source }}</div>
+          {% if r.values %}
+            <table class="kv"><tbody>
+              {% for v in r.values %}<tr><th>{{ v.analyte }}</th><td>{{ v.value }} {{ v.unit }}</td></tr>{% endfor %}
+            </tbody></table>
+          {% else %}<div class="muted">No analyte values.</div>{% endif %}
+          {% if r.note %}<div class="lab-note">{{ r.note }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% else %}<div class="empty">No lab results yet.</div>{% endif %}
+
+<details class="add-form">
+  <summary>Add a lab result</summary>
+  <form hx-post="{% url 'lot-lab-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>Lab</label>
+        <select name="source">
+          {% for val, label in sources %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select></div>
+      <div><label>Sample ID <span class="muted">(ETS / Lodi)</span></label><input type="text" name="sample_id"></div>
+      <div><label>Reported</label><input type="datetime-local" name="reported_at" value="{{ now_local }}"></div>
+    </div>
+    <label>Analyses</label>
+    <div class="lab-values">
+      {% for i in "123" %}
+      <div class="lab-value-row">
+        <select name="analyte"><option value="">—</option>{% for a in analytes %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}</select>
+        <input type="text" name="value" placeholder="value">
+      </div>
+      {% endfor %}
+    </div>
+    <label>Note</label><textarea name="note" rows="2"></textarea>
+    <div class="note-actions"><button class="btn sm" type="submit">Add result</button></div>
+  </form>
+</details>
+
+{% include "web/_lot_note.html" with section="labs" note=note %}

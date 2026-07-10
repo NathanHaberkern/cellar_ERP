@@ -126,14 +126,22 @@ class LabRequest(AppendOnly):
 
 class LabResult(AppendOnly):
     class Source(models.TextChoices):
-        ETS = "ets", "ETS"
         IN_HOUSE = "in_house", "In-house"
+        ETS = "ets", "ETS"
+        LODI = "lodi", "Lodi Wine Labs"
 
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="lab_results")
     lab_request = models.ForeignKey(LabRequest, null=True, blank=True,
                                     on_delete=models.PROTECT, related_name="+")
     reported_at = models.DateTimeField()
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.ETS)
+    # Outside-lab sample identifier — carried on ETS / Lodi results, blank in-house.
+    sample_id = models.CharField(max_length=60, blank=True,
+                                 help_text="outside-lab sample ID (ETS / Lodi); blank for in-house")
+
+    @property
+    def requires_sample_id(self):
+        return self.source in (self.Source.ETS, self.Source.LODI)
 
     def __str__(self):
         return f"{self.lot} lab result {self.reported_at:%Y-%m-%d}"

@@ -5,6 +5,7 @@ from .reference import (
 )
 from .spine import (
     HarvestEvent, WeighTag, WeighTagBin, Lot, LotDesignation, WeighTagAllocation, LotLineage,
+    LotSectionNote,
 )
 from .spirits import HighProofSpiritLedger
 from .ledger import Reading, Addition
@@ -31,6 +32,7 @@ __all__ = [
     "Variety", "Grower", "Vineyard", "Block", "VarietalDesignation", "Vessel",
     "Additive", "LabAnalyte", "ConfigConstant", "LotSequenceCounter",
     "HarvestEvent", "WeighTag", "WeighTagBin", "Lot", "LotDesignation", "WeighTagAllocation", "LotLineage",
+    "LotSectionNote",
     "HighProofSpiritLedger", "Reading", "Addition",
     "DestemmingEvent", "TankAssignment", "ColdSoakSchedule", "PumpOverEvent", "PunchDownEvent",
     "InoculationEvent", "LabRequest", "LabResult", "LabResultValue", "CellarNote",

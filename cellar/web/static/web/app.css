@@ -189,8 +189,11 @@ label.inline input{width:auto}
 .lg-dot.other{background:var(--st-other);border-color:var(--st-other)}
 .lg-dot.empty{background:#fff}
 
-.rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.room{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px 18px}
+/* Each room shrinks to exactly the width its own grid needs and wraps to the next
+   line on narrow screens — an equal-width grid track used to squeeze the 4-column
+   Old Tank Room and clip its rightmost column (T-103 / SS-5 / SS-4). */
+.rooms{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px}
+.room{flex:0 0 auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px 18px}
 .room-name{font:700 11px/1 "Roboto";letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
   margin-bottom:16px;padding-bottom:9px;border-bottom:1px solid var(--line)}
 .room-grid{display:grid;gap:14px;justify-items:center;align-items:center}
@@ -203,9 +206,11 @@ label.inline input{width:auto}
 }
 .v-circle{border-radius:50%}
 .v-square{border-radius:8px}
+.sz-xl{width:140px;height:140px}
 .sz-lg{width:118px;height:118px}
 .sz-md{width:94px;height:94px}
 .sz-sm{width:74px;height:74px}
+.sz-xl .v-id{font-size:16px}
 .vessel .v-id{font:700 14px "Roboto Condensed";letter-spacing:.02em;color:var(--ink)}
 .sz-sm .v-id{font-size:12px}
 .vessel .v-lot{font-family:var(--mono);font-size:10px;color:var(--ink);
@@ -229,3 +234,64 @@ label.inline input{width:auto}
 .bin-strip-label{font:700 10px/1 "Roboto";letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .bin-row{display:flex;flex-wrap:wrap;gap:12px}
 .bin-empty{font-size:12px;color:var(--gray);font-style:italic}
+
+/* ---- lot detail: summary + sub-pages ------------------------------------- */
+.lot-status{font:700 11px/1 "Roboto";letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;align-self:center}
+.lot-summary{margin-bottom:8px}
+.card .n.loc{font-size:16px;font-family:"Roboto";font-weight:600;line-height:1.25}
+.card .l.disp{margin-top:6px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.card .l.disp.bond{color:var(--olive)}
+.card .l.disp.ferment{color:var(--st-cold)}
+.card .rd{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin-top:4px}
+.card .rd b{font-family:"Roboto Condensed";font-size:18px}
+.tasks-head{display:flex;align-items:baseline;gap:10px;margin-top:6px;
+  padding-top:12px;border-top:1px solid var(--line)}
+.tasks-head h3{margin:0;font-size:16px}
+.muted{color:var(--muted)}
+
+/* editable section scratchpad */
+textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;color:var(--ink);
+  background:#fff;border:1px solid var(--line-strong);border-radius:6px;padding:9px 11px;resize:vertical}
+textarea:focus{outline:2px solid var(--red);outline-offset:1px;border-color:var(--red)}
+input[type=datetime-local]{font:inherit;font-size:14px;color:var(--ink);background:#fff;
+  border:1px solid var(--line-strong);border-radius:6px;padding:8px 10px}
+input[type=datetime-local]:focus{outline:2px solid var(--red);outline-offset:1px;border-color:var(--red)}
+.note-form{margin-top:16px}
+.note-actions{margin-top:8px}
+.note-form .saved{color:var(--olive);font-weight:700;text-transform:none;letter-spacing:0;margin-left:6px}
+.note-form .err-inline{color:var(--red-ink);margin-left:6px}
+
+/* on-page add forms (collapsed by default) */
+.add-form{margin-top:18px;border:1px solid var(--line);border-radius:8px;background:#fdfcf9}
+.add-form>summary{cursor:pointer;padding:10px 14px;font-weight:600;font-size:13px;color:var(--red-ink)}
+.add-form>form{padding:4px 14px 14px}
+.add-form label{margin-top:10px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.form-grid label{margin-top:0}
+.lab-value-row{display:flex;gap:8px;margin-bottom:6px}
+.lab-value-row select{flex:1 1 auto}
+.lab-value-row input{flex:0 0 120px}
+
+/* labs display */
+.lab-group{border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.lab-sample{background:var(--panel);padding:8px 14px;font-size:13px;border-bottom:1px solid var(--line)}
+.lab-result{padding:10px 14px;border-top:1px dashed var(--line)}
+.lab-result:first-of-type{border-top:none}
+.lab-meta{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.lab-note{margin-top:6px;font-size:13px;color:var(--brown)}
+
+/* movement type pills */
+.mv{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  padding:2px 8px;border-radius:999px;background:var(--st-other-bg);color:var(--st-other)}
+.mv-blending{background:var(--st-cold-bg);color:var(--st-cold)}
+.mv-topping-gain,.mv-barrel-down{background:var(--st-ferment-bg);color:var(--st-ferment)}
+.mv-topping-loss,.mv-loss,.mv-sale{background:#fbeae6;color:var(--red-ink)}
+.mv-bottling{background:var(--st-pressed-bg);color:var(--st-pressed)}
+
+/* oak + cost */
+.oak-tiers{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+.oak-context{margin:4px 0 18px}
+h4.sub{margin:18px 0 8px;font-size:14px}
+.cost-kv th{min-width:150px}
+.cost-kv .total th,.cost-kv .total td{border-top:1px solid var(--line-strong);font-weight:700;padding-top:8px}
