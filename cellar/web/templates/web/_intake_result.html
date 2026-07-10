@@ -2,7 +2,10 @@
   <div class="msg err" style="margin-bottom:16px">{{ error }}</div>
 {% else %}
 <div class="card" style="max-width:860px;margin-bottom:16px;border-color:#cdd0a2">
-  <p class="eyebrow">Lot created</p>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <p class="eyebrow" style="color:var(--olive)">&#10003; Lot created</p>
+    <a class="btn" href="{% url 'intake' %}">Receive another lot &rarr;</a>
+  </div>
   <h2 style="margin:.15em 0 .4em"><span class="lot-code" style="font-size:16px">{{ r.code }}</span></h2>
   <table class="kv">
     <tr><th>Fruit</th><td>{{ r.tons }} tons</td></tr>

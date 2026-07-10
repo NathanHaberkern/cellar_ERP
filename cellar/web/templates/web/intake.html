@@ -6,7 +6,7 @@
 <div id="intake-result"></div>
 
 <div class="card" style="max-width:860px">
-  <form hx-post="{% url 'intake-destem' %}" hx-target="#intake-result" hx-swap="innerHTML">
+  <form id="intake-form" hx-post="{% url 'intake-destem' %}" hx-target="#intake-result" hx-swap="innerHTML">
 
     <p class="eyebrow" style="margin-bottom:10px">1 · Fruit &amp; lot</p>
     <div class="row">
@@ -70,6 +70,9 @@
         <p class="eyebrow" style="margin:12px 0 6px">Bin lines
           <span style="color:var(--muted)">(estate — all new lines get assigned to this lot; leave empty for net-only)</span></p>
         <div id="wtbin-rows"></div>
+        <input type="hidden" name="bin_rows" id="bin-rows-manifest" value="">
+        <p style="margin:6px 0 0;font-size:12px;color:var(--muted)">
+          Checked lines are assigned to this lot; unchecked lines are held as unassigned fruit.</p>
         <button type="button" class="btn ghost sm" onclick="addBin()" style="margin-top:6px">+ Bin line</button>
         <div style="margin-top:10px"><label for="i-tnotes">Notes</label>
           <textarea name="tag_notes" id="i-tnotes" rows="2" placeholder="other relevant notes for this delivery"></textarea></div>
@@ -165,16 +168,27 @@ function fillDefault(sel){
   if (opt && opt.dataset.default && !amt.value) amt.value = opt.dataset.default;
 }
 
+var binN = 0;
 function addBin(){
+  var rid = binN++;
+  var manifest = document.getElementById('bin-rows-manifest');
+  manifest.value = (manifest.value ? manifest.value + ',' : '') + rid;
   var w = document.createElement('div');
-  w.className = 'row'; w.style.marginBottom = '6px';
+  w.className = 'row'; w.style.marginBottom = '6px'; w.dataset.rid = rid;
   w.innerHTML =
-    '<div style="flex:1 1 140px"><input type="text" name="bin_label" placeholder="bin # e.g. 22/142"></div>'
-    + '<div style="flex:0 1 120px"><input type="number" step="1" name="bin_gross" placeholder="gross lb"></div>'
-    + '<div style="flex:0 1 96px"><input type="number" min="1" name="bin_ct" value="2" title="bins in this weighing"></div>'
+    '<div style="flex:0 0 auto;align-self:center"><label class="inline" title="assign to this lot">'
+    +   '<input type="checkbox" name="bin_incl_' + rid + '" checked></label></div>'
+    + '<div style="flex:1 1 140px"><input type="text" name="bin_label_' + rid + '" placeholder="bin # e.g. 22/142"></div>'
+    + '<div style="flex:0 1 120px"><input type="number" step="1" name="bin_gross_' + rid + '" placeholder="gross lb"></div>'
+    + '<div style="flex:0 1 96px"><input type="number" min="1" name="bin_ct_' + rid + '" value="2" title="bins in this weighing"></div>'
     + '<div style="flex:0 0 auto;align-self:flex-end"><button type="button" class="btn ghost sm" '
-    +   'onclick="this.closest(\'.row\').remove()">&times;</button></div>';
+    +   'onclick="removeBin(this,' + rid + ')">&times;</button></div>';
   document.getElementById('wtbin-rows').appendChild(w);
+}
+function removeBin(btn, rid){
+  var m = document.getElementById('bin-rows-manifest');
+  m.value = m.value.split(',').filter(function(x){ return x !== String(rid); }).join(',');
+  btn.closest('.row').remove();
 }
 
 addRow();

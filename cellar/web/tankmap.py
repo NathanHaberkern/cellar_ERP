@@ -102,3 +102,51 @@ def build_tank_map():
                             for v in bin_vessels]
         rooms.append(room)
     return rooms
+
+
+# ---------------------------------------------------------------------------
+# Persistent-vessel placement (shared by seed_reference and seed_vessel_layout)
+# ---------------------------------------------------------------------------
+# code -> (room, map_row, map_col). Codes match seed_reference exactly.
+LAYOUT = {
+    # Old Tank Room (4-col U)
+    "SS-1": (Vessel.Room.OLD_TANK, 0, 0),
+    "T-102": (Vessel.Room.OLD_TANK, 0, 1),
+    "T-101": (Vessel.Room.OLD_TANK, 0, 2),
+    "T-103": (Vessel.Room.OLD_TANK, 0, 3),
+    "SS-2": (Vessel.Room.OLD_TANK, 1, 0),
+    "SS-5": (Vessel.Room.OLD_TANK, 1, 3),
+    "SS-3": (Vessel.Room.OLD_TANK, 2, 0),
+    "SS-4": (Vessel.Room.OLD_TANK, 2, 3),
+    # New Tank Room (left col 0, right col 1)
+    "SS-14": (Vessel.Room.NEW_TANK, 0, 0),
+    "SS-13": (Vessel.Room.NEW_TANK, 1, 0),
+    "SS-12": (Vessel.Room.NEW_TANK, 2, 0),
+    "SS-11": (Vessel.Room.NEW_TANK, 3, 0),
+    "SS-10": (Vessel.Room.NEW_TANK, 4, 0),
+    "SS-6": (Vessel.Room.NEW_TANK, 0, 1),
+    "SS-7": (Vessel.Room.NEW_TANK, 1, 1),
+    "SS-8": (Vessel.Room.NEW_TANK, 2, 1),
+    "SS-9": (Vessel.Room.NEW_TANK, 3, 1),
+    # New Barrel Room (persistent squares; bins are dynamic)
+    "Titan": (Vessel.Room.NEW_BARREL, 0, 0),
+    "SS-Tote 1": (Vessel.Room.NEW_BARREL, 0, 1),
+    "SS-Tote 2": (Vessel.Room.NEW_BARREL, 0, 2),
+}
+
+
+def place_persistent_vessels():
+    """Write room + (map_row, map_col) onto the persistent vessels. Place-only:
+    matches existing vessels by code (exact, then case-insensitive) and never
+    creates one, so it can't spawn duplicates. Returns (placed, missing_codes)."""
+    placed, missing = 0, []
+    for code, (room, row, col) in LAYOUT.items():
+        v = (Vessel.objects.filter(code=code).first()
+             or Vessel.objects.filter(code__iexact=code).first())
+        if v is None:
+            missing.append(code)
+            continue
+        v.room, v.map_row, v.map_col = room, row, col
+        v.save(update_fields=["room", "map_row", "map_col"])
+        placed += 1
+    return placed, missing

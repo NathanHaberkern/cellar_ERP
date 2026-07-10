@@ -101,4 +101,10 @@ class Command(BaseCommand):
             )
             a += 1
 
-        self.stdout.write(self.style.SUCCESS(f"Seeded {v} vessels, {a} additives."))
+        from cellar.web.tankmap import place_persistent_vessels
+        placed, missing = place_persistent_vessels()
+        self.stdout.write(self.style.SUCCESS(
+            f"Seeded {v} vessels, {a} additives; {placed} placed on the tank map."))
+        if missing:
+            self.stdout.write(self.style.WARNING(
+                "Not placed (code mismatch): " + ", ".join(missing)))

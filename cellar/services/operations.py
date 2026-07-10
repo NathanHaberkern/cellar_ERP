@@ -51,6 +51,28 @@ def tons_from_lbs(net_lbs) -> Decimal:
     return (Decimal(net_lbs) / Decimal("2000")).quantize(Decimal("0.01"))
 
 
+def open_assignment_for(vessel):
+    """The vessel's current open (unvacated) assignment, or None."""
+    return (TankAssignment.objects
+            .filter(vessel=vessel, voided_at__isnull=True, emptied_at__isnull=True)
+            .select_related("lot").order_by("-assigned_at").first())
+
+
+def assign_lot_to_vessel(lot, vessel, at, *, allow_blend=False):
+    """Assign a lot to a vessel, enforcing one lot per vessel — UNLESS this is a
+    deliberate blend (allow_blend=True), which permits co-occupancy:
+      • scenario A — two lots racked into the same (new) tank together, and
+      • scenario B — a lot racked into a tank another lot already occupies.
+    Fresh-fruit intake never blends, so it calls this with allow_blend=False and
+    an occupied tank is rejected. Returns the TankAssignment."""
+    occ = open_assignment_for(vessel)
+    if occ and occ.lot_id != lot.id and not allow_blend:
+        raise ValueError(
+            f"{vessel.code} is occupied by {occ.lot.code}. Empty it first, "
+            f"or record this as a blend to co-occupy.")
+    return TankAssignment.objects.create(lot=lot, vessel=vessel, assigned_at=at)
+
+
 def generate_weigh_tag_number(block, harvest_date) -> str:
     """Human-readable tag id: '<block>-MMDDYY' (e.g. block 422 picked 09/12/26 →
     '422-091226'). If that exact id is already taken (same block picked again the
@@ -158,9 +180,15 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
     # Bin-level assignment: mark each chosen bin's lot, then roll the bins up to
     # one WeighTagAllocation per tag (keeps tons/costing/remaining-lbs working).
     if bin_ids:
+        chosen = list(WeighTagBin.objects.filter(pk__in=bin_ids).select_related("weigh_tag", "assigned_lot"))
+        already = [b for b in chosen if b.assigned_lot_id]
+        if already:
+            raise ValueError(
+                "These bins are already assigned: "
+                + ", ".join(f"{b.bin_label} → {b.assigned_lot.code}" for b in already)
+                + ". Each bin line can only feed one lot.")
         by_tag = {}
-        for b in (WeighTagBin.objects.filter(pk__in=bin_ids)
-                  .select_related("weigh_tag")):
+        for b in chosen:
             b.assigned_lot = lot
             b.save(update_fields=["assigned_lot"])
             lbs = Decimal(b.net_lbs or 0)
@@ -170,9 +198,15 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
             WeighTagAllocation.objects.create(weigh_tag=wt, lot=lot, allocated_net_lbs=lbs)
 
     for wt, lbs in (allocations or []):
+        lbs = Decimal(lbs)
+        remaining = Decimal(wt.remaining_lbs or 0)
+        if lbs > remaining + Decimal("0.01"):
+            raise ValueError(
+                f"{wt.weigh_tag_number} only has {remaining} lb left "
+                f"(requested {lbs}).")
         WeighTagAllocation.objects.create(weigh_tag=wt, lot=lot,
-                                          allocated_net_lbs=Decimal(lbs))
-        total_lbs += Decimal(lbs)
+                                          allocated_net_lbs=lbs)
+        total_lbs += lbs
 
     ft_pct = Decimal(str(foot_tread_pct)) if foot_tread_pct is not None else None
     de = DestemmingEvent.objects.create(
@@ -202,7 +236,7 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
             vessels.append(v)
     elif tank_code:
         tank = Vessel.objects.get(code=tank_code)
-        TankAssignment.objects.create(lot=lot, vessel=tank, assigned_at=destem_at)
+        assign_lot_to_vessel(lot, tank, destem_at)   # fresh fruit never blends
         vessels.append(tank)
 
     est_intake = intake_volume_estimate(total_lbs, path)

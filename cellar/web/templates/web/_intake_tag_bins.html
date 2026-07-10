@@ -4,7 +4,7 @@
       Assign bins from {{ wt.weigh_tag_number }} to this lot:</p>
     {% for b in bins %}
       <label class="inline" style="display:block;margin:3px 0{% if b.assigned_lot %};color:var(--muted){% endif %}">
-        <input type="checkbox" name="bin_ids" value="{{ b.pk }}"{% if b.assigned_lot %} disabled{% endif %}>
+        <input type="checkbox" name="bin_ids" value="{{ b.pk }}"{% if b.assigned_lot %} disabled{% else %} checked{% endif %}>
         {{ b.bin_label }} · {{ b.net_lbs|floatformat:0 }} lb net
         {% if b.assigned_lot %}<span style="color:var(--muted)"> — already crushed into {{ b.assigned_lot.code }}</span>{% endif %}
       </label>

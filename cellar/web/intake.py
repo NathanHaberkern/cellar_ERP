@@ -76,7 +76,10 @@ def _effective_net_lbs(request):
 # ---------------------------------------------------------------- page --
 @login_required
 def intake_index(request):
-    tanks = Vessel.objects.filter(type=Vessel.Type.TANK).order_by("code")
+    from .tankmap import _open_assignments
+    occupied = set(_open_assignments().keys())
+    tanks = [t for t in Vessel.objects.filter(type=Vessel.Type.TANK).order_by("code")
+             if t.id not in occupied]
     open_tags = [wt for wt in WeighTag.objects.order_by("-created_at")[:80]
                  if wt.remaining_lbs and wt.remaining_lbs > 0]
     ctx = {
@@ -174,21 +177,25 @@ def intake_destem(request):
                 rot_type=(P.get("rot_type") or "").strip(),
                 notes=(P.get("tag_notes") or "").strip(),
             )
-            # optional per-bin lines (bin_label[] + bin_gross[] [+ bin_ct[]])
-            made, labels, grosses, counts = [], P.getlist("bin_label"), P.getlist("bin_gross"), P.getlist("bin_ct")
-            for i, (lbl, gr) in enumerate(zip(labels, grosses)):
-                lbl, grd = (lbl or "").strip(), _dec(gr)
+            # per-bin lines (indexed by a client-side manifest so each line's
+            # include-checkbox aligns with its own inputs). Checked → assign to
+            # this lot; unchecked → created but held as unassigned fruit.
+            made_assign = []
+            for rid in [r for r in (P.get("bin_rows") or "").split(",") if r.strip()]:
+                lbl = (P.get(f"bin_label_{rid}") or "").strip()
+                grd = _dec(P.get(f"bin_gross_{rid}"))
                 if not lbl or grd is None:
                     continue
-                ct = int(counts[i]) if i < len(counts) and (counts[i] or "").strip().isdigit() else 1
-                made.append(WeighTagBin.objects.create(
-                    weigh_tag=wt, bin_label=lbl, bin_count=ct, gross_lbs=grd))
-            if made:
-                bin_ids = [str(b.pk) for b in made]      # assign the new bins to this lot
-            else:                                        # net-only new tag
+                ct = int(P.get(f"bin_ct_{rid}")) if (P.get(f"bin_ct_{rid}") or "").isdigit() else 1
+                b = WeighTagBin.objects.create(weigh_tag=wt, bin_label=lbl, bin_count=ct, gross_lbs=grd)
+                if P.get(f"bin_incl_{rid}"):        # checkbox present ⇒ assign
+                    made_assign.append(b)
+            if made_assign:
+                bin_ids = [str(b.pk) for b in made_assign]
+            else:                                   # no assigned lines ⇒ net-only
                 net_lbs = _dec(P.get("net_lbs"))
                 if not net_lbs:
-                    raise ValueError("Add bin lines, or enter net pounds.")
+                    raise ValueError("Check at least one bin line to assign, or enter net pounds.")
                 wt.net_weight_lbs = net_lbs
                 wt.save(update_fields=["net_weight_lbs"])
                 allocations = [(wt, net_lbs)]
@@ -233,12 +240,17 @@ def intake_destem(request):
         return render(request, "web/_intake_result.html", {"error": str(e)})
 
     lot = r["lot"]
-    return render(request, "web/_intake_result.html", {
+    resp = render(request, "web/_intake_result.html", {
         "r": r, "lot": lot,
         "additives": Additive.objects.exclude(dose_mode=Additive.DoseMode.BENCH)
                           .order_by("category", "name"),
         "additions": lot.additions.filter(voided_at__isnull=True).order_by("id"),
     })
+    # Swap the whole form out for the summary so the same entry can't be submitted
+    # twice (append-only ⇒ a resubmit would create a duplicate lot).
+    resp["HX-Retarget"] = "#intake-form"
+    resp["HX-Reswap"] = "outerHTML"
+    return resp
 
 
 # ---------------------------------------------------------- dose preview --
