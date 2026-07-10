@@ -24,6 +24,7 @@ urlpatterns = [
     # guided receiving-fruit intake
     path("intake/", intake.intake_index, name="intake"),
     path("intake/estimate/", intake.intake_estimate, name="intake-estimate"),      # HTMX
+    path("intake/tag-bins/", intake.intake_tag_bins, name="intake-tag-bins"),      # HTMX
     path("intake/destem/", intake.intake_destem, name="intake-destem"),            # HTMX
     path("intake/dose/", intake.dose_preview, name="intake-dose"),                 # HTMX
     path("intake/<int:lot_pk>/addition/", intake.intake_addition, name="intake-addition"),  # HTMX

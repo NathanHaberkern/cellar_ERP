@@ -25,7 +25,7 @@ from decimal import Decimal
 from django.db import transaction
 
 from cellar.models import (
-    Lot, Vessel, Additive, WeighTag, WeighTagAllocation,
+    Lot, Vessel, Additive, WeighTag, WeighTagBin, WeighTagAllocation,
     DestemmingEvent, TankAssignment, ColdSoakSchedule, InoculationEvent,
     Reading, Addition, VolumeMeasurement,
 )
@@ -49,6 +49,24 @@ PRESS_YIELD_FALLBACK = Decimal("165")
 # ======================================================================
 def tons_from_lbs(net_lbs) -> Decimal:
     return (Decimal(net_lbs) / Decimal("2000")).quantize(Decimal("0.01"))
+
+
+def generate_weigh_tag_number(block, harvest_date) -> str:
+    """Human-readable tag id: '<block>-MMDDYY' (e.g. block 422 picked 09/12/26 →
+    '422-091226'). If that exact id is already taken (same block picked again the
+    same day), suffix -A, -B, … so it stays unique and readable."""
+    base = f"{block.name}-{harvest_date.strftime('%m%d%y')}"
+    if not WeighTag.objects.filter(weigh_tag_number=base).exists():
+        return base
+    for i in range(26):
+        cand = f"{base}-{chr(ord('A') + i)}"
+        if not WeighTag.objects.filter(weigh_tag_number=cand).exists():
+            return cand
+    # extraordinarily unlikely; fall back to a numeric tail
+    n = 1
+    while WeighTag.objects.filter(weigh_tag_number=f"{base}-{n}").exists():
+        n += 1
+    return f"{base}-{n}"
 
 
 def intake_volume_estimate(net_lbs, path) -> Decimal:
@@ -105,18 +123,23 @@ def add_working_days(d: date, n: int) -> date:
 # ======================================================================
 @transaction.atomic
 def receive_and_destem(*, vintage, variety, program, path, destem_at,
-                       allocations, block=None, vineyard=None,
+                       allocations=None, bin_ids=None, block=None, vineyard=None,
                        tank_code=None, bins=None,
                        crusher_enabled=True, fruit_condition=None, foot_tread=False,
+                       foot_tread_pct=None,
                        initial_temp_f=None, hold_hours=None,
-                       mog_severity="none",
+                       mog_severity="none", additions=None,
                        cold_soak_days=2, production_intent=""):
     """Create the lot + code, allocate weigh-tag pounds, record the destemming
     event, assign it to a tank OR to freshly-created A/B/C bins, persist the
     intake volume estimate, and (path D) schedule inoculation.
 
-    allocations: list of (weigh_tag, net_lbs) to draw for this lot.
-    bins: list of size-in-tons (e.g. [1, 1, 0.5]) → creates bins A, B, C…
+    allocations: list of (weigh_tag, net_lbs) — net-only (purchased) tags.
+    bin_ids:     list of WeighTagBin pks to assign to this lot (estate tags with
+                 bin lines). Each bin's net rolls up to a per-tag allocation, so a
+                 lot may pull bins from several tags and a tag's bins may go to
+                 several lots. allocations and bin_ids can be combined.
+    bins: list of size-in-tons (e.g. [1, 1, 0.5]) creates bins A, B, C.
     Returns a dict summary for the UI.
     """
     if fruit_condition is None:
@@ -131,15 +154,33 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
                                production_intent=production_intent)
 
     total_lbs = Decimal("0")
-    for wt, lbs in allocations:
+
+    # Bin-level assignment: mark each chosen bin's lot, then roll the bins up to
+    # one WeighTagAllocation per tag (keeps tons/costing/remaining-lbs working).
+    if bin_ids:
+        by_tag = {}
+        for b in (WeighTagBin.objects.filter(pk__in=bin_ids)
+                  .select_related("weigh_tag")):
+            b.assigned_lot = lot
+            b.save(update_fields=["assigned_lot"])
+            lbs = Decimal(b.net_lbs or 0)
+            by_tag[b.weigh_tag] = by_tag.get(b.weigh_tag, Decimal("0")) + lbs
+            total_lbs += lbs
+        for wt, lbs in by_tag.items():
+            WeighTagAllocation.objects.create(weigh_tag=wt, lot=lot, allocated_net_lbs=lbs)
+
+    for wt, lbs in (allocations or []):
         WeighTagAllocation.objects.create(weigh_tag=wt, lot=lot,
                                           allocated_net_lbs=Decimal(lbs))
         total_lbs += Decimal(lbs)
 
+    ft_pct = Decimal(str(foot_tread_pct)) if foot_tread_pct is not None else None
     de = DestemmingEvent.objects.create(
         lot=lot, destem_at=destem_at, processing_path=path,
         crusher_enabled=crusher_enabled, fruit_condition=fruit_condition,
-        foot_tread=foot_tread, initial_temp_f=initial_temp_f, hold_hours=hold_hours,
+        foot_tread=bool(foot_tread or (ft_pct and ft_pct > 0)),
+        foot_tread_pct=ft_pct,
+        initial_temp_f=initial_temp_f, hold_hours=hold_hours,
         mog_severity=mog_severity or "none",
     )
 
@@ -167,6 +208,16 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
     est_intake = intake_volume_estimate(total_lbs, path)
     _record_volume(lot, est_intake, destem_at)
 
+    # Crusher additions, recorded in the SAME transaction as the lot so they can be
+    # entered up front (append-only means there's no going back to add them later).
+    # Doses compute against the just-persisted intake estimate and the lot's tons.
+    recorded_additions = []
+    for spec in (additions or []):
+        add = _resolve_additive(spec["additive"])
+        kw = _addition_kwargs(add, spec.get("amount"))
+        recorded_additions.append(
+            record_addition(lot, add, added_at=destem_at, volume_gal=est_intake, **kw))
+
     cold_soak = None
     if path == DestemmingEvent.Path.D:
         lot.status = Lot.Status.COLD_SOAK
@@ -182,6 +233,7 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
         "press_yield_est_gal": press_yield_estimate(total_lbs, variety),
         "cold_soak": cold_soak,
         "target_inoc_date": cold_soak.target_inoc_date if cold_soak else None,
+        "additions": recorded_additions,
     }
 
 
@@ -275,12 +327,35 @@ def _resolve_additive(additive):
     return Additive.objects.get(name=additive) if isinstance(additive, str) else additive
 
 
+def _addition_kwargs(additive, override):
+    """Map one UI override value onto the right dose kwarg for this additive's mode.
+    Kept here (not only in the view) so pre-lot previews and the atomic create use
+    identical logic."""
+    if additive.dose_mode == Additive.DoseMode.PPM_TARGET:
+        return {"target_ppm": override}
+    if additive.dose_mode == Additive.DoseMode.BENCH:
+        return {"explicit_quantity": override}
+    return {"rate_override": override}
+
+
 def preview_addition(lot, additive, *, volume_gal=None, tons=None,
                      rate_override=None, target_ppm=None, explicit_quantity=None):
     """Dry-run: compute the dose for the live UI preview without writing."""
     additive = _resolve_additive(additive)
     vol = Decimal(str(volume_gal)) if volume_gal is not None else current_volume(lot)
     t = Decimal(str(tons)) if tons is not None else _lot_tons(lot)
+    return _compute_dose(additive, vol=vol, tons=t, rate_override=rate_override,
+                         target_ppm=target_ppm, explicit_quantity=explicit_quantity)
+
+
+def preview_dose(additive, *, volume_gal, tons, rate_override=None,
+                 target_ppm=None, explicit_quantity=None):
+    """Lot-less dry-run for the intake form's live preview BEFORE the lot exists —
+    computes straight from the intake volume estimate + tons. Same math the atomic
+    create will apply, so the previewed dose equals what gets recorded."""
+    additive = _resolve_additive(additive)
+    vol = Decimal(str(volume_gal)) if volume_gal is not None else None
+    t = Decimal(str(tons)) if tons is not None else None
     return _compute_dose(additive, vol=vol, tons=t, rate_override=rate_override,
                          target_ppm=target_ppm, explicit_quantity=explicit_quantity)
 

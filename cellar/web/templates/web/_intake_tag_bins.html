@@ -1,0 +1,16 @@
+{% if bins %}
+  <div style="margin-top:10px;border:1px solid var(--line);border-radius:6px;padding:10px">
+    <p style="margin:0 0 6px;font-size:12px;color:var(--muted)">
+      Assign bins from {{ wt.weigh_tag_number }} to this lot:</p>
+    {% for b in bins %}
+      <label class="inline" style="display:block;margin:3px 0{% if b.assigned_lot %};color:var(--muted){% endif %}">
+        <input type="checkbox" name="bin_ids" value="{{ b.pk }}"{% if b.assigned_lot %} disabled{% endif %}>
+        {{ b.bin_label }} · {{ b.net_lbs|floatformat:0 }} lb net
+        {% if b.assigned_lot %}<span style="color:var(--muted)"> — already crushed into {{ b.assigned_lot.code }}</span>{% endif %}
+      </label>
+    {% endfor %}
+  </div>
+{% elif bins is not None %}
+  <p style="margin:8px 0 0;color:var(--muted);font-size:12px">
+    No bin lines on this tag — use net pounds above.</p>
+{% endif %}

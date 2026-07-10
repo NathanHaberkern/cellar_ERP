@@ -4,6 +4,15 @@ from django.db import models
 from .base import AppendOnly, LotKind, SourceType
 
 
+class Severity(models.TextChoices):
+    """4-level fruit-condition scale, shared by weigh-tag MOG/Rot ratings.
+    Same string values as the destem-side scale so the two stay consistent."""
+    NONE = "none", "None"
+    LIGHT = "light", "Light"
+    MODERATE = "moderate", "Moderate"
+    HEAVY = "heavy", "Heavy"
+
+
 class HarvestEvent(models.Model):
     block = models.ForeignKey("cellar.Block", on_delete=models.PROTECT, related_name="harvests")
     harvest_date = models.DateField()
@@ -39,6 +48,12 @@ class WeighTag(models.Model):
     fruit_cost_per_ton = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True,
         help_text="accounting cost basis (estate farming cost, or purchase price) — for COGS")
     locked = models.BooleanField(default=False, help_text="set true at crush")
+    # Per-delivery fruit assessment (rated once at the tag, not per resulting lot).
+    mog_severity = models.CharField(max_length=8, choices=Severity.choices,
+                                    default=Severity.NONE, help_text="material other than grapes")
+    rot_severity = models.CharField(max_length=8, choices=Severity.choices, default=Severity.NONE)
+    rot_type = models.CharField(max_length=40, blank=True, help_text="e.g. botrytis, sour")
+    notes = models.TextField(blank=True, help_text="free-form intake notes for this delivery")
     supersedes = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT,
                                    related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -80,6 +95,9 @@ class WeighTagBin(models.Model):
     TARE_PER_BIN = 98
 
     weigh_tag = models.ForeignKey(WeighTag, on_delete=models.CASCADE, related_name="bins")
+    assigned_lot = models.ForeignKey("cellar.Lot", null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="assigned_bins",
+                                     help_text="the lot this bin was crushed into, if assigned")
     bin_label = models.CharField(max_length=40, help_text="bin number(s) in this weighing, e.g. '22/142'")
     bin_count = models.PositiveSmallIntegerField(default=2, help_text="bins in this weighing (1 or 2)")
     gross_lbs = models.DecimalField(max_digits=10, decimal_places=1)

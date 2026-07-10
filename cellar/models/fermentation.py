@@ -37,6 +37,8 @@ class DestemmingEvent(AppendOnly):
     crusher_enabled = models.BooleanField(default=True)
     fruit_condition = models.CharField(max_length=14, choices=Fruit.choices, default=Fruit.DESTEMMED)
     foot_tread = models.BooleanField(default=False)
+    foot_tread_pct = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True,
+                                         help_text="% of the lot foot-tread, by bin count (3 of 6 bins → 50)")
     hold_hours = models.PositiveIntegerField(null=True, blank=True)
     initial_temp_f = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     mog_severity = models.CharField(max_length=8, choices=Severity.choices, default=Severity.NONE,
