@@ -100,6 +100,10 @@ def lot_detail(request, pk):
     show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
     hide_additions = lot.status in ferment_window
 
+    # Bottling tab: finished bulk wine, or a parcel itself.
+    from cellar.services import bottling as bz
+    show_bottling = bz.can_split(lot) or bz.is_parcel(lot) or bool(bz.parcels_of(lot))
+
     # Overview task summary — open count, overdue count, next 3 by due date.
     from cellar.services import tasks as tsvc
     open_qs = list(tsvc.open_tasks(lot=lot))
@@ -114,7 +118,7 @@ def lot_detail(request, pk):
         "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
         "overview_note": lotpages.section_note(lot, "overview"),
         "show_ferment": show_ferment, "hide_additions": hide_additions,
-        "task_summary": task_summary,
+        "show_bottling": show_bottling, "task_summary": task_summary,
     })
 
 

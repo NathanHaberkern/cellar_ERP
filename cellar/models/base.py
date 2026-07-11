@@ -20,6 +20,11 @@ class LotKind(models.TextChoices):
     BLEND = "blend", "Blend"
     COFERMENT = "coferment", "Co-ferment"
     SPLIT = "split", "Split"
+    # A parcel racked off a finished bulk lot to be prepped and bottled. Kept distinct
+    # from STANDARD on purpose: _abbr_lot_count() (the singleton display rule) counts
+    # only STANDARD lots, so splitting a parcel off 25VERD must not silently re-render
+    # the parent as 25VERD1.
+    BOTTLING = "bottling", "Bottling parcel"
 
 
 class SourceType(models.TextChoices):

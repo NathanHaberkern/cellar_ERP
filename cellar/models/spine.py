@@ -125,6 +125,7 @@ class Lot(models.Model):
         PRESSED = "pressed", "Pressed"
         SETTLING = "settling", "Settling"
         DONE_PRIMARY = "done_primary", "Primary complete"
+        BOTTLED = "bottled", "Bottled"
 
     vintage_year = models.PositiveSmallIntegerField(help_text="2-digit, = harvest year")
     current_designation = models.ForeignKey(
@@ -213,6 +214,7 @@ class LotLineage(AppendOnly):
         WHOLE_BLEND = "whole_blend", "Whole-lot blend"
         PARTIAL_BLEND = "partial_blend_contribution", "Partial blend contribution"
         TOPPING = "topping_contribution", "Topping contribution"
+        BOTTLING_SPLIT = "bottling_split", "Bottling parcel split"
 
     parent_lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="lineage_as_parent")
     child_lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="lineage_as_child")

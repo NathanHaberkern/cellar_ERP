@@ -1,0 +1,115 @@
+<h3 style="margin:0 0 12px">Bottling</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+{% if is_parcel %}
+  {# ---------- this lot IS a bottling parcel ---------- #}
+  <p class="muted" style="margin:0 0 12px">
+    Bottling parcel{% if parent %} racked off
+    <a href="{% url 'lot-detail' parent.pk %}">{{ parent.code }}</a>{% endif %}.
+    Prep work (fining, SO₂, blending) belongs here, not on the bulk lot.
+    {% if volume %}Holding <b>{{ volume|floatformat:0 }} gal</b>.{% endif %}
+  </p>
+
+  {% if runs %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Bottled</th><th>SKU</th><th>Format</th><th>Cases</th><th>Gal in</th><th>Loss</th><th>On hand</th></tr></thead>
+      <tbody>
+        {% for r in runs %}
+          <tr>
+            <td>{{ r.bottled_at|date:"M j, Y" }}</td>
+            <td><b>{{ r.sku }}</b></td>
+            <td>{{ r.bottle_format.name }}</td>
+            <td>{{ r.cases_produced }}</td>
+            <td>{{ r.bulk_gallons_in|default:"—" }}</td>
+            <td>{{ r.bottling_loss_gal|default:"—" }}</td>
+            <td>{{ r.cases_on_hand }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  {% endif %}
+
+  {% if lot.status != "bottled" %}
+    <div class="card" style="margin-top:14px">
+      <p class="eyebrow" style="margin:0 0 10px">Bottle this parcel</p>
+      <form hx-post="{% url 'bottling-run' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+        <div class="form-grid">
+          <div><label>SKU <span class="muted">(must match C7 / QBO)</span></label>
+            <input type="text" name="sku" required placeholder="e.g. 25VERD"></div>
+          <div><label>Format</label>
+            <select name="bottle_format">
+              {% for f in formats %}<option value="{{ f.pk }}">{{ f.name }}</option>{% endfor %}
+            </select></div>
+          <div><label>Cases produced</label><input type="number" min="1" name="cases" required></div>
+          <div><label>Bulk gal in</label>
+            <input type="number" step="0.1" name="gallons_in" value="{{ volume|default:'' }}"
+                   title="blank → the lot's booking volume; the difference from bottled volume is the loss"></div>
+          <div><label>Bottled on</label><input type="date" name="bottled_at" value="{{ today }}"></div>
+          <div><label>Line + labor cost</label><input type="number" step="0.01" name="labor" value="0"></div>
+        </div>
+        <div class="note-actions" style="margin-top:10px">
+          <button class="btn sm" type="submit"
+                  hx-confirm="Record this bottling run? The parcel's tank is emptied and the lot is marked bottled.">
+            Record bottling</button>
+        </div>
+      </form>
+      <p class="muted" style="margin:10px 0 0">
+        The SKU is the finished-goods identity and is independent of the lot code — so
+        this parcel bottles into your existing C7 SKU while the trail back to
+        {% if parent %}{{ parent.code }}{% else %}the bulk lot{% endif %} stays intact.
+      </p>
+    </div>
+  {% else %}
+    <div class="msg ok">Bottled. The wine has left the tank; the case goods live on the run above.</div>
+  {% endif %}
+
+{% else %}
+  {# ---------- this lot is BULK ---------- #}
+  {% if parcels %}
+    <p class="eyebrow" style="margin:0 0 8px">Parcels racked off for bottling</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parcel</th><th>Gallons</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for p in parcels %}
+          <tr>
+            <td><a href="{% url 'lot-detail' p.lot.pk %}"><b>{{ p.lot.code }}</b></a></td>
+            <td>{{ p.volume_gal|floatformat:0 }}</td>
+            <td>{{ p.lot.get_status_display }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  {% endif %}
+
+  {% if can_split %}
+    <div class="card" style="margin-top:14px">
+      <p class="eyebrow" style="margin:0 0 10px">Prepare for bottling</p>
+      <p class="muted" style="margin:0 0 10px">
+        Racks a parcel off into its own lot ({{ lot.code }}_B1, _B2…). Prep and bottling
+        happen on the parcel; whatever stays in tank keeps its own history and can still
+        be sold as bulk.
+        {% if volume %} Currently holding <b>{{ volume|floatformat:0 }} gal</b>.{% endif %}
+      </p>
+      <form hx-post="{% url 'bottling-prepare' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+        <div class="form-grid">
+          <div><label>Gallons to rack off</label>
+            <input type="number" step="0.1" name="volume" required
+                   value="{{ volume|default:'' }}"></div>
+          {% include "web/_vessel_picker.html" with options=vessel_options field="vessel" picker_id="btl" label="Into vessel" %}
+          <div><label>Racked at</label>
+            <input type="datetime-local" name="racked_at" value="{{ now_local }}"></div>
+        </div>
+        <div class="note-actions" style="margin-top:10px">
+          <button class="btn sm" type="submit">Create bottling parcel</button>
+        </div>
+      </form>
+    </div>
+  {% elif not parcels %}
+    <div class="empty">
+      Bottling opens once the lot has finished primary.
+      {% if lot.status == "bottled" %}This lot is already bottled.{% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+
+{% include "web/_lot_note.html" with section="bottling" note=note %}

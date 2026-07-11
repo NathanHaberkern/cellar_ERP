@@ -168,8 +168,17 @@ def labs(lot):
 
 # ------------------------------------------------------------------ movement
 def _d(value):
-    """Normalize a date / datetime to a date for uniform sorting + display."""
-    if hasattr(value, "date") and not isinstance(value, type(timezone.now().date())):
+    """Normalize a date / datetime to a date for uniform sorting + display.
+
+    NB: datetime is a SUBCLASS of date, so `isinstance(dt, date)` is True for both.
+    Any guard phrased as "is it not a date?" therefore never fires on a datetime and
+    lets it through unconverted — which blows up the sort below the moment one lot
+    carries both a datetime-sourced row (tank assignment) and a date-sourced one
+    (bottling run, aging placement) with "can't compare datetime to date". Test for
+    datetime FIRST.
+    """
+    from datetime import datetime as _datetime
+    if isinstance(value, _datetime):
         try:
             return timezone.localtime(value).date()
         except (ValueError, TypeError):
@@ -210,6 +219,22 @@ def movements(lot):
         rows.append({"type": "Blending", "date": _d(e.created_at),
                      "start": lot.code, "end": e.child_lot.code,
                      "gallons": e.volume_gal, "note": e.get_relationship_type_display()})
+
+    # Bottling parcel split — both directions, so the bulk lot shows what left and the
+    # parcel shows where it came from.
+    for e in (LotLineage.objects.filter(parent_lot=lot, voided_at__isnull=True,
+                                        relationship_type=LotLineage.Relationship.BOTTLING_SPLIT)
+              .select_related("child_lot")):
+        rows.append({"type": "Bottling prep", "date": _d(e.created_at),
+                     "start": lot.code, "end": e.child_lot.code,
+                     "gallons": -e.volume_gal if e.volume_gal is not None else None,
+                     "note": "racked off for bottling"})
+    for e in (LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True,
+                                        relationship_type=LotLineage.Relationship.BOTTLING_SPLIT)
+              .select_related("parent_lot")):
+        rows.append({"type": "Bottling prep", "date": _d(e.created_at),
+                     "start": e.parent_lot.code, "end": lot.code,
+                     "gallons": e.volume_gal, "note": "parcel racked off bulk"})
 
     # Topping gain — foreign wine topped into this lot's barrels (LotLineage TOPPING)
     for e in (LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True,

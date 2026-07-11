@@ -14,6 +14,7 @@ from . import intake
 from . import labs
 from . import tasks
 from . import fermentation as ferment
+from . import bottling as bottle
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -51,6 +52,10 @@ urlpatterns = [
     path("lots/<int:pk>/ferment/confirm/<int:task_pk>/", ferment.ferment_confirm, name="ferment-confirm"),
     path("lots/<int:pk>/ferment/press/", ferment.ferment_press, name="ferment-press"),
     path("lots/<int:pk>/ferment/rack/", ferment.ferment_rack, name="ferment-rack"),
+    # bottling (parcel split + run)
+    path("lots/<int:pk>/bottling/", bottle.lot_bottling, name="lot-bottling"),
+    path("lots/<int:pk>/bottling/prepare/", bottle.bottling_prepare, name="bottling-prepare"),
+    path("lots/<int:pk>/bottling/run/", bottle.bottling_run, name="bottling-run"),
     # section scratchpad note + on-page entry actions
     path("lots/<int:pk>/note/<slug:section>/", views.lot_note_save, name="lot-note-save"),
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),

@@ -120,10 +120,16 @@ def render_designation(d):
     abbrs = {m["abbr"] for m in members}
     if len(abbrs) == 1:  # same-variety blend → 24TEMP4/5/6
         seqs = "/".join(str(m["seq"]) for m in members)
-        return f"{vv}{members[0]['abbr']}{seqs}"
-    # differing → full member codes joined "/"  (25SOUZPORT1/TNPORT1, 24TCPORT/SOUZPORT)
-    parts = [m["abbr"] + (str(m["seq"]) if m.get("seq") is not None else "") for m in members]
-    return f"{vv}" + "/".join(parts)
+        core = f"{vv}{members[0]['abbr']}{seqs}"
+    else:
+        # differing → full member codes joined "/"  (25SOUZPORT1/TNPORT1, 24TCPORT/SOUZPORT)
+        parts = [m["abbr"] + (str(m["seq"]) if m.get("seq") is not None else "") for m in members]
+        core = f"{vv}" + "/".join(parts)
+    # suffix applies to blends too — a bottling parcel split off a blend would otherwise
+    # drop its _B1 and render identically to its parent.
+    if d.custom_suffix:
+        core += f"_{d.custom_suffix}"
+    return core
 
 
 # ------------------------------------------------------------- creation points
@@ -173,3 +179,39 @@ def redesignate(lot, variety, program, block=None, vineyard=None):
     lot.current_designation = d
     lot.save(update_fields=["current_designation"])
     return lot
+
+
+# ------------------------------------------------------- bottling parcels
+def next_parcel_suffix(parent) -> str:
+    """B1, B2, ... — the next bottling-parcel suffix for this parent lot.
+
+    Numbered per parent, so bottling the same wine twice in a vintage gives
+    25VERD_B1 and 25VERD_B2 rather than a collision.
+    """
+    n = LotDesignation.objects.filter(
+        lot__lineage_as_child__parent_lot=parent,
+        lot__lineage_as_child__voided_at__isnull=True,
+        kind=LotKind.BOTTLING, effective_to__isnull=True).count()
+    return f"B{n + 1}"
+
+
+@transaction.atomic
+def assign_parcel_designation(child, parent, suffix=None):
+    """Code a bottling parcel off its parent: same members, plus a _B<n> suffix.
+
+    The parent's abbreviation and sequence are REUSED verbatim (no new sequence is
+    drawn) so the parcel reads as what it is — a piece of 25VERD, not a new lot in
+    its own right. kind=BOTTLING keeps it out of _abbr_lot_count(), so the parent's
+    own code is unaffected by the split.
+    """
+    pd = parent.current_designation
+    if pd is None:
+        raise ValueError(f"{parent} has no designation to split from.")
+    suffix = suffix or next_parcel_suffix(parent)
+
+    d = LotDesignation.objects.create(
+        lot=child, kind=LotKind.BOTTLING, members=list(pd.members),
+        custom_suffix=suffix, is_provisional=pd.is_provisional)
+    child.current_designation = d
+    child.save(update_fields=["current_designation"])
+    return d
