@@ -1,0 +1,29 @@
+{% if error %}
+  <div class="msg err">{{ error }}</div>
+{% elif pp %}
+  <div class="card" style="margin-top:12px">
+    <h4 style="margin:0 0 8px">Plan preview</h4>
+    <p class="muted" style="margin:0 0 10px">
+      Nitrogen need <b>{{ pp.plan.need }}</b> · YAN required <b>{{ pp.plan.yan_required }}</b> ·
+      juice YAN <b>{{ pp.yan|floatformat:0 }}</b> · additional <b>{{ pp.plan.additional_yan }}</b> ppm
+      (band {{ pp.plan.band }}){% if pp.source %} · from {{ pp.source }}{% endif %}
+    </p>
+    {% for w in pp.warnings %}<div class="msg err">{{ w }}</div>{% endfor %}
+
+    <table class="kv" style="width:100%"><tbody>
+      <tr><th>Yeast ({{ pp.strain }})</th><td>{{ pp.yeast_label }} <span class="muted">· 2 lb/1000 gal at rehydration</span></td></tr>
+      {% for a in pp.plan.adds %}
+        <tr>
+          <th>{{ a.product }}</th>
+          <td>{{ a.dose_g_hl|floatformat:0 }} g/hL ≈ {{ a.grams|floatformat:0 }} g · <span class="muted">{{ a.stage }}{% if a.trigger_brix %} (~{{ a.trigger_brix }} °Brix){% endif %}</span>{% if a.note %} <span class="badge">{{ a.note }}</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody></table>
+
+    {% if pp.staged %}
+      <p class="muted" style="margin:10px 0 0">Estimated Fermaid O dates:
+        {% for s in pp.staged %}{{ s.stage }} → {{ s.due|date:"M j" }}{% if not forloop.last %}; {% endif %}{% endfor %}.
+        Tasks auto-advance when a Brix reading reaches the trigger.</p>
+    {% endif %}
+  </div>
+{% endif %}

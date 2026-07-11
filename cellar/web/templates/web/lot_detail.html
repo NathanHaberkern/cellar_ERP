@@ -58,8 +58,14 @@
 
 {# ---- sub-page menu bar --------------------------------------------------- #}
 <div class="tabs" role="tablist">
+  {% if show_ferment %}
+  <button class="{% if hide_additions %}on{% endif %}" hx-get="{% url 'lot-ferment' lot.pk %}" hx-target="#lot-panel"
+          onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Fermentation</button>
+  {% endif %}
+  {% if not hide_additions %}
   <button class="on" hx-get="{% url 'lot-additions' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Additions</button>
+  {% endif %}
   <button hx-get="{% url 'lot-labs' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Labs</button>
   <button hx-get="{% url 'lot-movement' lot.pk %}" hx-target="#lot-panel"
@@ -73,7 +79,9 @@
   <button hx-get="{% url 'lot-tasks' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Tasks</button>
 </div>
-<div id="lot-panel" class="panel" hx-get="{% url 'lot-additions' lot.pk %}" hx-trigger="load">
+<div id="lot-panel" class="panel"
+     hx-get="{% if hide_additions %}{% url 'lot-ferment' lot.pk %}{% else %}{% url 'lot-additions' lot.pk %}{% endif %}"
+     hx-trigger="load">
   <div class="empty">Loading…</div>
 </div>
 {% endblock %}

@@ -13,6 +13,7 @@ from . import scan
 from . import intake
 from . import labs
 from . import tasks
+from . import fermentation as ferment
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -42,6 +43,14 @@ urlpatterns = [
     path("lots/<int:pk>/oak/", views.lot_oak, name="lot-oak"),
     path("lots/<int:pk>/cost/", views.lot_cost, name="lot-cost"),
     path("lots/<int:pk>/tasks/", views.lot_tasks, name="lot-tasks"),
+    # fermentation module (HTMX sub-panel, steps 1-4)
+    path("lots/<int:pk>/ferment/", ferment.lot_ferment, name="lot-ferment"),
+    path("lots/<int:pk>/ferment/preview/", ferment.ferment_preview, name="ferment-preview"),
+    path("lots/<int:pk>/ferment/inoculate/", ferment.ferment_inoculate, name="ferment-inoculate"),
+    path("lots/<int:pk>/ferment/daily/", ferment.ferment_daily, name="ferment-daily"),
+    path("lots/<int:pk>/ferment/confirm/<int:task_pk>/", ferment.ferment_confirm, name="ferment-confirm"),
+    path("lots/<int:pk>/ferment/press/", ferment.ferment_press, name="ferment-press"),
+    path("lots/<int:pk>/ferment/rack/", ferment.ferment_rack, name="ferment-rack"),
     # section scratchpad note + on-page entry actions
     path("lots/<int:pk>/note/<slug:section>/", views.lot_note_save, name="lot-note-save"),
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),

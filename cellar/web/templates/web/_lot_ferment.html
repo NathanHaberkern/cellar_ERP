@@ -1,0 +1,113 @@
+<h3 style="margin:0 0 12px">Fermentation</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+{# ---- Step 1 · Inoculation + nutrition plan ---- #}
+{% if show_inoculate %}
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Step 1 · Yeast &amp; nutrition</p>
+    <form id="ferment-form">
+      <div class="form-grid">
+        <div><label>Yeast</label>
+          <select name="strain">{% for val, lbl in strains %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}</select></div>
+        <div><label>Est. volume (gal)</label><input type="number" step="1" name="volume" value="{{ volume|default:'' }}"></div>
+        <div><label>Inoculated at</label><input type="datetime-local" name="inoculated_at" value="{{ now_local }}"></div>
+        <div><label>Initial Brix</label><input type="number" step="0.1" name="brix" value="{{ brix|default:'' }}"></div>
+        <div><label>Juice YAN</label><input type="number" step="1" name="yan" value="{{ yan|default:'' }}"></div>
+      </div>
+      {% if metric_source %}<p class="muted" style="margin:6px 0 0">Brix / YAN prefilled from {{ metric_source }}. Edit if needed.</p>
+      {% else %}<p class="muted" style="margin:6px 0 0">No juice panel found — enter Brix and YAN.</p>{% endif %}
+      <div class="note-actions" style="margin-top:10px">
+        <button class="btn sm ghost" type="button" hx-post="{% url 'ferment-preview' lot.pk %}"
+                hx-include="#ferment-form" hx-target="#ferment-preview" hx-swap="innerHTML">Preview plan</button>
+        <button class="btn sm" type="button" hx-post="{% url 'ferment-inoculate' lot.pk %}"
+                hx-include="#ferment-form" hx-target="#lot-panel" hx-swap="innerHTML"
+                hx-confirm="Inoculate and book the yeast + Go-Ferm additions now?">Inoculate</button>
+      </div>
+    </form>
+    <div id="ferment-preview"></div>
+  </div>
+{% endif %}
+
+{# ---- staged Fermaid O tasks (the plan as live, confirmable tasks) ---- #}
+{% if fermaid_tasks %}
+  <div class="card" style="margin-top:14px">
+    <p class="eyebrow" style="margin:0 0 10px">Nutrition additions — confirm when made</p>
+    {% for t in fermaid_tasks %}
+      <div class="lab-group">
+        <div class="row" style="justify-content:space-between;align-items:baseline">
+          <div>{{ t.title }} {% if t.is_overdue %}<span class="badge danger">due</span>{% elif t.payload.advanced %}<span class="badge ok">trigger reached</span>{% endif %}
+            <div class="muted" style="font-size:12px">{{ t.body }}</div></div>
+        </div>
+        <form hx-post="{% url 'ferment-confirm' lot.pk t.pk %}" hx-target="#lot-panel" hx-swap="innerHTML"
+              class="row" style="gap:8px;align-items:flex-end;margin-top:6px">
+          <div><label class="muted" style="margin:0">Actual g/hL</label>
+            <input type="number" step="1" name="dose" value="{{ t.payload.dose_g_hl }}" style="max-width:110px"></div>
+          <div><label class="muted" style="margin:0">Added at</label>
+            <input type="datetime-local" name="added_at" value="{{ now_local }}"></div>
+          <button class="btn sm" type="submit">Confirm &amp; book</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{# ---- Step 2 · Daily readings + cap ---- #}
+{% if show_daily %}
+  <div class="card" style="margin-top:14px">
+    <p class="eyebrow" style="margin:0 0 10px">Step 2 · Daily reading</p>
+    <form hx-post="{% url 'ferment-daily' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+      <div class="form-grid">
+        <div><label>Brix</label><input type="number" step="0.1" name="brix"></div>
+        <div><label>Temp (°F)</label><input type="number" step="1" name="temp"></div>
+        <div><label>Measured at</label><input type="datetime-local" name="measured_at" value="{{ now_local }}"></div>
+        <div><label>Cap</label>
+          <select name="cap"><option value="">— none —</option>
+            <option value="punchdown">Punch-down</option><option value="pumpover">Pump-over</option></select></div>
+      </div>
+      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit">Log reading</button></div>
+    </form>
+    {% if readings %}
+      <table class="kv" style="margin-top:10px"><tbody>
+        {% for r in readings %}<tr><th>{{ r.get_analyte_display }}</th><td>{{ r.value }} <span class="muted">· {{ r.measured_at|date:"M j H:i" }}</span></td></tr>{% endfor %}
+      </tbody></table>
+    {% endif %}
+  </div>
+{% endif %}
+
+{# ---- Step 3 · Press to new vessel ---- #}
+{% if show_press %}
+  <details class="add-form" style="margin-top:14px">
+    <summary>Step 3 · Press to new vessel</summary>
+    <form hx-post="{% url 'ferment-press' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+      <div class="form-grid">
+        <div><label>To vessel</label><select name="vessel">{% for v in vessels %}<option value="{{ v.pk }}">{{ v.code }}</option>{% endfor %}</select></div>
+        <div><label>Est. volume (gal)</label><input type="number" step="1" name="volume"></div>
+        <div><label>Pressed at</label><input type="datetime-local" name="pressed_at" value="{{ now_local }}"></div>
+      </div>
+      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit">Record press</button></div>
+    </form>
+  </details>
+{% endif %}
+
+{# ---- Step 4 · Rack to barrel (flips module off) ---- #}
+{% if show_rack %}
+  <div class="card" style="margin-top:14px">
+    <p class="eyebrow" style="margin:0 0 10px">Step 4 · Rack to barrel</p>
+    <form hx-post="{% url 'ferment-rack' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+      <label>Empty barrels (volume splits evenly)</label>
+      <div class="row" style="flex-wrap:wrap;gap:10px;margin:6px 0">
+        {% for b in barrels %}
+          <label class="muted" style="margin:0"><input type="checkbox" name="containers" value="{{ b.pk }}"> {{ b.container_id }}</label>
+        {% empty %}<span class="muted">No empty barrels — add containers first.</span>{% endfor %}
+      </div>
+      <div class="form-grid">
+        <div><label>Total volume (gal)</label><input type="number" step="1" name="volume"></div>
+        <div><label>Filled at</label><input type="date" name="filled_at"></div>
+      </div>
+      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit"
+        hx-confirm="Rack to barrel and finish primary? The Fermentation tab will close and Additions will return.">Rack &amp; finish</button></div>
+    </form>
+  </div>
+{% endif %}
+
+{% include "web/_lot_note.html" with section="fermentation" note=note %}

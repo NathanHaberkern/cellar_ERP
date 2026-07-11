@@ -94,9 +94,15 @@ def _lot_queryset(request):
 def lot_detail(request, pk):
     lot = get_object_or_404(Lot, pk=pk)
     summary, err = _safe(lotpages.summary, lot)
+    # tab gate (C1): fermentation replaces additions through the ferment window
+    ferment_window = {Lot.Status.COLD_SOAK, Lot.Status.FERMENTING,
+                      Lot.Status.PRESSED, Lot.Status.SETTLING}
+    show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
+    hide_additions = lot.status in ferment_window
     return render(request, "web/lot_detail.html", {
         "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
         "overview_note": lotpages.section_note(lot, "overview"),
+        "show_ferment": show_ferment, "hide_additions": hide_additions,
     })
 
 
