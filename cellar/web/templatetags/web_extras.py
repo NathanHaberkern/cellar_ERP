@@ -51,3 +51,13 @@ def get(mapping, key):
 def humanize_key(value):
     """under_scored / camelCase-ish keys -> Title Case labels."""
     return str(value).replace("_", " ").strip().title()
+
+
+@register.filter
+def jsonify(value):
+    """Render a dict/list as compact JSON for an editable textarea (rule params)."""
+    import json
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError):
+        return "{}"

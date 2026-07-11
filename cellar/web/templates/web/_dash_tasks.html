@@ -1,0 +1,50 @@
+{% load web_extras %}
+<div class="tasks-head" style="justify-content:space-between">
+  <h3 style="margin:0">Tasks</h3>
+  <div class="row" style="gap:10px;align-items:center">
+    <form hx-get="{% url 'dash-tasks' %}" hx-target="#dash-tasks" hx-swap="innerHTML" hx-trigger="change">
+      <label class="muted" style="margin:0">By&nbsp;</label>
+      <select name="assignee" onchange="this.form.requestSubmit()">
+        <option value="all" {% if assignee_filter == "all" %}selected{% endif %}>Everyone</option>
+        <option value="none" {% if assignee_filter == "none" %}selected{% endif %}>Unassigned</option>
+        {% for u in users %}<option value="{{ u.pk }}" {% if assignee_filter == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.username }}</option>{% endfor %}
+      </select>
+    </form>
+    <a class="btn sm ghost" href="{% url 'rules' %}">Rules</a>
+  </div>
+</div>
+
+{% if tasks %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Due</th><th>Task</th><th>Target</th><th>Assignee</th><th></th></tr></thead>
+    <tbody>
+    {% for t in tasks %}
+      <tr {% if t.is_overdue %}class="voided-row"{% endif %}>
+        <td>{% if t.due_date %}{{ t.due_date|date:"M j" }}{% if t.is_overdue %} <span class="badge danger">late</span>{% endif %}{% else %}—{% endif %}</td>
+        <td>{{ t.title }}{% if t.body %}<div class="muted" style="font-size:12px">{{ t.body|truncatechars:70 }}</div>{% endif %}</td>
+        <td>{% if t.lot_id %}<a href="{% url 'lot-detail' t.lot_id %}">{{ t.target_label }}</a>{% else %}{{ t.target_label }}{% endif %}</td>
+        <td>
+          <form hx-post="{% url 'task-reassign' t.pk %}" hx-target="#dash-tasks" hx-swap="innerHTML">
+            <input type="hidden" name="scope" value="dash">
+            <input type="hidden" name="assignee_filter" value="{{ assignee_filter }}">
+            <select name="assignee" onchange="this.form.requestSubmit()">
+              <option value="none" {% if not t.assignee_id %}selected{% endif %}>—</option>
+              {% for u in users %}<option value="{{ u.pk }}" {% if t.assignee_id == u.pk %}selected{% endif %}>{{ u.username }}</option>{% endfor %}
+            </select>
+          </form>
+        </td>
+        <td class="actions" style="white-space:nowrap">
+          <form style="display:inline" hx-post="{% url 'task-action' t.pk %}" hx-target="#dash-tasks" hx-swap="innerHTML">
+            <input type="hidden" name="scope" value="dash"><input type="hidden" name="assignee_filter" value="{{ assignee_filter }}">
+            <button class="btn sm" name="action" value="complete">Done</button>
+            <button class="btn sm ghost" name="action" value="delete"
+                    hx-confirm="Delete this task? It stays on the ledger.">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+{% else %}
+  <div class="empty">No open tasks{% if assignee_filter != "all" %} for this filter{% endif %}.</div>
+{% endif %}

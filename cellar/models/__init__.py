@@ -26,6 +26,7 @@ from .bottling import (
 from .reporting import (
     Phase, BondTransfer, Material, MaterialTransaction, SweeteningEvent, BondAdjustment, BulkTaxPaidRemoval,
 )
+from .tasks import Task, TaskEvent, TaskRule
 
 __all__ = [
     "Program", "LotKind", "SourceType", "AppendOnly",
@@ -41,4 +42,5 @@ __all__ = [
     "VolumeLoss", "ToppingEvent", "ToppingTarget", "Room", "Location",
     "BottleFormat", "DryGood", "BottlingRun", "BottlingDryGoodUse", "TaxPaidRemoval",
     "Phase", "BondTransfer", "Material", "MaterialTransaction", "SweeteningEvent", "BondAdjustment", "BulkTaxPaidRemoval",
+    "Task", "TaskEvent", "TaskRule",
 ]

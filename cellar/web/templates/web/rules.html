@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Automation</p><h1>Task rules</h1></div>
+</div>
+<p class="muted" style="max-width:64ch">
+  These rules run nightly and create tasks automatically. Tune each rule's
+  parameters and toggle it on or off. New rules are added in code; the knobs live here.
+</p>
+
+<div style="max-width:760px">
+{% for rule in rules %}
+  <div id="rule-{{ rule.pk }}">
+    {% include "web/_rule_row.html" with rule=rule status_choices=status_choices %}
+  </div>
+{% empty %}
+  <div class="empty">No rules yet. Run <code>python manage.py seed_task_rules</code>.</div>
+{% endfor %}
+</div>
+{% endblock %}

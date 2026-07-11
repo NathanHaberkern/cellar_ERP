@@ -62,6 +62,8 @@ def dashboard(request):
         "tank_map": tank_map or [],
         "tank_map_error": tank_map_error,
     }
+    from . import tasks as tasks_web
+    ctx.update(tasks_web.dash_tasks_ctx(request))
     return render(request, "web/dashboard.html", ctx)
 
 
@@ -177,7 +179,8 @@ def lot_cost(request, pk):
 @login_required
 def lot_tasks(request, pk):
     lot = get_object_or_404(Lot, pk=pk)
-    return render(request, "web/_lot_tasks.html", {"lot": lot})
+    from . import tasks as tasks_web
+    return render(request, "web/_lot_tasks.html", tasks_web.lot_tasks_ctx(lot))
 
 
 # -- section note save (mutable scratchpad) ---------------------------------

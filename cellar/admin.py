@@ -13,6 +13,7 @@ from cellar.models import (
     LabResultValue, CellarNote,
     VolumeMeasurement, PressingEvent, FortificationEvent, BookToBond,
 )
+from cellar.models import Task, TaskEvent, TaskRule
 from cellar.services.generator import assign_initial_designation, render_designation
 from django.contrib import messages
 from django.utils import timezone
@@ -544,3 +545,26 @@ from cellar.models import BulkTaxPaidRemoval
 class BulkTaxPaidRemovalAdmin(AuditMixin, admin.ModelAdmin):
     list_display = ("removed_at", "lot", "tax_class", "wine_gallons", "channel")
     list_filter = ("tax_class", "channel")
+
+
+# ------------------------------------------------------------------- tasks
+class TaskEventInline(admin.TabularInline):
+    model = TaskEvent
+    fields = ("kind", "detail", "operator", "created_at")
+    readonly_fields = ("created_at",)
+    extra = 0
+    can_delete = False
+
+
+@admin.register(Task)
+class TaskAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "assignee", "due_date", "lot", "rule")
+    list_filter = ("status", "assignee", "rule")
+    search_fields = ("title", "body")
+    inlines = [TaskEventInline]
+
+
+@admin.register(TaskRule)
+class TaskRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "key", "enabled")
+    list_editable = ("enabled",)

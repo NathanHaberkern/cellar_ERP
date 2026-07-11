@@ -1,0 +1,34 @@
+{% load web_extras %}
+<div class="card" style="margin-bottom:14px">
+  <form hx-post="{% url 'rule-update' rule.pk %}" hx-target="#rule-{{ rule.pk }}" hx-swap="innerHTML">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <div>
+        <b>{{ rule.name }}</b>
+        {% if rule.enabled %}<span class="badge ok">on</span>{% else %}<span class="badge">off</span>{% endif %}
+        {% if saved %}<span class="badge ok">saved</span>{% endif %}
+      </div>
+      <label class="muted" style="margin:0"><input type="checkbox" name="enabled" {% if rule.enabled %}checked{% endif %}> enabled</label>
+    </div>
+    <p class="muted" style="margin:6px 0 10px">{{ rule.description }}</p>
+
+    {% if rule.key == "topping_interval" %}
+      <label>Interval (days without topping before flagging)</label>
+      <input type="number" name="interval_days" min="1" value="{{ rule.params.interval_days|default:60 }}" style="max-width:120px">
+
+    {% elif rule.key == "ferment_daily" %}
+      <label>Apply to lots in these statuses</label>
+      <div class="row" style="gap:14px;flex-wrap:wrap">
+        {% for val, label in status_choices %}
+          <label class="muted" style="margin:0"><input type="checkbox" name="statuses" value="{{ val }}"
+            {% if val in rule.params.statuses %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+
+    {% else %}
+      <label>Parameters (JSON)</label>
+      <textarea name="params_json" rows="3">{{ rule.params|jsonify }}</textarea>
+    {% endif %}
+
+    <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit">Save</button></div>
+  </form>
+</div>

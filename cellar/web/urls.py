@@ -12,6 +12,7 @@ from . import ledger
 from . import scan
 from . import intake
 from . import labs
+from . import tasks
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -51,6 +52,14 @@ urlpatterns = [
     path("labs/import/", labs.labs_import_index, name="labs-import"),
     path("labs/import/preview/", labs.labs_import_preview, name="labs-import-preview"),  # HTMX
     path("labs/import/commit/", labs.labs_import_commit, name="labs-import-commit"),      # HTMX
+
+    # tasks
+    path("tasks/", tasks.dash_tasks, name="dash-tasks"),                          # HTMX (dashboard list)
+    path("tasks/<int:pk>/action/", tasks.task_action, name="task-action"),        # HTMX
+    path("tasks/<int:pk>/reassign/", tasks.task_reassign, name="task-reassign"),  # HTMX
+    path("lots/<int:pk>/tasks/add/", tasks.lot_task_create, name="lot-task-create"),  # HTMX
+    path("rules/", tasks.rules_index, name="rules"),
+    path("rules/<int:pk>/update/", tasks.rule_update, name="rule-update"),        # HTMX
 
     path("reports/", views.reports_index, name="reports"),
     path("reports/run/", views.report_run, name="report-run"),           # HTMX
