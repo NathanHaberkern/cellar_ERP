@@ -151,12 +151,36 @@ class Additive(models.Model):
 
 
 class LabAnalyte(models.Model):
+    # slug — stable machine key the importer and panel definitions reference, so a
+    # display-name tweak never breaks a panel membership or a CSV mapping.
+    slug = models.SlugField(max_length=40, unique=True, blank=True)
     name = models.CharField(max_length=40, unique=True)
     unit = models.CharField(max_length=20, blank=True)
     in_house = models.BooleanField(default=False)
+    sort_order = models.PositiveSmallIntegerField(
+        default=100, help_text="panel display order — lower shows first")
+
+    class Meta:
+        ordering = ("sort_order", "name")
 
     def __str__(self):
         return self.name
+
+
+class LabAnalyteSynonym(models.Model):
+    """Maps an outside lab's analysis-name string onto our canonical analyte.
+
+    ETS reports the same reading under several names (ethanol at 20C / at 60F are
+    kept separate; TA / VA / tartaric arrive with method suffixes). The importer
+    looks a raw name up here first, then falls back to an exact analyte-name match.
+    Editable in admin so a new ETS label never needs a code change.
+    """
+    raw_name = models.CharField(max_length=120, unique=True,
+                                help_text="exact 'Analysis Name' string as ETS prints it")
+    analyte = models.ForeignKey(LabAnalyte, on_delete=models.CASCADE, related_name="synonyms")
+
+    def __str__(self):
+        return f"{self.raw_name} → {self.analyte.slug}"
 
 
 class ConfigConstant(models.Model):

@@ -1,0 +1,27 @@
+{% extends "web/base.html" %}
+{% block title %}Import labs{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Labs</p><h1>Import ETS report</h1></div>
+</div>
+
+<div class="card" style="max-width:720px">
+  <p class="muted" style="margin-top:0">
+    Upload an ETS CSV export. Each sample is matched to a lot by its description
+    (which equals the lot code), classified as a juice or chemistry panel, and
+    de-duplicated — re-uploading the same report imports nothing new.
+  </p>
+  <form hx-post="{% url 'labs-import-preview' %}" hx-target="#import-result"
+        hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:2 1 320px">
+        <label for="csv">ETS export (.csv)</label>
+        <input type="file" name="csv" id="csv" accept=".csv,text/csv" required>
+      </div>
+      <div><button class="btn" type="submit">Preview</button></div>
+    </div>
+  </form>
+</div>
+
+<div id="import-result" style="max-width:860px;margin-top:16px"></div>
+{% endblock %}

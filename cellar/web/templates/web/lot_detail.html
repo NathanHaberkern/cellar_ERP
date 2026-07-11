@@ -32,6 +32,23 @@
     {% endif %}
   </div>
 
+  {% if summary.panel %}
+  <div class="card lab-pinned" style="margin-top:14px">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <div class="l">Latest {{ summary.panel.panel|lower }}
+        <span class="muted">· {{ summary.panel.date|date:"Y-m-d" }} · {{ summary.panel.source }}</span></div>
+      {% if summary.panel.newer_partials %}
+        <span class="muted">{{ summary.panel.newer_partials }} newer partial result{{ summary.panel.newer_partials|pluralize }} — see Labs</span>
+      {% endif %}
+    </div>
+    <table class="kv lab-pinned-grid"><tbody>
+      {% for v in summary.panel.values %}
+        <tr><th>{{ v.analyte }}</th><td>{{ v.display }} {{ v.unit }}{% if v.flag %} <span class="badge">{{ v.flag }}</span>{% endif %}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  {% endif %}
+
   {% include "web/_lot_note.html" with section="overview" note=overview_note %}
 
   <div class="tasks-head">

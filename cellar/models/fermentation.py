@@ -130,11 +130,23 @@ class LabResult(AppendOnly):
         ETS = "ets", "ETS"
         LODI = "lodi", "Lodi Wine Labs"
 
+    class Panel(models.TextChoices):
+        # Classified at import: a sample with a Brix reading is a JUICE panel
+        # (harvest), otherwise CHEMISTRY (spring racking). Heat-stability and
+        # smoke sit apart; anything else lands in OTHER.
+        JUICE = "juice", "Juice panel"
+        CHEMISTRY = "chemistry", "Chemistry panel"
+        HEAT_STABILITY = "heat_stability", "Heat stability"
+        SMOKE = "smoke", "Smoke"
+        OTHER = "other", "Other"
+
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="lab_results")
     lab_request = models.ForeignKey(LabRequest, null=True, blank=True,
                                     on_delete=models.PROTECT, related_name="+")
     reported_at = models.DateTimeField()
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.ETS)
+    panel = models.CharField(max_length=14, choices=Panel.choices, default=Panel.OTHER,
+                             help_text="panel classification, set from the analytes present")
     # Outside-lab sample identifier — carried on ETS / Lodi results, blank in-house.
     sample_id = models.CharField(max_length=60, blank=True,
                                  help_text="outside-lab sample ID (ETS / Lodi); blank for in-house")
@@ -148,13 +160,45 @@ class LabResult(AppendOnly):
 
 
 class LabResultValue(AppendOnly):
-    """One analyte reading on a result — the structured, calc-driving, exportable value."""
+    """One analyte reading on a result — the structured, calc-driving, exportable value.
+
+    A raw ETS result is not always a bare number: censored readings ('< 0.05'),
+    heat-stability pass/fail ('>20' NTU → FAIL), and 'Dry' glucose+fructose all
+    have to survive import without collapsing to an ambiguous zero. So:
+      * `value`   — the numeric reading the calcs use (0 for ND / Dry).
+      * `qualifier` — the operator ETS printed ('<', '>', or '=' for a plain number).
+      * `flag`    — the qualitative meaning (ND / Dry / Pass / FAIL / note).
+      * `display` — exactly what the reports should show ('ND', 'Dry', 'FAIL',
+                    or the number). This is the label; `value` is the math.
+      * `raw_result` — the untouched source string, kept for audit.
+    A plain numeric reading has qualifier '=', no flag, and display == the number.
+    """
+    class Qualifier(models.TextChoices):
+        EQ = "=", "="
+        LT = "<", "< (below detection / threshold)"
+        GT = ">", "> (above threshold)"
+
+    class Flag(models.TextChoices):
+        NONE = "", "—"
+        ND = "ND", "ND (not detected)"
+        DRY = "Dry", "Dry"
+        PASS = "Pass", "Pass (heat-stable)"
+        FAIL = "FAIL", "FAIL (heat-unstable)"
+        NOTE = "note", "Note"
+
     result = models.ForeignKey(LabResult, on_delete=models.CASCADE, related_name="values")
     analyte = models.ForeignKey("cellar.LabAnalyte", on_delete=models.PROTECT, related_name="+")
-    value = models.DecimalField(max_digits=10, decimal_places=3)
+    value = models.DecimalField(max_digits=10, decimal_places=3,
+                                help_text="numeric reading used by calcs; 0 for ND / Dry")
+    qualifier = models.CharField(max_length=1, choices=Qualifier.choices, default=Qualifier.EQ)
+    flag = models.CharField(max_length=8, choices=Flag.choices, blank=True, default=Flag.NONE)
+    display = models.CharField(max_length=40, blank=True,
+                               help_text="how the reading is shown (ND / Dry / FAIL / the number)")
+    raw_result = models.CharField(max_length=200, blank=True,
+                                  help_text="untouched source string, for audit")
 
     def __str__(self):
-        return f"{self.analyte} = {self.value}"
+        return f"{self.analyte} = {self.display or self.value}"
 
 
 class CellarNote(AppendOnly):

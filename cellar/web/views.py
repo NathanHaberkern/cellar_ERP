@@ -31,6 +31,8 @@ from cellar.services import reporting as reporting_svc
 from cellar.services import excise as excise_svc
 from cellar.services import crush_report as crush_svc
 from cellar.services import operations as ops
+from cellar.services import labpanels
+from cellar.services import labimport
 from .tankmap import build_tank_map
 from . import lotpages
 
@@ -228,19 +230,29 @@ def lot_lab_create(request, pk):
             raise ValueError("Sample ID is required for ETS and Lodi Wine Labs results.")
         if source == LabResult.Source.IN_HOUSE:
             sample_id = ""
-        result = LabResult.objects.create(
-            lot=lot, reported_at=_parse_dt(request.POST.get("reported_at")),
-            source=source, sample_id=sample_id, notes=request.POST.get("note", ""),
-            operator=request.user if request.user.is_authenticated else None)
         # analyte/value pairs arrive as parallel lists analyte[]/value[]
         analytes = request.POST.getlist("analyte")
         values = request.POST.getlist("value")
-        for aid, val in zip(analytes, values):
-            if not aid or val in (None, ""):
+        pairs = [(int(aid), (val or "").strip())
+                 for aid, val in zip(analytes, values) if aid and val not in (None, "")]
+        if not pairs:
+            raise ValueError("Enter at least one analyte value.")
+        analyte_by_id = {a.pk: a for a in LabAnalyte.objects.filter(pk__in=[p[0] for p in pairs])}
+        panel = labpanels.classify([analyte_by_id[aid].slug for aid, _ in pairs
+                                    if aid in analyte_by_id])
+        op = request.user if request.user.is_authenticated else None
+        result = LabResult.objects.create(
+            lot=lot, reported_at=_parse_dt(request.POST.get("reported_at")),
+            source=source, panel=panel, sample_id=sample_id,
+            notes=request.POST.get("note", ""), operator=op)
+        for aid, raw in pairs:
+            a = analyte_by_id.get(aid)
+            if a is None:
                 continue
+            v, qual, flag, disp = labimport.parse_result(raw, a.slug)
             LabResultValue.objects.create(
-                result=result, analyte_id=aid, value=val,
-                operator=request.user if request.user.is_authenticated else None)
+                result=result, analyte=a, value=round(v, 3), qualifier=qual,
+                flag=flag, display=disp, raw_result=raw, operator=op)
     except Exception as e:  # noqa: BLE001
         return lot_labs_with_error(request, pk, str(e))
     return lot_labs(request, pk)

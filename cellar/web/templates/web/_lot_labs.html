@@ -1,27 +1,35 @@
-<h3 style="margin:0 0 12px">Labs</h3>
+<div class="row" style="justify-content:space-between;align-items:baseline">
+  <h3 style="margin:0 0 12px">Labs</h3>
+  <a class="btn sm ghost" href="{% url 'labs-import' %}">Import ETS CSV</a>
+</div>
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 {% if form_error %}<div class="msg err">{{ form_error }}</div>{% endif %}
+
 {% if groups %}
-  {% for g in groups %}
+  {% for c in groups %}
     <div class="lab-group">
-      <div class="lab-sample">Sample ID · <b>{{ g.sample_id }}</b></div>
-      {% for r in g.results %}
-        <div class="lab-result">
-          <div class="lab-meta">{{ r.date|date:"Y-m-d" }} · {{ r.source }}</div>
-          {% if r.values %}
-            <table class="kv"><tbody>
-              {% for v in r.values %}<tr><th>{{ v.analyte }}</th><td>{{ v.value }} {{ v.unit }}</td></tr>{% endfor %}
-            </tbody></table>
-          {% else %}<div class="muted">No analyte values.</div>{% endif %}
-          {% if r.note %}<div class="lab-note">{{ r.note }}</div>{% endif %}
-        </div>
-      {% endfor %}
+      <div class="lab-sample">
+        <span class="badge {% if c.panel_key == 'juice' %}ok{% endif %}">{{ c.panel }}</span>
+        {% if c.is_full %}<span class="badge">full</span>{% else %}<span class="muted">partial</span>{% endif %}
+        <span class="lab-meta">{{ c.date|date:"Y-m-d" }} &middot; {{ c.source }}{% if c.sample_id != "—" %} &middot; #{{ c.sample_id }}{% endif %}</span>
+      </div>
+      {% if c.values %}
+        <table class="kv"><tbody>
+          {% for v in c.values %}
+            <tr>
+              <th>{{ v.analyte }}</th>
+              <td>{{ v.display }} {{ v.unit }}{% if v.flag %} <span class="badge">{{ v.flag }}</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody></table>
+      {% else %}<div class="muted">No analyte values.</div>{% endif %}
+      {% if c.note %}<div class="lab-note">{{ c.note }}</div>{% endif %}
     </div>
   {% endfor %}
-{% else %}<div class="empty">No lab results yet.</div>{% endif %}
+{% else %}<div class="empty">No lab results yet. <a href="{% url 'labs-import' %}">Import an ETS report</a>.</div>{% endif %}
 
 <details class="add-form">
-  <summary>Add a lab result</summary>
+  <summary>Add a lab result by hand</summary>
   <form hx-post="{% url 'lot-lab-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
     <div class="form-grid">
       <div><label>Lab</label>
@@ -31,11 +39,11 @@
       <div><label>Sample ID <span class="muted">(ETS / Lodi)</span></label><input type="text" name="sample_id"></div>
       <div><label>Reported</label><input type="datetime-local" name="reported_at" value="{{ now_local }}"></div>
     </div>
-    <label>Analyses</label>
+    <label>Analyses <span class="muted">(value may be a number, or ND / Dry / &lt;0.05 / FAIL)</span></label>
     <div class="lab-values">
-      {% for i in "123" %}
+      {% for i in "12345" %}
       <div class="lab-value-row">
-        <select name="analyte"><option value="">—</option>{% for a in analytes %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}</select>
+        <select name="analyte"><option value="">&mdash;</option>{% for a in analytes %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}</select>
         <input type="text" name="value" placeholder="value">
       </div>
       {% endfor %}

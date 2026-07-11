@@ -32,6 +32,7 @@ from cellar.models import (
 )
 from cellar.services import aging as aging_svc
 from cellar.services import operations as ops
+from cellar.services import labpanels
 
 
 # --------------------------------------------------------------- disposition
@@ -82,6 +83,33 @@ def latest_readings(lot):
     return out or None
 
 
+def _value_view(v):
+    """Shape one LabResultValue for display — the label the report shows, plus unit/flag."""
+    return {
+        "analyte": v.analyte.name,
+        "display": v.display or (f"{v.value:g}" if v.value is not None else ""),
+        "unit": v.analyte.unit,
+        "flag": v.flag,
+    }
+
+
+def latest_panel(lot):
+    """The most recent *full* juice/chemistry panel, pinned to the summary card,
+    with a count of newer partial results. None if the lot has no full panel yet."""
+    result, newer = labpanels.latest_full_panel(lot)
+    if result is None:
+        return None
+    values = sorted(result.values.all(), key=lambda v: v.analyte.sort_order)
+    return {
+        "panel": result.get_panel_display(),
+        "date": result.reported_at,
+        "source": result.get_source_display(),
+        "sample_id": result.sample_id,
+        "values": [_value_view(v) for v in values],
+        "newer_partials": newer,
+    }
+
+
 def summary(lot):
     return {
         "location": current_location(lot),
@@ -89,6 +117,7 @@ def summary(lot):
         "disposition": disposition(lot),
         "in_bond": is_in_bond(lot),
         "readings": latest_readings(lot),
+        "panel": latest_panel(lot),
     }
 
 
@@ -115,28 +144,26 @@ def additions(lot):
 
 # ---------------------------------------------------------------------- labs
 def labs(lot):
-    """Results grouped by Sample ID, then Date (newest first). In-house results
-    carry no sample ID and group under a single '—' bucket."""
+    """Every result as a panel card, newest first — each labelled with its panel
+    type (Juice / Chemistry / …) and whether it's a full panel. Analyte values
+    carry the display label + flag so censored / qualitative readings show as
+    ND / Dry / FAIL rather than a bare zero."""
     results = (lot.lab_results.filter(voided_at__isnull=True)
-               .prefetch_related("values__analyte").order_by("-reported_at"))
-    groups = defaultdict(list)
+               .prefetch_related("values__analyte").order_by("-reported_at", "-id"))
+    cards = []
     for r in results:
-        groups[r.sample_id or ""].append(r)
-
-    out = []
-    # named sample IDs first (alpha), the unlabelled in-house bucket last
-    for key in sorted(groups, key=lambda k: (k == "", k.lower())):
-        entries = []
-        for r in sorted(groups[key], key=lambda x: x.reported_at, reverse=True):
-            entries.append({
-                "date": r.reported_at,
-                "source": r.get_source_display(),
-                "note": r.notes,
-                "values": [{"analyte": v.analyte.name, "value": v.value,
-                            "unit": v.analyte.unit} for v in r.values.all()],
-            })
-        out.append({"sample_id": key or "—", "results": entries})
-    return out
+        values = sorted(r.values.all(), key=lambda v: v.analyte.sort_order)
+        cards.append({
+            "sample_id": r.sample_id or "—",
+            "panel": r.get_panel_display(),
+            "panel_key": r.panel,
+            "is_full": labpanels.result_is_full(r),
+            "date": r.reported_at,
+            "source": r.get_source_display(),
+            "note": r.notes,
+            "values": [_value_view(v) for v in values],
+        })
+    return cards
 
 
 # ------------------------------------------------------------------ movement

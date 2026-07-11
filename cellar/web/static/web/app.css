@@ -295,3 +295,13 @@ input[type=datetime-local]:focus{outline:2px solid var(--red);outline-offset:1px
 h4.sub{margin:18px 0 8px;font-size:14px}
 .cost-kv th{min-width:150px}
 .cost-kv .total th,.cost-kv .total td{border-top:1px solid var(--line-strong);font-weight:700;padding-top:8px}
+
+/* lab import + pinned panel (slice A) */
+.badge.ok{color:var(--olive);border-color:#cdd0a2;background:#f4f6e6}
+.badge.danger{color:var(--red-ink);border-color:#e6c3b8;background:#fbeee9}
+.lab-pinned{border-left:3px solid var(--olive)}
+.lab-pinned-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;column-gap:28px}
+@media (max-width:640px){.lab-pinned-grid{grid-template-columns:1fr}}
+.lab-pinned-grid th{width:60%}
+.msg.ok{background:#f4f6e6;border-color:#cdd0a2;color:var(--olive)}
+.err-inline{color:var(--red-ink);font-size:13px;margin-top:6px}

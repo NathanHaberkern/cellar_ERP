@@ -6,7 +6,7 @@ from django.contrib import admin
 
 from cellar.models import (
     Variety, Grower, Vineyard, Block, VarietalDesignation, Vessel,
-    Additive, LabAnalyte, ConfigConstant, HarvestEvent, WeighTag, WeighTagBin,
+    Additive, LabAnalyte, LabAnalyteSynonym, ConfigConstant, HarvestEvent, WeighTag, WeighTagBin,
     Lot, LotDesignation, WeighTagAllocation, HighProofSpiritLedger, Program,
     Reading, Addition, DestemmingEvent, TankAssignment, ColdSoakSchedule,
     PumpOverEvent, PunchDownEvent, InoculationEvent, LabRequest, LabResult,
@@ -223,7 +223,7 @@ class VineyardAdmin(AuditMixin, admin.ModelAdmin):
     list_filter = ("crush_district",)
 
 
-for m in (Variety, Grower, Block, Vessel, Additive, LabAnalyte,
+for m in (Variety, Grower, Block, Vessel, Additive, LabAnalyte, LabAnalyteSynonym,
           ConfigConstant, HarvestEvent, HighProofSpiritLedger):
     admin.site.register(m)
 
@@ -231,15 +231,15 @@ for m in (Variety, Grower, Block, Vessel, Additive, LabAnalyte,
 # ------------------------------------------------------ fermentation ledger
 class LabValueInline(admin.TabularInline):
     model = LabResultValue
-    fields = ("analyte", "value")
+    fields = ("analyte", "value", "qualifier", "flag", "display", "raw_result")
     extra = 3
     can_delete = False
 
 
 @admin.register(LabResult)
 class LabResultAdmin(AuditMixin, admin.ModelAdmin):
-    list_display = ("lot", "reported_at", "source")
-    list_filter = ("source", "lot")
+    list_display = ("lot", "reported_at", "source", "panel")
+    list_filter = ("source", "panel", "lot")
     inlines = [LabValueInline]
 
 

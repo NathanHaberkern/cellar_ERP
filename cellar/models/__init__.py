@@ -1,7 +1,7 @@
 from .base import Program, LotKind, SourceType, AppendOnly
 from .reference import (
     Variety, Grower, Vineyard, Block, VarietalDesignation, Vessel,
-    Additive, LabAnalyte, ConfigConstant, LotSequenceCounter,
+    Additive, LabAnalyte, LabAnalyteSynonym, ConfigConstant, LotSequenceCounter,
 )
 from .spine import (
     HarvestEvent, WeighTag, WeighTagBin, Lot, LotDesignation, WeighTagAllocation, LotLineage,
@@ -30,7 +30,7 @@ from .reporting import (
 __all__ = [
     "Program", "LotKind", "SourceType", "AppendOnly",
     "Variety", "Grower", "Vineyard", "Block", "VarietalDesignation", "Vessel",
-    "Additive", "LabAnalyte", "ConfigConstant", "LotSequenceCounter",
+    "Additive", "LabAnalyte", "LabAnalyteSynonym", "ConfigConstant", "LotSequenceCounter",
     "HarvestEvent", "WeighTag", "WeighTagBin", "Lot", "LotDesignation", "WeighTagAllocation", "LotLineage",
     "LotSectionNote",
     "HighProofSpiritLedger", "Reading", "Addition",

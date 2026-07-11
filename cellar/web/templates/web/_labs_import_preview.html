@@ -1,0 +1,79 @@
+{% if error %}
+  <div class="msg err">{{ error }}</div>
+{% endif %}
+
+{% if committed %}
+  <div class="msg ok">Imported {{ committed_values }} value{{ committed_values|pluralize }}
+    across {{ committed_results }} sample{{ committed_results|pluralize }}.
+    Re-running this file would now add nothing.</div>
+{% endif %}
+
+{% if plan and not error %}
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <h3 style="margin:0">Preview</h3>
+      <span class="muted">
+        {{ plan.matched|length }} matched ·
+        {{ plan.total_new_values }} new value{{ plan.total_new_values|pluralize }} ·
+        {{ plan.total_dupes }} already imported ·
+        {{ plan.unresolved|length }} unresolved
+      </span>
+    </div>
+
+    {% for s in plan.samples %}
+      <div class="lab-group">
+        <div class="lab-sample">
+          <b>{{ s.description }}</b>
+          {% if s.status == "matched" %}
+            <span class="badge ok">{{ s.lot_code }}</span>
+            <span class="badge">{{ s.panel_display }}</span>
+          {% elif s.status == "ambiguous" %}
+            <span class="badge danger">ambiguous — matches several lots</span>
+          {% else %}
+            <span class="badge danger">no lot found</span>
+          {% endif %}
+          <span class="muted">· sample #{{ s.sample_id }}</span>
+        </div>
+
+        {% if s.values %}
+          <table class="kv"><tbody>
+            {% for v in s.values %}
+              <tr {% if v.dup %}class="muted"{% endif %}>
+                <th>{{ v.analyte_name }}</th>
+                <td>{{ v.display }} {{ v.unit }}
+                  {% if v.flag %}<span class="badge">{{ v.flag }}</span>{% endif %}
+                  {% if v.dup %}<span class="muted">· already imported</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody></table>
+        {% endif %}
+
+        {% if s.unknown %}
+          <div class="msg err-inline">Unmapped analyses (skipped):
+            {{ s.unknown|join:", " }}.
+            Add a synonym in admin if these should import.</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    {% if plan.total_unknown %}
+      <p class="muted">{{ plan.total_unknown }} analysis row{{ plan.total_unknown|pluralize }}
+        had no matching analyte and will be skipped.</p>
+    {% endif %}
+
+    {% if not committed %}
+      {% if plan.total_new_values %}
+        <form hx-post="{% url 'labs-import-commit' %}" hx-target="#import-result"
+              hx-swap="innerHTML" style="margin-top:12px">
+          <input type="hidden" name="csv_text" value="{{ csv_text|escape }}">
+          <button class="btn" type="submit">
+            Import {{ plan.total_new_values }} value{{ plan.total_new_values|pluralize }}</button>
+          <span class="muted">into {{ plan.matched|length }} sample{{ plan.matched|length|pluralize }}</span>
+        </form>
+      {% else %}
+        <p class="muted" style="margin-top:12px">Nothing new to import.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endif %}

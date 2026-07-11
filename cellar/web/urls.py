@@ -11,6 +11,7 @@ from . import views
 from . import ledger
 from . import scan
 from . import intake
+from . import labs
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -45,6 +46,11 @@ urlpatterns = [
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),
     path("lots/<int:pk>/labs/add/", views.lot_lab_create, name="lot-lab-create"),
     path("lots/<int:pk>/movement/transfer/", views.lot_transfer_create, name="lot-transfer-create"),
+
+    # lab CSV import (ETS)
+    path("labs/import/", labs.labs_import_index, name="labs-import"),
+    path("labs/import/preview/", labs.labs_import_preview, name="labs-import-preview"),  # HTMX
+    path("labs/import/commit/", labs.labs_import_commit, name="labs-import-commit"),      # HTMX
 
     path("reports/", views.reports_index, name="reports"),
     path("reports/run/", views.report_run, name="report-run"),           # HTMX
