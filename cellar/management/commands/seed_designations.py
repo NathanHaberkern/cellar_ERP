@@ -32,17 +32,25 @@ VARIETY_DEFAULTS = [
     ("Verdelho",         "VERD"),
     ("Trousseau",        "TROU"),
     ("Tempranillo",      "TEMP"),
+    ("Tinta Roriz",      "TR"),
     ("Touriga Nacional", "TN"),
     ("Tinta Cão",        "TC"),
     ("Souzão",           "SOUZ"),
-    ("Zinfandel",        "ZINF"),
-    ("Alvarelhão",       "ALVA"),
     ("Bastardo",         "BAST"),
+    ("Syrah",            "SYRAH"),
+    ("Cabernet Sauvignon","CS"),
+    ("Zinfandel",        "ZIN"),
+    ("Barbera",          "BARB"),
+    ("Petite Sirah",     "PS"),
+    ("Alicante Bouschet","AB"),
 ]
 
 # Vineyard-level overrides — (variety, vineyard name contains, abbreviation)
 VINEYARD_OVERRIDES = [
     ("Zinfandel", "Mohr-Fry", "MFZ"),
+    ("Zinfandel", "Marian's", "MZ"),
+    ("Cabernet Sauvignon", "Spencer Ranch", "SRCS"),
+    ("Cabernet Sauvignon", "Martel Vineyard", "LMCS"),
 ]
 
 # Explicit program codes, ONLY where table+suffix is wrong.
