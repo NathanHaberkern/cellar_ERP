@@ -247,10 +247,14 @@ def record_daily(lot, *, brix=None, temp=None, measured_at=None, cap=None, actor
 
 # --------------------------------------------------------------- Step 3 / 4
 @transaction.atomic
-def press_to_vessel(lot, *, vessel, volume_gal, at=None, actor=None):
-    """Step 3: press the lot to a new vessel and record the estimated volume."""
+def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, actor=None):
+    """Step 3: press the lot to a new vessel and record the estimated volume.
+
+    `allow_blend` co-occupies an already-occupied tank (same semantics as a Movement
+    transfer) instead of raising "SS-1 is occupied by ...".
+    """
     at = at or timezone.now()
-    ops.transfer_lot(lot, vessel, at)
+    ops.transfer_lot(lot, vessel, at, allow_blend=allow_blend)
     if volume_gal not in (None, ""):
         ops._record_volume(lot, Decimal(str(volume_gal)), at,
                            method=ops.VolumeMeasurement.Method.STATED)

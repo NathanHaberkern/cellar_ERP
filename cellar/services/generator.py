@@ -7,6 +7,8 @@ Two things change from the reference implementation:
     creating a lot at the same moment during crush can't collide. The counter
     is monotonic → numbers are never reused.
 """
+import re
+import unicodedata
 from django.db import transaction
 from django.utils import timezone
 
@@ -17,6 +19,28 @@ from cellar.models import (
 
 
 # --------------------------------------------------------------------- resolve
+def _stem(variety) -> str:
+    """Provisional abbreviation when the curated catalog has no entry.
+
+    Multi-word varieties take their initials — which is exactly the house
+    convention (Touriga Nacional -> TN, Tinta Cao -> TC). Single-word varieties
+    take their first four letters (Verdelho -> VERD, Trousseau -> TROU,
+    Tempranillo -> TEMP), because initials collapse them to one letter and collide
+    (Trousseau and Tempranillo would both be "T").
+
+    Diacritics are folded first, so Souzao -> SOUZ. Still flagged provisional by
+    the caller — curate it in the VarietalDesignation catalog to make it official.
+    """
+    folded = unicodedata.normalize("NFKD", variety.name)
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    words = [w for w in re.split(r"[^A-Za-z]+", folded) if w]
+    if not words:
+        return "LOT"
+    if len(words) > 1:
+        return "".join(w[0] for w in words)[:4].upper()
+    return words[0][:4].upper()
+
+
 def resolve_abbreviation(variety, program, block=None, vineyard=None):
     """Returns (abbreviation, is_provisional). Never raises — unknown combos
     autofire a provisional code flagged for review."""
@@ -40,18 +64,16 @@ def resolve_abbreviation(variety, program, block=None, vineyard=None):
         if table_abbr:
             return table_abbr + "PORT", True
         # If no table_abbr, fall through to generate provisional PORT code
-        stem = "".join(w[0] for w in variety.name.split())[:4].upper()
-        return f"{stem}PORT", True
+        return f"{_stem(variety)}PORT", True
 
     # BASE CASE: Don't recurse if we're already at TABLE level
     if program == Program.TABLE:
         # no code at all → provisional placeholder, flagged
-        stem = "".join(w[0] for w in variety.name.split())[:4].upper()
-        return f"{stem}", True
+        return _stem(variety), True
 
     # RECURSIVE CASE: Fall back to TABLE level
     table_abbr, _ = resolve_abbreviation(variety, Program.TABLE, block, vineyard)
-    stem = table_abbr or "".join(w[0] for w in variety.name.split())[:4].upper()
+    stem = table_abbr or _stem(variety)
     suffix = {"rose": "ROSE", "port": "PORT", "table": ""}[program]
     return f"{stem}{suffix}", True
 

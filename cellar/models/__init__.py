@@ -12,6 +12,7 @@ from .ledger import Reading, Addition
 from .fermentation import (
     DestemmingEvent, TankAssignment, ColdSoakSchedule, PumpOverEvent, PunchDownEvent,
     InoculationEvent, LabRequest, LabResult, LabResultValue, CellarNote,
+    LabSampleAlias,
 )
 from .crushout import (
     TaxClass, VolumeMeasurement, PressingEvent, FortificationEvent, BookToBond,
@@ -43,4 +44,5 @@ __all__ = [
     "BottleFormat", "DryGood", "BottlingRun", "BottlingDryGoodUse", "TaxPaidRemoval",
     "Phase", "BondTransfer", "Material", "MaterialTransaction", "SweeteningEvent", "BondAdjustment", "BulkTaxPaidRemoval",
     "Task", "TaskEvent", "TaskRule",
+    "LabSampleAlias",
 ]

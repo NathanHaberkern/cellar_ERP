@@ -99,10 +99,22 @@ def lot_detail(request, pk):
                       Lot.Status.PRESSED, Lot.Status.SETTLING}
     show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
     hide_additions = lot.status in ferment_window
+
+    # Overview task summary — open count, overdue count, next 3 by due date.
+    from cellar.services import tasks as tsvc
+    open_qs = list(tsvc.open_tasks(lot=lot))
+    task_summary = {
+        "open_count": len(open_qs),
+        "overdue_count": sum(1 for t in open_qs if t.is_overdue),
+        "next": open_qs[:3],
+        "more": max(0, len(open_qs) - 3),
+    }
+
     return render(request, "web/lot_detail.html", {
         "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
         "overview_note": lotpages.section_note(lot, "overview"),
         "show_ferment": show_ferment, "hide_additions": hide_additions,
+        "task_summary": task_summary,
     })
 
 
@@ -142,11 +154,12 @@ def lot_labs(request, pk):
 def lot_movement(request, pk):
     def extra(lot):
         rows, err = _safe(lotpages.movements, lot)
-        from .tankmap import _open_assignments
-        occupied = set(_open_assignments().keys())
-        tanks = [t for t in Vessel.objects.filter(type=Vessel.Type.TANK).order_by("code")
-                 if t.id not in occupied]
-        return {"rows": rows or [], "error": err, "tanks": tanks,
+        from .vessels import vessel_options
+        # Every tank/tote is offered; occupied ones are shown with their current lot
+        # and unlocked only by the co-occupancy checkbox. Filtering them out here is
+        # what made that checkbox dead.
+        return {"rows": rows or [], "error": err,
+                "vessel_options": vessel_options(exclude_lot=lot),
                 "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
     return _panel(request, pk, "movement", "web/_lot_movement.html", extra)
 
@@ -317,12 +330,10 @@ def lot_labs_with_error(request, pk, msg):
 
 
 def lot_movement_with_error(request, pk, msg):
-    from .tankmap import _open_assignments
-    occupied = set(_open_assignments().keys())
-    tanks = [t for t in Vessel.objects.filter(type=Vessel.Type.TANK).order_by("code")
-             if t.id not in occupied]
+    from .vessels import vessel_options
+    lot = get_object_or_404(Lot, pk=pk)
     return _inject_error(request, pk, "web/_lot_movement.html", None, msg, lotpages.movements, "rows",
-                         {"tanks": tanks,
+                         {"vessel_options": vessel_options(exclude_lot=lot),
                           "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")})
 
 

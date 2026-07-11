@@ -14,7 +14,21 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
+from cellar.models import Lot
 from cellar.services import labimport
+
+
+def _lots():
+    """Lot choices for binding an unresolved sample description, newest first."""
+    return sorted(Lot.objects.select_related("current_designation"),
+                  key=lambda l: (-l.vintage_year, l.code))
+
+
+def _binds(request):
+    """{description: lot_pk} from the preview's bind_<description> selects."""
+    return {k[len("bind_"):]: v
+            for k, v in request.POST.items()
+            if k.startswith("bind_") and (v or "").strip()}
 
 
 @login_required
@@ -36,10 +50,11 @@ def labs_import_preview(request):
     text = _read_upload(request)
     if not text.strip():
         return render(request, "web/_labs_import_preview.html",
-                      {"plan": None, "error": "No file received. Choose an ETS .csv and try again."})
+                      {"plan": None, "lots": _lots(),
+                       "error": "No file received. Choose an ETS .csv and try again."})
     plan = labimport.plan(text)
     return render(request, "web/_labs_import_preview.html",
-                  {"plan": plan, "error": plan.error, "csv_text": text})
+                  {"plan": plan, "error": plan.error, "csv_text": text, "lots": _lots()})
 
 
 @login_required
@@ -47,13 +62,14 @@ def labs_import_preview(request):
 def labs_import_commit(request):
     text = request.POST.get("csv_text", "")
     try:
-        results, values = labimport.commit(text, user=request.user)
+        results, values = labimport.commit(text, user=request.user, binds=_binds(request))
         # re-plan so the confirmation reflects post-commit state (everything now dup)
         plan = labimport.plan(text)
         return render(request, "web/_labs_import_preview.html",
                       {"plan": plan, "committed": True,
                        "committed_results": results, "committed_values": values,
-                       "csv_text": text})
+                       "csv_text": text, "lots": _lots()})
     except Exception as e:  # noqa: BLE001
         return render(request, "web/_labs_import_preview.html",
-                      {"plan": labimport.plan(text), "error": str(e), "csv_text": text})
+                      {"plan": labimport.plan(text), "error": str(e), "csv_text": text,
+                       "lots": _lots()})

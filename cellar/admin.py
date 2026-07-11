@@ -13,7 +13,7 @@ from cellar.models import (
     LabResultValue, CellarNote,
     VolumeMeasurement, PressingEvent, FortificationEvent, BookToBond,
 )
-from cellar.models import Task, TaskEvent, TaskRule
+from cellar.models import Task, TaskEvent, TaskRule, LabSampleAlias
 from cellar.services.generator import assign_initial_designation, render_designation
 from django.contrib import messages
 from django.utils import timezone
@@ -568,3 +568,11 @@ class TaskAdmin(admin.ModelAdmin):
 class TaskRuleAdmin(admin.ModelAdmin):
     list_display = ("name", "key", "enabled")
     list_editable = ("enabled",)
+
+
+@admin.register(LabSampleAlias)
+class LabSampleAliasAdmin(admin.ModelAdmin):
+    """Correct or hand-add a lab sample-description → lot binding."""
+    list_display = ("description", "lot")
+    search_fields = ("description",)
+    autocomplete_fields = ()

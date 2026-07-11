@@ -35,6 +35,18 @@
           <span class="muted">· sample #{{ s.sample_id }}</span>
         </div>
 
+        {% if s.status != "matched" %}
+          {# Bind the lab's string to a lot once; the binding is remembered, so every
+             future import carrying this description resolves without asking again. #}
+          <div class="row" style="gap:8px;align-items:center;margin:6px 0">
+            <label class="muted" style="margin:0">Bind &ldquo;{{ s.description }}&rdquo; to</label>
+            <select name="bind_{{ s.description }}">
+              <option value="">— skip this sample —</option>
+              {% for l in lots %}<option value="{{ l.pk }}">{{ l.code }}</option>{% endfor %}
+            </select>
+          </div>
+        {% endif %}
+
         {% if s.values %}
           <table class="kv"><tbody>
             {% for v in s.values %}
@@ -63,13 +75,17 @@
     {% endif %}
 
     {% if not committed %}
-      {% if plan.total_new_values %}
+      {% if plan.total_new_values or plan.unresolved %}
         <form hx-post="{% url 'labs-import-commit' %}" hx-target="#import-result"
-              hx-swap="innerHTML" style="margin-top:12px">
+              hx-swap="innerHTML" hx-include="[name^='bind_']" style="margin-top:12px">
           <input type="hidden" name="csv_text" value="{{ csv_text|escape }}">
           <button class="btn" type="submit">
-            Import {{ plan.total_new_values }} value{{ plan.total_new_values|pluralize }}</button>
-          <span class="muted">into {{ plan.matched|length }} sample{{ plan.matched|length|pluralize }}</span>
+            {% if plan.total_new_values %}
+              Import {{ plan.total_new_values }} value{{ plan.total_new_values|pluralize }}
+            {% else %}Bind &amp; import{% endif %}</button>
+          <span class="muted">
+            into {{ plan.matched|length }} sample{{ plan.matched|length|pluralize }}{% if plan.unresolved %};
+            any sample you bind above is imported too{% endif %}</span>
         </form>
       {% else %}
         <p class="muted" style="margin-top:12px">Nothing new to import.</p>

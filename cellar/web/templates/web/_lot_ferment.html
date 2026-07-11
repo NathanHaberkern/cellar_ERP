@@ -80,7 +80,7 @@
     <summary>Step 3 · Press to new vessel</summary>
     <form hx-post="{% url 'ferment-press' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
       <div class="form-grid">
-        <div><label>To vessel</label><select name="vessel">{% for v in vessels %}<option value="{{ v.pk }}">{{ v.code }}</option>{% endfor %}</select></div>
+        {% include "web/_vessel_picker.html" with options=vessel_options field="vessel" picker_id="press" label="To vessel" %}
         <div><label>Est. volume (gal)</label><input type="number" step="1" name="volume"></div>
         <div><label>Pressed at</label><input type="datetime-local" name="pressed_at" value="{{ now_local }}"></div>
       </div>

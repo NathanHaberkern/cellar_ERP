@@ -30,7 +30,8 @@ from datetime import datetime
 from django.db import transaction
 from django.utils import timezone
 
-from cellar.models import Lot, LabAnalyte, LabAnalyteSynonym, LabResult, LabResultValue
+from cellar.models import (Lot, LabAnalyte, LabAnalyteSynonym, LabResult,
+                           LabResultValue, LabSampleAlias)
 from cellar.services import labpanels
 
 # ETS header names we rely on
@@ -132,6 +133,13 @@ def _lot_index_for_vintages(vintages):
     return idx
 
 
+def _alias_index():
+    """Manually-bound description -> Lot. Consulted BEFORE the computed-code match,
+    so a binding always wins over (and can override) code inference."""
+    return {a.description.lower(): a.lot
+            for a in LabSampleAlias.objects.select_related("lot__current_designation")}
+
+
 def _desc_vintage(desc):
     d = _clean(desc)
     return int(d[:2]) if len(d) >= 2 and d[:2].isdigit() else None
@@ -219,6 +227,7 @@ def plan(text) -> ImportPlan:
         return ImportPlan(error=str(e))
 
     syn, names = _analyte_index()
+    alias_idx = _alias_index()
 
     # group rows by Sample #
     groups: dict[str, list] = {}
@@ -248,8 +257,9 @@ def plan(text) -> ImportPlan:
 
         sg = SampleGroup(description=desc, sample_id=sid, group_id=gid, reported_at=reported)
 
-        # resolve lot
-        candidates = lot_idx.get(desc, [])
+        # resolve lot — a manual binding wins, then the computed code
+        alias = alias_idx.get(desc.lower())
+        candidates = [alias] if alias is not None else lot_idx.get(desc, [])
         if len(candidates) == 1:
             sg.lot = candidates[0]
             sg.lot_code = candidates[0].code
@@ -296,9 +306,29 @@ def plan(text) -> ImportPlan:
 
 # -------------------------------------------------------------------- commit
 @transaction.atomic
-def commit(text, user=None):
+def bind_samples(binds):
+    """Persist description -> lot bindings chosen in the preview. `binds` is
+    {description: lot_pk}. Upserts, so re-binding corrects a mistake."""
+    made = 0
+    for desc, lot_pk in (binds or {}).items():
+        if not desc or not lot_pk:
+            continue
+        lot = Lot.objects.filter(pk=lot_pk).first()
+        if lot is None:
+            continue
+        LabSampleAlias.objects.update_or_create(description=desc, defaults={"lot": lot})
+        made += 1
+    return made
+
+
+def commit(text, user=None, binds=None):
     """Apply a plan. Only matched samples with new values are written; dupes and
-    unresolved samples are skipped. Returns (results_touched, values_written)."""
+    unresolved samples are skipped. Returns (results_touched, values_written).
+
+    `binds` ({description: lot_pk}) is saved FIRST, so samples the user just bound
+    in the preview resolve on this very commit."""
+    if binds:
+        bind_samples(binds)
     p = plan(text)
     if p.error:
         raise ValueError(p.error)

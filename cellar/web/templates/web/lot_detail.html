@@ -52,8 +52,29 @@
   {% include "web/_lot_note.html" with section="overview" note=overview_note %}
 
   <div class="tasks-head">
-    <h3>Tasks</h3><span class="muted">module coming soon</span>
+    <h3>Tasks</h3>
+    {% if task_summary.open_count %}
+      <span class="muted">{{ task_summary.open_count }} open{% if task_summary.overdue_count %} · <span class="badge danger">{{ task_summary.overdue_count }} overdue</span>{% endif %}</span>
+    {% else %}
+      <span class="muted">none open</span>
+    {% endif %}
   </div>
+  {% if task_summary.next %}
+    <table class="kv"><tbody>
+      {% for t in task_summary.next %}
+        <tr>
+          <th style="white-space:nowrap">
+            {% if t.due_date %}{{ t.due_date|date:"M j" }}{% else %}—{% endif %}
+            {% if t.is_overdue %}<span class="badge danger">late</span>{% endif %}
+          </th>
+          <td>{{ t.title }}{% if t.assignee %} <span class="muted">· {{ t.assignee.username }}</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody></table>
+    {% if task_summary.more %}
+      <p class="muted" style="margin:6px 0 0">+{{ task_summary.more }} more — see the Tasks tab.</p>
+    {% endif %}
+  {% endif %}
 </section>
 
 {# ---- sub-page menu bar --------------------------------------------------- #}

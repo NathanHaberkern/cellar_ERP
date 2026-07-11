@@ -208,3 +208,27 @@ class CellarNote(AppendOnly):
 
     def __str__(self):
         return f"{self.lot} note {self.noted_at:%Y-%m-%d}"
+
+
+class LabSampleAlias(models.Model):
+    """Binds an outside-lab 'Sample Description' string onto a Lot.
+
+    The importer's normal path computes each lot's code and matches the description
+    against it. That breaks whenever the string the cellar typed on the submission
+    form isn't the lot's code — historical samples submitted under a provisional
+    code ("25T" before the abbreviation catalog existed, now "25TROU"), shorthand,
+    or a plain typo. Rather than force a re-designation to chase the lab's string,
+    bind the string once here and every future import of it resolves silently.
+
+    Created from the import preview when the user picks a lot for an unresolved
+    sample. Not append-only: a mis-binding should be correctable in place.
+    """
+    description = models.CharField(max_length=120, unique=True,
+                                   help_text="exact 'Sample Description' as the lab prints it")
+    lot = models.ForeignKey("cellar.Lot", on_delete=models.CASCADE, related_name="sample_aliases")
+
+    class Meta:
+        verbose_name_plural = "lab sample aliases"
+
+    def __str__(self):
+        return f"{self.description} → {self.lot}"

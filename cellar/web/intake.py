@@ -55,13 +55,20 @@ def _effective_net_lbs(request):
         total = sum((b.net_lbs or 0) for b in WeighTagBin.objects.filter(pk__in=ids))
         if total:
             return Decimal(total)
-    grosses, counts = G.getlist("bin_gross"), G.getlist("bin_ct")
+    # New-tag bin lines. The form emits these PER ROW as bin_gross_<rid> /
+    # bin_ct_<rid> (the commit path in intake_destem reads exactly those names), so
+    # reading a bare "bin_gross" list finds nothing and the preview reports "enter
+    # net pounds" even though the same lines book fine on submit. Pair by row id.
     total = Decimal("0")
-    for i, gr in enumerate(grosses):
-        g = _dec(gr)
+    for key, raw in G.items():
+        if not key.startswith("bin_gross_"):
+            continue
+        g = _dec(raw)
         if g is None:
             continue
-        ct = int(counts[i]) if i < len(counts) and (counts[i] or "").strip().isdigit() else 1
+        rid = key[len("bin_gross_"):]
+        ct_raw = (G.get(f"bin_ct_{rid}") or "").strip()
+        ct = int(ct_raw) if ct_raw.isdigit() else 1
         total += g - ct * WeighTagBin.TARE_PER_BIN
     if total > 0:
         return total

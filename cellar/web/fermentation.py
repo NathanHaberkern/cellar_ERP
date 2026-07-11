@@ -74,8 +74,10 @@ def ferment_ctx(lot):
         ctx["readings"] = (Reading.objects.filter(lot=lot, voided_at__isnull=True)
                            .order_by("-measured_at")[:6])
 
-    if show_press or show_rack:
-        ctx["vessels"] = Vessel.objects.order_by("code")
+    if show_press:
+        # tanks + totes, occupied ones shown-but-locked behind the co-occupancy box
+        from .vessels import vessel_options
+        ctx["vessel_options"] = vessel_options(exclude_lot=lot)
     if show_rack:
         ctx["barrels"] = fz.empty_oak_containers()
 
@@ -166,7 +168,9 @@ def ferment_press(request, pk):
         vessel = get_object_or_404(Vessel, pk=request.POST.get("vessel"))
         fz.press_to_vessel(lot, vessel=vessel,
                            volume_gal=request.POST.get("volume"),
-                           at=_parse_dt(request.POST.get("pressed_at")), actor=request.user)
+                           at=_parse_dt(request.POST.get("pressed_at")),
+                           allow_blend=request.POST.get("allow_blend") == "on",
+                           actor=request.user)
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001
         return _panel(request, lot, error=str(e))

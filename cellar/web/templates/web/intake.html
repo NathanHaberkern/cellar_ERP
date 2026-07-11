@@ -141,7 +141,10 @@ function optionsHtml(){
 
 function addRow(){
   var n = rowN++;
-  var inc = "[name='path'],[name='net_lbs'],[name='weigh_tag'],[name='bin_ids']:checked,[name='bin_gross'],[name='bin_ct'],closest .add-row";
+  // Bin lines are named per-row (bin_gross_1, bin_ct_1, ...), so an exact
+  // [name='bin_gross'] selector matches nothing and the dose preview never sees the
+  // fruit. Prefix-match them instead.
+  var inc = "[name='path'],[name='net_lbs'],[name='weigh_tag'],[name='bin_ids']:checked,[name^='bin_gross_'],[name^='bin_ct_'],closest .add-row";
   var wrap = document.createElement('div');
   wrap.className = 'add-row';
   wrap.style.cssText = 'border-top:1px solid var(--line);padding-top:10px;margin-top:8px';

@@ -24,13 +24,9 @@
   <summary>Book a transfer (tank move)</summary>
   <form hx-post="{% url 'lot-transfer-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
     <div class="form-grid">
-      <div><label>To vessel</label>
-        <select name="to_vessel">
-          {% for t in tanks %}<option value="{{ t.pk }}">{{ t.code }}</option>{% endfor %}
-        </select></div>
+      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="mv" label="To vessel" %}
       <div><label>When</label><input type="datetime-local" name="moved_at" value="{{ now_local }}"></div>
     </div>
-    <label class="inline"><input type="checkbox" name="allow_blend"> Allow co-occupancy (blend into an occupied tank)</label>
     <label>Note</label><textarea name="note" rows="2"></textarea>
     <div class="note-actions"><button class="btn sm" type="submit">Book transfer</button></div>
   </form>

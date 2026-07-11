@@ -1,0 +1,30 @@
+{# Shared vessel picker (Movement + Press).
+   Occupied vessels are ALWAYS shown — the cellar needs to see the full tank farm —
+   but they're disabled until "Allow co-occupancy" is ticked, which also passes
+   allow_blend through so the transfer is booked as a blend instead of throwing.
+   Expects: options (from web.vessels.vessel_options), field (select name), picker_id #}
+<div><label>{{ label|default:"To vessel" }}</label>
+  <select name="{{ field|default:'to_vessel' }}" id="{{ picker_id }}-sel">
+    {% for o in options %}
+      {% if o.occupied_by %}
+        <option value="{{ o.vessel.pk }}" data-occupied="1" disabled>
+          {{ o.vessel.code }} — occupied by {{ o.occupied_by }}</option>
+      {% else %}
+        <option value="{{ o.vessel.pk }}">{{ o.vessel.code }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+</div>
+<label class="inline" style="margin-top:6px">
+  <input type="checkbox" name="allow_blend" id="{{ picker_id }}-blend"
+         onchange="(function(cb){
+           var sel = document.getElementById('{{ picker_id }}-sel');
+           Array.prototype.forEach.call(sel.options, function(o){
+             if (o.dataset.occupied) o.disabled = !cb.checked;
+           });
+           if (!cb.checked && sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
+             sel.selectedIndex = 0;
+           }
+         })(this)">
+  Allow co-occupancy (blend into an occupied tank)
+</label>
