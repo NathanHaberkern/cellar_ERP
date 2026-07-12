@@ -39,6 +39,10 @@ KMBS_SO2_FRACTION = Decimal("0.5764")     # K2S2O5 → 2·SO2 / MW
 L_PER_GAL = Decimal("3.785411784")
 
 RED_PATHS = {DestemmingEvent.Path.D, DestemmingEvent.Path.E}
+# Whites and rosés press before fermentation; reds ferment on skins and press after.
+PRESS_FIRST_PATHS = {DestemmingEvent.Path.A, DestemmingEvent.Path.B,
+                     DestemmingEvent.Path.C, DestemmingEvent.Path.F}
+DEFAULT_SETTLING_DAYS = 2
 INTAKE_GAL_PER_TON_RED = Decimal("170")
 INTAKE_GAL_PER_TON_WHITE = Decimal("160")
 PRESS_YIELD_FALLBACK = Decimal("165")
@@ -107,10 +111,45 @@ def intake_volume_estimate(net_lbs, path) -> Decimal:
     return (tons_from_lbs(net_lbs) * factor).quantize(Decimal("1"))
 
 
+def historic_press_yield(variety, min_lots=2):
+    """Gal/ton actually achieved on prior bookings of this variety, or None.
+
+    Now answerable: a booked lot has a BookToBond (or an initial FortificationEvent,
+    which is the same thing for Port) and weigh-tag allocations, so gallons ÷ tons is
+    a real observation. Needs at least `min_lots` before it is worth trusting over the
+    SOP number — one odd lot should not move the estimate.
+    """
+    from cellar.models import BookToBond
+    from cellar.services import lotmeta
+
+    gal = Decimal("0")
+    tons = Decimal("0")
+    n = 0
+    for bb in (BookToBond.objects.filter(voided_at__isnull=True)
+               .select_related("lot__current_designation")):
+        if bb.gallons_produced is None:
+            continue
+        if lotmeta.lot_variety(bb.lot) != variety:
+            continue
+        t = sum((a.allocated_net_lbs for a in bb.lot.allocations.filter(voided_at__isnull=True)),
+                Decimal("0")) / 2000
+        if t <= 0:
+            continue
+        gal += Decimal(str(bb.gallons_produced))
+        tons += t
+        n += 1
+    if n < min_lots or tons <= 0:
+        return None
+    return (gal / tons).quantize(Decimal("0.1"))
+
+
 def press_yield_estimate(net_lbs, variety=None) -> Decimal:
     """Historic varietal average if we have prior bookings for this variety,
     else the SOP fallback of 165 gal/ton."""
-    rate = PRESS_YIELD_FALLBACK  # TODO: derive historic varietal avg from prior BookToBond
+    rate = None
+    if variety is not None:
+        rate = historic_press_yield(variety)
+    rate = rate or PRESS_YIELD_FALLBACK
     return (tons_from_lbs(net_lbs) * rate).quantize(Decimal("1"))
 
 
@@ -270,6 +309,21 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
         target = add_working_days(destem_at.date(), cold_soak_days + 1)
         cold_soak = ColdSoakSchedule.objects.create(
             lot=lot, start_at=destem_at, target_inoc_date=target)
+    elif path in PRESS_FIRST_PATHS:
+        # Whites and rosés press BEFORE fermentation. Until now intake created the lot,
+        # wrote a 160 gal/ton estimate, and stopped — no press, no settling, no
+        # inoculation, and the lot just sat there. Hand it to the press.
+        from cellar.services import tasks as _task_svc
+        lot.status = Lot.Status.PROCESSING
+        lot.save(update_fields=["status"])
+        _task_svc.create_task(
+            title=f"Press — {lot.code}",
+            body=(f"{lot.code} received {destem_at.date()} "
+                  f"({tons_from_lbs(total_lbs)} tons, est. {est_intake} gal). "
+                  f"Press and gauge what comes off; the press gauge is the booking volume. "
+                  f"Settle {DEFAULT_SETTLING_DAYS} days, rack off gross lees, then inoculate."),
+            due_date=destem_at.date(), lot=lot,
+            dedupe_key=f"press:{lot.pk}")
 
     return {
         "lot": lot, "code": lot.code, "destemming": de, "vessels": vessels,

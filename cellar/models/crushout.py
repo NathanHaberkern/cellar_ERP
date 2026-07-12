@@ -69,12 +69,20 @@ class VolumeMeasurement(AppendOnly):
 
     @classmethod
     def booking_volume_for(cls, lot):
+        """Highest-confidence gauge; among equals, the MOST RECENT.
+
+        The tie-break matters. A lot can be gauged twice at the same confidence —
+        pressed at 640 gal, then racked off the gross lees at 605 — and without a
+        tie-break the first row won and the booking volume stayed at the superseded
+        figure forever.
+        """
         qs = list(cls.objects.filter(lot=lot, voided_at__isnull=True))
         if not qs:
             return None
         flagged = [m for m in qs if m.is_booking_volume]
         pool = flagged or qs
-        return min(pool, key=lambda m: cls._RANK[m.confidence])
+        return min(pool, key=lambda m: (cls._RANK[m.confidence],
+                                        -m.measured_at.timestamp(), -m.id))
 
     def __str__(self):
         return f"{self.lot} {self.volume_gal} gal ({self.method})"
