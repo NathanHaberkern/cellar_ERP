@@ -206,3 +206,44 @@ class LotSequenceCounter(models.Model):
 
     def __str__(self):
         return f"{self.vintage}{self.abbreviation} @ {self.last_seq}"
+
+
+class FruitPrice(models.Model):
+    """Contract price per ton, by vintage.
+
+    Prices change every year, so they can't live on the Block as a single field —
+    2025's Zinfandel at $1,600/ton must still be $1,600/ton when you look at the
+    lot's COGS in 2029. Keyed on (vintage, variety) with an optional block, so a
+    block-specific contract (Martel Cabernet at $2,000 against a general Cabernet
+    price) wins over the varietal default.
+
+    Estate fruit is priced the same way — one row per vintage, entered from that
+    year's farming cost, until the farming module can compute it.
+    """
+    vintage_year = models.PositiveSmallIntegerField()
+    variety = models.ForeignKey(Variety, on_delete=models.PROTECT, related_name="prices")
+    block = models.ForeignKey(Block, null=True, blank=True, on_delete=models.PROTECT,
+                              related_name="prices",
+                              help_text="blank = the varietal price for that vintage")
+    price_per_ton = models.DecimalField(max_digits=9, decimal_places=2)
+    notes = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        unique_together = [("vintage_year", "variety", "block")]
+        ordering = ["-vintage_year", "variety__name"]
+
+    @classmethod
+    def for_lot(cls, vintage_year, variety, block=None):
+        """Block-specific price if there is one, else the varietal price."""
+        if block is not None:
+            row = cls.objects.filter(vintage_year=vintage_year, variety=variety,
+                                     block=block).first()
+            if row:
+                return row.price_per_ton
+        row = cls.objects.filter(vintage_year=vintage_year, variety=variety,
+                                 block__isnull=True).first()
+        return row.price_per_ton if row else None
+
+    def __str__(self):
+        who = f"{self.variety} {self.block}" if self.block_id else str(self.variety)
+        return f"{self.vintage_year} {who} — ${self.price_per_ton}/ton"

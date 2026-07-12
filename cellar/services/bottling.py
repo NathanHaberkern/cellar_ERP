@@ -33,7 +33,12 @@ from cellar.models.base import LotKind
 from cellar.services import generator
 from cellar.services import operations as ops
 
-# A parcel can only come off wine that's finished primary.
+# A parcel can only come off wine that has been DECLARED — i.e. booked to bond.
+#
+# This used to key on `status == DONE_PRIMARY`, which was only reachable by racking
+# to barrel. Gating on bond status is both more permissive (Verdelho, never oaked,
+# can now bottle) and stricter in the way that matters: you cannot bottle wine whose
+# production has never been booked, which is exactly the rule TTB cares about.
 SPLITTABLE = {Lot.Status.DONE_PRIMARY}
 
 
@@ -61,7 +66,10 @@ def parent_of(parcel):
 
 
 def can_split(lot):
-    return lot.status in SPLITTABLE and not is_parcel(lot)
+    from cellar.services import bonding
+    return (bonding.is_in_bond(lot)
+            and lot.status != Lot.Status.BOTTLED
+            and not is_parcel(lot))
 
 
 @transaction.atomic

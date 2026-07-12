@@ -49,6 +49,8 @@
   </div>
   {% endif %}
 
+  {% include "web/_lot_bond_card.html" with lot=lot error=bond_card.error ok=bond_card.ok booking=bond_card.booking can_book=bond_card.can_book in_bond=bond_card.in_bond gauges=bond_card.gauges tax_classes=bond_card.tax_classes default_tax_class=bond_card.default_tax_class today=bond_card.today %}
+
   {% include "web/_lot_note.html" with section="overview" note=overview_note %}
 
   <div class="tasks-head">

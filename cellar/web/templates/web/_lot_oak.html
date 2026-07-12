@@ -25,4 +25,81 @@
 </table></div>
 {% else %}<div class="empty">No racks currently holding this lot.</div>{% endif %}
 
+{% if can_rack %}
+<h4 class="sub">Rack to barrel</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    Enter the gallons that <b>actually</b> went into each barrel — prefilled with its
+    capacity, edit down for a partial. On tanks without a pressure sensor this sum
+    <b>is</b> the gauge: rack the lot down, then book to bond off the barrel fill.
+    {% if barrel_total %}<br>Already down: <b>{{ barrel_total|floatformat:1 }} gal</b>.{% endif %}
+  </p>
+
+  <form hx-post="{% url 'lot-rack-to-barrel' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <label>Empty barrels</label>
+    <div class="barrel-fills" style="margin:6px 0">
+      {% for b in barrels %}
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
+          <label class="inline" style="min-width:150px;margin:0">
+            <input type="checkbox" name="containers" value="{{ b.pk }}"
+                   onchange="document.getElementById('fill-{{ b.pk }}').disabled = !this.checked; window.__oakSum && window.__oakSum();">
+            {{ b.container_id }}
+            <span class="muted">{{ b.format|default:b.get_type_display }}</span>
+          </label>
+          <input type="number" step="0.1" id="fill-{{ b.pk }}" name="fill_{{ b.pk }}"
+                 class="fill-input" value="{{ b.capacity_gal|floatformat:1 }}" disabled
+                 style="max-width:100px" oninput="window.__oakSum && window.__oakSum();">
+          <span class="muted">gal</span>
+        </div>
+      {% empty %}
+        <span class="muted">No empty barrels — add containers first.</span>
+      {% endfor %}
+    </div>
+
+    <p class="muted" style="margin:6px 0 10px">
+      This session: <b id="oak-session-total">0.0</b> gal
+    </p>
+
+    <div class="form-grid">
+      <div><label>Filled at</label><input type="date" name="filled_at" value="{{ today }}"></div>
+      <div>
+        <label>Tank after this rack</label>
+        <select name="tank_disposition" id="tank-disp"
+                onchange="document.getElementById('lees-row').style.display = (this.value === 'emptied') ? '' : 'none';">
+          <option value="remains" selected>Wine remains in tank (partial — rack the rest later)</option>
+          <option value="emptied">Tank emptied (lot is fully down)</option>
+        </select>
+      </div>
+      <div id="lees-row" style="display:none">
+        <label>Lees / heel left behind (gal)</label>
+        <input type="number" step="0.1" name="lees_gal" placeholder="blank → none"
+               title="Booked as a VolumeLoss — this is what the 5120.17 reads. Leave blank if nothing was lost.">
+      </div>
+    </div>
+
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit">Rack to barrel</button>
+    </div>
+    {% if not in_bond %}
+      <p class="muted" style="margin:10px 0 0">
+        Racking does not end primary. Once the lot is fully down, <b>book to bond</b>
+        from the summary card — the barrel-fill gauge will be offered there.
+      </p>
+    {% endif %}
+  </form>
+</div>
+
+<script>
+  window.__oakSum = function () {
+    var t = 0;
+    document.querySelectorAll('.barrel-fills .fill-input').forEach(function (i) {
+      if (!i.disabled && i.value) t += parseFloat(i.value) || 0;
+    });
+    var el = document.getElementById('oak-session-total');
+    if (el) el.textContent = t.toFixed(1);
+  };
+  window.__oakSum();
+</script>
+{% endif %}
+
 {% include "web/_lot_note.html" with section="oak" note=note %}

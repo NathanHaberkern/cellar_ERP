@@ -1,0 +1,96 @@
+{# Book-to-bond card. Lives on the lot summary — this is the act that ends primary,
+   so it belongs where the cellar already looks for the lot's state, not behind a tab.
+   Shows the booking receipt once booked; disappears entirely before the wine is
+   off the skins. #}
+<div id="bond-card">
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+{% if booking %}
+  <div class="card" style="margin-top:14px">
+    <p class="eyebrow" style="margin:0 0 10px">Booked to bond</p>
+    <table class="kv"><tbody>
+      <tr><th>Booked</th><td>{{ booking.booked_at|date:"M j, Y" }}</td></tr>
+      <tr><th>Gallons produced</th><td><b>{{ booking.gallons_produced|floatformat:1 }}</b></td></tr>
+      <tr><th>Tax class</th><td>{{ booking.get_tax_class_display }}</td></tr>
+      <tr><th>Gauge</th><td>{{ booking.get_gauge_source_display }}</td></tr>
+    </tbody></table>
+    <p class="muted" style="margin:10px 0 0">
+      This is the figure the 5120.17 reads. Port base wine books in col a (≤16%) —
+      fortification is what moves it to col b.
+    </p>
+  </div>
+
+{% elif can_book %}
+  <div class="card" style="margin-top:14px">
+    <p class="eyebrow" style="margin:0 0 10px">Book to bond</p>
+    <p class="muted" style="margin:0 0 10px">
+      Declares the produced gallons and ends primary. Oak is optional and separate —
+      wine that never sees a barrel books straight out of tank and goes to bottling.
+    </p>
+
+    <form hx-post="{% url 'lot-book-to-bond' lot.pk %}"
+          hx-target="#bond-card" hx-swap="outerHTML">
+      <div class="form-grid">
+        <div>
+          <label>Gauge source</label>
+          <select name="gauge_source" id="bond-gauge"
+                  onchange="(function(sel){
+                    var v = sel.options[sel.selectedIndex].dataset.vol || '';
+                    var g = document.getElementById('bond-gal');
+                    if (v) g.value = v;
+                  })(this)">
+            {% if gauges.tank %}
+              <option value="tank_gauge" data-vol="{{ gauges.tank.volume_gal|floatformat:1 }}"
+                      {% if gauges.default == "tank_gauge" %}selected{% endif %}>
+                Tank gauge — {{ gauges.tank.volume_gal|floatformat:1 }} gal ({{ gauges.tank.method }})
+              </option>
+            {% endif %}
+            {% if gauges.barrel_total %}
+              <option value="barrel_fill" data-vol="{{ gauges.barrel_total|floatformat:1 }}"
+                      {% if gauges.default == "barrel_fill" %}selected{% endif %}>
+                Barrel fill — {{ gauges.barrel_total|floatformat:1 }} gal across
+                {{ gauges.barrel_count }} barrel{{ gauges.barrel_count|pluralize }}
+              </option>
+            {% endif %}
+            <option value="stated" data-vol=""
+                    {% if gauges.default == "stated" %}selected{% endif %}>Stated (enter manually)</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Gallons produced</label>
+          <input type="number" step="0.1" name="gallons" id="bond-gal" required
+                 value="{{ gauges.default_volume|floatformat:1 }}">
+        </div>
+
+        <div>
+          <label>Tax class</label>
+          <select name="tax_class">
+            {% for val, label in tax_classes %}
+              <option value="{{ val }}" {% if val == default_tax_class %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div><label>Booked on</label>
+          <input type="date" name="booked_at" value="{{ today }}"></div>
+      </div>
+
+      {% if gauges.still_in_tank and gauges.barrel_total %}
+        <p class="muted" style="margin:10px 0 0">
+          <span class="badge">heads up</span>
+          This lot is partly in barrel and still holding wine in tank. The barrel-fill
+          gauge only counts what's gone down ({{ gauges.barrel_total|floatformat:1 }} gal).
+          Rack the rest first if you're gauging off the barrels.
+        </p>
+      {% endif %}
+
+      <div class="note-actions" style="margin-top:10px">
+        <button class="btn sm" type="submit"
+                hx-confirm="Book this lot to bond? Primary closes and the produced gallons become the compliance figure.">
+          Book to bond</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+</div>

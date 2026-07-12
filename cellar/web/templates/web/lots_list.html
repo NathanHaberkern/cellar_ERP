@@ -4,16 +4,56 @@
 <div class="page-head">
   <div><p class="eyebrow">Spine</p><h1>Lots</h1></div>
 </div>
-<div style="max-width:360px;margin-bottom:14px">
-  <input type="text" name="q" value="{{ q }}" placeholder="Search lot code…"
-         autocomplete="off"
-         hx-get="{% url 'lots-search' %}"
-         hx-trigger="input changed delay:250ms, search"
-         hx-target="#lot-rows" hx-swap="innerHTML">
+
+{# All four controls hit the same endpoint and swap the same tbody. hx-include pulls
+   the whole filter bar along, so they compose instead of clobbering each other. #}
+<div class="row lot-filters" id="lot-filters"
+     style="gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+  <div style="min-width:220px">
+    <label class="l">Search</label>
+    <input type="text" name="q" value="{{ q }}" placeholder="Lot code…" autocomplete="off"
+           hx-get="{% url 'lots-search' %}" hx-include="#lot-filters"
+           hx-trigger="input changed delay:250ms, search"
+           hx-target="#lot-rows" hx-swap="innerHTML">
+  </div>
+  <div>
+    <label class="l">Status</label>
+    <select name="status" hx-get="{% url 'lots-search' %}" hx-include="#lot-filters"
+            hx-trigger="change" hx-target="#lot-rows" hx-swap="innerHTML">
+      <option value="">All</option>
+      {% for val, label in statuses %}
+        <option value="{{ val }}" {% if val == f_status %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="l">Disposition</label>
+    <select name="disposition" hx-get="{% url 'lots-search' %}" hx-include="#lot-filters"
+            hx-trigger="change" hx-target="#lot-rows" hx-swap="innerHTML">
+      <option value="">All</option>
+      <option value="in_bond" {% if f_disposition == "in_bond" %}selected{% endif %}>In bond</option>
+      <option value="not_booked" {% if f_disposition == "not_booked" %}selected{% endif %}>Not yet booked</option>
+      <option value="in_fermenter" {% if f_disposition == "in_fermenter" %}selected{% endif %}>In fermenter</option>
+    </select>
+  </div>
+  <div>
+    <label class="l">Vessel</label>
+    <select name="vessel" hx-get="{% url 'lots-search' %}" hx-include="#lot-filters"
+            hx-trigger="change" hx-target="#lot-rows" hx-swap="innerHTML">
+      <option value="">Any</option>
+      {% for code in vessels %}
+        <option value="{{ code }}" {% if code == f_vessel %}selected{% endif %}>{{ code }}</option>
+      {% endfor %}
+    </select>
+  </div>
 </div>
+
 <div class="table-wrap">
   <table>
-    <thead><tr><th style="width:1%">ID</th><th>Lot code</th><th style="width:1%"></th></tr></thead>
+    <thead><tr>
+      <th style="width:1%">ID</th><th>Lot code</th><th>Status</th>
+      <th>Disposition</th><th>Location</th><th style="width:1%"></th>
+    </tr></thead>
     <tbody id="lot-rows">
       {% include "web/_lots_rows.html" %}
     </tbody>

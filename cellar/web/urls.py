@@ -15,6 +15,7 @@ from . import labs
 from . import tasks
 from . import fermentation as ferment
 from . import bottling as bottle
+from . import bonding as bond
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -51,7 +52,13 @@ urlpatterns = [
     path("lots/<int:pk>/ferment/daily/", ferment.ferment_daily, name="ferment-daily"),
     path("lots/<int:pk>/ferment/confirm/<int:task_pk>/", ferment.ferment_confirm, name="ferment-confirm"),
     path("lots/<int:pk>/ferment/press/", ferment.ferment_press, name="ferment-press"),
-    path("lots/<int:pk>/ferment/rack/", ferment.ferment_rack, name="ferment-rack"),
+    # ferment-rack RETIRED — racking to barrel moved to the Oak tab (lot-rack-to-barrel);
+    # it is an aging move and no longer ends primary. Book-to-bond does that now.
+    # book-to-bond (the declaration that ends primary) + barrel-down (aging)
+    path("lots/<int:pk>/bond/", bond.lot_bond_card, name="lot-bond-card"),
+    path("lots/<int:pk>/bond/book/", bond.lot_book_to_bond, name="lot-book-to-bond"),
+    path("lots/<int:pk>/oak/rack/", bond.lot_rack_to_barrel, name="lot-rack-to-barrel"),
+
     # bottling (parcel split + run)
     path("lots/<int:pk>/bottling/", bottle.lot_bottling, name="lot-bottling"),
     path("lots/<int:pk>/bottling/prepare/", bottle.bottling_prepare, name="bottling-prepare"),

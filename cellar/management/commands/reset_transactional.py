@@ -16,7 +16,7 @@ KEPT (master data you curated):
     Variety, Grower, Vineyard, Block, VarietalDesignation,
     Vessel, Container, Rack, Room, Location, BarrelOrder,
     Additive, LabAnalyte, LabAnalyteSynonym,
-    BottleFormat, DryGood, Material, ConfigConstant, TaskRule, users
+    BottleFormat, DryGood, Material, ConfigConstant, TaskRule, FruitPrice, users
 
 DELETED (everything the cellar recorded):
     every other model in the app — lots, designations, lineage, weigh tags,
@@ -37,6 +37,7 @@ KEEP = {
     "Vessel", "Container", "Rack", "Room", "Location", "BarrelOrder",
     "Additive", "LabAnalyte", "LabAnalyteSynonym",
     "BottleFormat", "DryGood", "Material", "ConfigConstant", "TaskRule",
+    "FruitPrice",
 }
 
 

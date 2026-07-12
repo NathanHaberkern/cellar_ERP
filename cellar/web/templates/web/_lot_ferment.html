@@ -91,22 +91,13 @@
 
 {# ---- Step 4 · Rack to barrel (flips module off) ---- #}
 {% if show_rack %}
-  <div class="card" style="margin-top:14px">
-    <p class="eyebrow" style="margin:0 0 10px">Step 4 · Rack to barrel</p>
-    <form hx-post="{% url 'ferment-rack' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
-      <label>Empty barrels (volume splits evenly)</label>
-      <div class="row" style="flex-wrap:wrap;gap:10px;margin:6px 0">
-        {% for b in barrels %}
-          <label class="muted" style="margin:0"><input type="checkbox" name="containers" value="{{ b.pk }}"> {{ b.container_id }}</label>
-        {% empty %}<span class="muted">No empty barrels — add containers first.</span>{% endfor %}
-      </div>
-      <div class="form-grid">
-        <div><label>Total volume (gal)</label><input type="number" step="1" name="volume"></div>
-        <div><label>Filled at</label><input type="date" name="filled_at"></div>
-      </div>
-      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit"
-        hx-confirm="Rack to barrel and finish primary? The Fermentation tab will close and Additions will return.">Rack &amp; finish</button></div>
-    </form>
+  {# Step 4 (rack to barrel) MOVED to the Oak tab. It is an aging move, not the end
+     of primary — booking to bond is what ends primary, and it lives on the summary
+     card above. Racking here used to be the ONLY way out of the ferment window,
+     which stranded every wine that never sees a barrel. #}
+  <div class="empty">
+    Off the press. <b>Book to bond</b> on the summary card above to close primary —
+    then rack to barrel from the <b>Oak</b> tab if this wine is going to oak.
   </div>
 {% endif %}
 

@@ -101,12 +101,36 @@ def _estate_cost_per_ton():
         return 0.0
 
 
+def _contract_price(lot, tag):
+    """The vintage's contract price for this fruit, block-specific if there is one.
+
+    Prices change every year, so they live in FruitPrice rows keyed on vintage —
+    not in a single field that gets overwritten each harvest and silently restates
+    the COGS of every prior vintage.
+    """
+    from cellar.models import FruitPrice
+    block = getattr(getattr(tag, "harvest_event", None), "block", None)
+    variety = getattr(block, "variety", None)
+    if variety is None:
+        from cellar.services import lotmeta
+        variety = lotmeta.lot_variety(lot)
+    if variety is None:
+        return None
+    return FruitPrice.for_lot(lot.vintage_year, variety, block)
+
+
 def fruit_cost(lot):
-    """Σ (allocated tons × cost/ton) over the lot's weigh-tag allocations."""
+    """Σ (allocated tons × cost/ton) over the lot's weigh-tag allocations.
+
+    Resolution order: the cost recorded on the tag → the vintage's contract price
+    (FruitPrice) → the purchase price on the tag → the estate constant.
+    """
     total = 0.0
     for a in lot.allocations.filter(voided_at__isnull=True):
         tag = a.weigh_tag
         cpt = tag.fruit_cost_per_ton
+        if cpt is None:
+            cpt = _contract_price(lot, tag)
         if cpt is None:
             cpt = tag.purchase_price_per_ton if tag.source_type == "purchased" else _estate_cost_per_ton()
         tons = float(a.allocated_net_lbs) / 2000.0

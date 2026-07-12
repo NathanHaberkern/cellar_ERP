@@ -95,9 +95,49 @@ def rule_ferment_daily(rule, today):
     return made
 
 
+# ------------------------------------------------------- partial barrel fill
+def rule_partial_barrel(rule, today):
+    """Barrels that came off the fill line short.
+
+    Filling barrels from a tank almost always ends on a partial. That barrel is
+    not empty — it holds wine and the container is spoken for — but it is not full
+    either, and wine sitting under that much headspace oxidises. Flag it and open a
+    task to bring it up to full from another lot.
+
+    Keyed on the placement, so it fires once per partial barrel and does not
+    re-fire while the barrel stays partial. Filling it makes it no longer partial,
+    so the rule stops selecting it; topping.top_partial() closes the open task.
+    """
+    from cellar.services import volumes as vol_svc
+
+    grace = int(rule.params.get("grace_days", 0))
+    made = 0
+    for p in (AgingPlacement.objects
+              .filter(emptied_at__isnull=True, voided_at__isnull=True)
+              .select_related("container", "lot")):
+        if not getattr(p.container, "is_oak", False):
+            continue
+        if not vol_svc.is_partial(p):
+            continue
+        if grace and (today - p.filled_at).days < grace:
+            continue
+        room = vol_svc.ullage(p)
+        _, created = task_svc.create_task(
+            title=f"Fill partial barrel {p.container.container_id} — {p.lot.code}",
+            body=f"{p.container.container_id} was filled to "
+                 f"{vol_svc.placement_volume(p)} gal of "
+                 f"{vol_svc.placement_capacity(p)} gal working capacity. "
+                 f"{room} gal of ullage — top it up from another lot.",
+            due_date=today, lot=p.lot, container=p.container, rule=rule,
+            dedupe_key=f"partialbbl:{p.pk}")
+        made += int(created)
+    return made
+
+
 RULES = {
     "topping_interval": rule_topping_interval,
     "ferment_daily": rule_ferment_daily,
+    "partial_barrel": rule_partial_barrel,
 }
 
 

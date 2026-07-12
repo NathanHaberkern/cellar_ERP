@@ -258,41 +258,38 @@ def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, acto
     if volume_gal not in (None, ""):
         ops._record_volume(lot, Decimal(str(volume_gal)), at,
                            method=ops.VolumeMeasurement.Method.STATED)
-    lot.status = Lot.Status.PRESSED
+    lot.status = post_press_status(lot)
     lot.save(update_fields=["status"])
 
 
-def empty_oak_containers():
-    from cellar.models import Container, AgingPlacement
-    open_ids = set(
-        AgingPlacement.objects
-        .filter(emptied_at__isnull=True, voided_at__isnull=True)
-        .values_list("container_id", flat=True))
-    return (Container.objects
-            .filter(active=True, type__in=[Container.Type.BARREL, Container.Type.FOUDRE])
-            .exclude(id__in=open_ids)
-            .order_by("container_id"))
+# Whites and rosés go to a settling period off the press; reds do not. Derived from
+# the destemming path so the cellar never has to declare it twice:
+#   A · White (destemmed)   B · Rosé (destemmed)   C · Rosé (direct press)
+#   F · White (whole cluster)                        [D / E are red]
+SETTLES_AFTER_PRESS = {"A", "B", "C", "F"}
 
 
-@transaction.atomic
-def rack_to_barrel(lot, *, container_ids, total_volume_gal, filled_at=None, actor=None):
-    """Step 4: rack the lot to barrels, close its tank assignment, and flip status
-    to DONE_PRIMARY — which hides the Fermentation module and restores Additions."""
-    from cellar.models import Container, AgingPlacement, TankAssignment
-    filled_at = filled_at or timezone.localdate()
-    ids = [int(c) for c in container_ids if str(c).strip()]
-    if not ids:
-        raise ValueError("Select at least one barrel to rack into.")
-    per = Decimal(str(total_volume_gal)) / Decimal(len(ids)) if total_volume_gal else Decimal("0")
+def post_press_status(lot):
+    """SETTLING for whites/rosés, PRESSED for reds.
 
-    for cid in ids:
-        container = Container.objects.get(pk=cid)
-        AgingPlacement.objects.create(lot=lot, container=container,
-                                      filled_at=filled_at,
-                                      volume_gal=per.quantize(Decimal("0.1")))
-    # close any open tank assignment
-    (TankAssignment.objects.filter(lot=lot, voided_at__isnull=True, emptied_at__isnull=True)
-     .update(emptied_at=timezone.now()))
+    SETTLING was previously dead — it sat in the enum and in the ferment-window gate
+    but nothing ever assigned it. It now means something: the lot is off the press
+    and dropping bright, not yet gauged.
+    """
+    d = (lot.destemmings.filter(voided_at__isnull=True)
+         .order_by("-destem_at").first())
+    if d and d.processing_path in SETTLES_AFTER_PRESS:
+        return Lot.Status.SETTLING
+    return Lot.Status.PRESSED
 
-    lot.status = Lot.Status.DONE_PRIMARY
-    lot.save(update_fields=["status"])
+
+# ---------------------------------------------------------------------------
+# Racking to barrel MOVED to services/barreling.py.
+#
+# It used to live here and flip the lot to DONE_PRIMARY, which made oak a mandatory
+# station on the way out of primary and stranded every wine that never sees a barrel.
+# It is an aging move, not a lifecycle gate. Re-exported so old imports keep working.
+# ---------------------------------------------------------------------------
+from cellar.services.barreling import (  # noqa: E402,F401
+    empty_oak_containers, rack_to_barrel, TankDisposition,
+)

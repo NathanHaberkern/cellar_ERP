@@ -184,12 +184,36 @@ class FortificationEvent(AppendOnly):
 
 
 class BookToBond(AppendOnly):
-    """Straight-fermentation production booking (non-fortified lots)."""
+    """Straight-fermentation production booking (non-fortified lots).
+
+    This is the declaration that ends primary — the lot's status flips to
+    DONE_PRIMARY on it (see services/bonding.py), NOT on racking to barrel. Wine
+    that never sees oak (Verdelho: racked, booked, bottled out of tank) has to be
+    able to finish, and oak is not what finishes it.
+
+    `gauge_source` records HOW the produced figure was arrived at, which is a
+    compliance-relevant fact and not always obvious from the number alone: tanks
+    without a pressure sensor are gauged BY the barrel-down, so the sum of the
+    actual barrel fills is the booking volume.
+    """
+    class GaugeSource(models.TextChoices):
+        TANK_GAUGE = "tank_gauge", "Tank gauge (pressure sensor)"
+        BARREL_FILL = "barrel_fill", "Barrel fill (sum of actual fills)"
+        STATED = "stated", "Stated"
+
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="bond_bookings")
     booked_at = models.DateField()
     gallons_produced = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True,
                                            help_text="blank → the lot's booking-volume measurement")
-    tax_class = models.CharField(max_length=1, choices=TaxClass.choices, default=TaxClass.NOT_OVER_16)
+    tax_class = models.CharField(max_length=1, choices=TaxClass.choices, default=TaxClass.NOT_OVER_16,
+                                 help_text="col a (≤16%) at booking — INCLUDING Port base wine. "
+                                           "Fortification moves it to col b, not this row.")
+    gauge_source = models.CharField(max_length=12, choices=GaugeSource.choices,
+                                    default=GaugeSource.STATED,
+                                    help_text="how the produced volume was determined")
+    volume = models.ForeignKey(VolumeMeasurement, null=True, blank=True,
+                               on_delete=models.PROTECT, related_name="+",
+                               help_text="the authoritative gauge this booking was struck from")
 
     def save(self, *args, **kwargs):
         if self.gallons_produced in (None, ""):

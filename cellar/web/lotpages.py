@@ -27,7 +27,7 @@ from collections import defaultdict
 from django.utils import timezone
 
 from cellar.models import (
-    TankAssignment, Reading, VolumeMeasurement, LotLineage, VolumeLoss,
+    Lot, TankAssignment, Reading, VolumeMeasurement, LotLineage, VolumeLoss,
     BottlingRun, AgingPlacement, BulkTaxPaidRemoval, BondTransfer, LotSectionNote,
 )
 from cellar.services import aging as aging_svc
@@ -37,12 +37,22 @@ from cellar.services import labpanels
 
 # --------------------------------------------------------------- disposition
 def is_in_bond(lot):
-    return (lot.bond_bookings.filter(voided_at__isnull=True).exists()
-            or lot.fortifications.filter(voided_at__isnull=True).exists())
+    """Delegates to the service — this is domain logic, not a view concern."""
+    from cellar.services import bonding
+    return bonding.is_in_bond(lot)
 
 
 def disposition(lot):
-    return "In bond" if is_in_bond(lot) else "In fermenter"
+    """Three real states, not two. 'Not yet booked' is the honest label for wine
+    that is off the skins but whose production has not been declared — the old
+    binary called it 'In fermenter', which was flatly wrong for a pressed lot
+    sitting in tank waiting to be gauged."""
+    from cellar.services import bonding
+    if bonding.is_in_bond(lot):
+        return "In bond"
+    if lot.status in (Lot.Status.PRESSED, Lot.Status.SETTLING):
+        return "Not yet booked"
+    return "In fermenter"
 
 
 # ------------------------------------------------------------------ location

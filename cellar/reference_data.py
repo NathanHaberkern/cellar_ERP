@@ -78,6 +78,66 @@ TASK_RULES = [
                        "management task and a daily Brix + temp reading task.",
         "params": {"statuses": ["fermenting"]},
     },
+    {
+        "key": "partial_barrel",
+        "name": "Partial barrel — fill to full",
+        "description": "Filling barrels from a tank almost always ends on a partial. "
+                       "The barrel isn't empty (the container is unavailable) but it "
+                       "isn't full either. Flag it and open a task to top it up from "
+                       "another wine. Fires once per placement; clears when filled.",
+        "params": {"tolerance_gal": 1, "grace_days": 0},
+    },
+]
+
+
+# ======================================================================
+# Bottling + materials reference
+# ======================================================================
+# name, mL, bottles/case
+BOTTLE_FORMATS = [
+    ("750ml",         750, 12),
+    ("500ml",         500, 12),
+    ("375ml Split",   375, 12),
+    ("1.5L Magnum",  1500,  6),
+]
+
+# name, kind, unit_cost, unit
+# NOTE: costs are ESTIMATES pending Nate's real price list — flagged in `notes`
+# on the seeded rows so nobody mistakes them for invoiced figures.
+DRY_GOODS = [
+    ("Bottle — 750ml",        "bottle",  "1.1000", "each"),
+    ("Bottle — 500ml",        "bottle",  "1.0500", "each"),
+    ("Bottle — 375ml",        "bottle",  "0.9000", "each"),
+    ("Bottle — 1.5L Magnum",  "bottle",  "2.6000", "each"),
+    ("Cork — Diam10",         "closure", "0.4500", "each"),   # same cork, all wines
+    ("Capsule — tin (port)",  "capsule", "0.2200", "each"),   # ports only
+    ("Label — front",         "label",   "0.1800", "each"),
+    ("Label — back",          "label",   "0.1800", "each"),
+    ("Label — neck (port)",   "label",   "0.1200", "each"),
+]
+
+# Dry-good bill of materials, per bottle, by program.
+#   table wine: bottle + Diam10 + front + back                (no capsule)
+#   port:       bottle + Diam10 + front + back + neck + tin capsule
+DRY_GOOD_BOM = {
+    "table": ["Cork — Diam10", "Label — front", "Label — back"],
+    "rose":  ["Cork — Diam10", "Label — front", "Label — back"],
+    "port":  ["Cork — Diam10", "Label — front", "Label — back",
+              "Label — neck (port)", "Capsule — tin (port)"],
+}
+
+# name, kind, unit, unit_cost
+MATERIALS = [
+    ("Vino Blanc concentrate", "concentrate", "gal", "18.0000"),   # $108 / 6-gal pail
+]
+
+# key, value, notes — labor rates are STUBS (Nate: "stub for now, revisit later")
+CONFIG_CONSTANTS = [
+    ("labor_harvest_per_ton",    "0", "STUB — cellar labor allocated per ton crushed"),
+    ("labor_cellar_per_gal_month", "0", "STUB — cellar labor allocated per gal-month in bulk"),
+    ("labor_bottling_per_case",  "0", "STUB — line labor allocated per case bottled"),
+    ("estate_fruit_cost_per_ton", "0",
+     "Superseded by FruitPrice rows (per vintage). Kept as the last-resort fallback."),
 ]
 
 
@@ -129,3 +189,36 @@ def install_task_rules(TaskRule):
             obj.save()
         created += made
     return created
+
+
+def install_bottling_reference(BottleFormat, DryGood, Material, ConfigConstant):
+    """Idempotent + adoptive. The four tables that were completely empty — nothing
+    downstream of bottling (COGS, dry-good use, sweetening, Part IV materials) can
+    run without them."""
+    made = {"formats": 0, "dry_goods": 0, "materials": 0, "config": 0}
+
+    for name, ml, per_case in BOTTLE_FORMATS:
+        obj, created = BottleFormat.objects.get_or_create(
+            name=name, defaults={"ml": ml, "bottles_per_case": per_case})
+        if not created and (obj.ml != ml or obj.bottles_per_case != per_case):
+            obj.ml, obj.bottles_per_case = ml, per_case
+            obj.save()
+        made["formats"] += created
+
+    for name, kind, cost, unit in DRY_GOODS:
+        _, created = DryGood.objects.get_or_create(
+            name=name,
+            defaults={"kind": kind, "unit_cost": cost, "unit": unit})
+        made["dry_goods"] += created
+
+    for name, kind, unit, cost in MATERIALS:
+        _, created = Material.objects.get_or_create(
+            name=name, defaults={"kind": kind, "unit": unit, "unit_cost": cost})
+        made["materials"] += created
+
+    for key, value, notes in CONFIG_CONSTANTS:
+        _, created = ConfigConstant.objects.get_or_create(
+            key=key, defaults={"value": value, "notes": notes})
+        made["config"] += created
+
+    return made

@@ -70,7 +70,8 @@ def dashboard(request):
 # --------------------------------------------------------------------- lots --
 @login_required
 def lots_list(request):
-    ctx = {"nav": "lots", "lots": _lot_queryset(request), "q": request.GET.get("q", "")}
+    ctx = {"nav": "lots", "lots": _lot_queryset(request)}
+    ctx.update(_lot_filter_ctx(request))
     return render(request, "web/lots_list.html", ctx)
 
 
@@ -81,13 +82,65 @@ def lots_search(request):
 
 
 def _lot_queryset(request):
-    # Lot.code is a derived property (from current_designation), not a column, so
-    # search filters in Python over the rendered code. Fine at this scale.
+    """Text search + status / disposition / vessel filters.
+
+    Lot.code and disposition are both derived (code from current_designation,
+    disposition from the BookToBond / FortificationEvent ledger), so those two
+    filter in Python. Status and vessel are real columns and filter in SQL. Fine at
+    this scale — a vintage is a few hundred lots.
+    """
+    from cellar.services import bonding as bond
+    from cellar.models import TankAssignment
+
     qs = Lot.objects.select_related("current_designation").order_by("-pk")
+
+    status = (request.GET.get("status") or "").strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    vessel = (request.GET.get("vessel") or "").strip()
+    if vessel:
+        lot_ids = (TankAssignment.objects
+                   .filter(voided_at__isnull=True, emptied_at__isnull=True,
+                           vessel__code=vessel)
+                   .values_list("lot_id", flat=True))
+        qs = qs.filter(pk__in=list(lot_ids))
+
+    lots = list(qs[:400])
+
     q = (request.GET.get("q") or "").strip().lower()
     if q:
-        return [lot for lot in qs if q in (lot.code or "").lower()][:200]
-    return list(qs[:200])
+        lots = [lot for lot in lots if q in (lot.code or "").lower()]
+
+    disp = (request.GET.get("disposition") or "").strip()
+    if disp == "in_bond":
+        lots = [lot for lot in lots if bond.is_in_bond(lot)]
+    elif disp == "not_booked":
+        lots = [lot for lot in lots
+                if not bond.is_in_bond(lot)
+                and lot.status in (Lot.Status.PRESSED, Lot.Status.SETTLING)]
+    elif disp == "in_fermenter":
+        lots = [lot for lot in lots
+                if not bond.is_in_bond(lot)
+                and lot.status not in (Lot.Status.PRESSED, Lot.Status.SETTLING)]
+
+    # decorate for the row template (both are derived, so compute once here)
+    for lot in lots:
+        lot.disposition = lotpages.disposition(lot)
+        lot.location = lotpages.current_location(lot)
+    return lots[:200]
+
+
+def _lot_filter_ctx(request):
+    from cellar.models import Vessel
+    return {
+        "q": request.GET.get("q", ""),
+        "f_status": request.GET.get("status", ""),
+        "f_disposition": request.GET.get("disposition", ""),
+        "f_vessel": request.GET.get("vessel", ""),
+        "statuses": Lot.Status.choices,
+        "vessels": Vessel.objects.order_by("code").values_list("code", flat=True),
+    }
 
 
 @login_required
@@ -100,9 +153,15 @@ def lot_detail(request, pk):
     show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
     hide_additions = lot.status in ferment_window
 
-    # Bottling tab: finished bulk wine, or a parcel itself.
+    # Bottling tab: wine that has been BOOKED TO BOND (not merely racked to oak),
+    # or a parcel itself. Keying this on `status == DONE_PRIMARY` was what hid the
+    # tab forever on any lot that never sees a barrel.
     from cellar.services import bottling as bz
     show_bottling = bz.can_split(lot) or bz.is_parcel(lot) or bool(bz.parcels_of(lot))
+
+    # Book-to-bond card on the summary — the act that ends primary.
+    from .bonding import bond_ctx
+    bond_card = bond_ctx(lot)
 
     # Overview task summary — open count, overdue count, next 3 by due date.
     from cellar.services import tasks as tsvc
@@ -119,6 +178,7 @@ def lot_detail(request, pk):
         "overview_note": lotpages.section_note(lot, "overview"),
         "show_ferment": show_ferment, "hide_additions": hide_additions,
         "show_bottling": show_bottling, "task_summary": task_summary,
+        "bond_card": bond_card,
     })
 
 
@@ -176,12 +236,34 @@ def lot_composition(request, pk):
     return _panel(request, pk, "composition", "web/_lot_composition.html", extra)
 
 
+def render_oak_panel(request, lot, error=None):
+    """The Oak tab, rendered from a lot we already have. Shared by the tab itself
+    and by the barrel-down POST, which swaps this panel back in."""
+    from cellar.services import barreling as bar
+    from cellar.services import bonding as bond
+    from cellar.models import TankAssignment
+
+    data, err = _safe(lotpages.oak, lot)
+    in_tank = TankAssignment.objects.filter(
+        lot=lot, voided_at__isnull=True, emptied_at__isnull=True).exists()
+    return render(request, "web/_lot_oak.html", {
+        "lot": lot, "section": "oak",
+        "note": lotpages.section_note(lot, "oak"),
+        "oak": data or {}, "error": error or err,
+        # barrel-down form
+        "barrels": bar.empty_oak_containers(),
+        "can_rack": lot.status not in (Lot.Status.PLANNED, Lot.Status.BOTTLED),
+        "still_in_tank": in_tank,
+        "barrel_total": bond.barrel_fill_total(lot),
+        "in_bond": bond.is_in_bond(lot),
+        "today": timezone.localdate().isoformat(),
+    })
+
+
 @login_required
 def lot_oak(request, pk):
-    def extra(lot):
-        data, err = _safe(lotpages.oak, lot)
-        return {"oak": data or {}, "error": err}
-    return _panel(request, pk, "oak", "web/_lot_oak.html", extra)
+    lot = get_object_or_404(Lot, pk=pk)
+    return render_oak_panel(request, lot)
 
 
 @login_required
