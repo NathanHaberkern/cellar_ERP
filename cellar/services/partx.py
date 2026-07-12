@@ -57,6 +57,16 @@ def build_part_x(year, month):
         return qs.filter(voided_at__isnull=True,
                          **{f"{field}__gte": start, f"{field}__lt": end})
 
+    def in_period_dt(qs, field):
+        """Same window, for a DateTimeField. Comparing one to a date works and then
+        warns about naive datetimes forever; make the bounds aware instead."""
+        from datetime import datetime, time
+        from django.utils import timezone
+        lo = timezone.make_aware(datetime.combine(start, time.min))
+        hi = timezone.make_aware(datetime.combine(end, time.min))
+        return qs.filter(voided_at__isnull=True,
+                         **{f"{field}__gte": lo, f"{field}__lt": hi})
+
     # ---------------------------------------------------- fortifications
     for fe in in_period(FortificationEvent.objects, "booked_at").select_related("lot"):
         base = COL.get(fe.base_tax_class, fe.base_tax_class)
@@ -106,7 +116,7 @@ def build_part_x(year, month):
             })
 
     # ---------------------------------------------- change of tax class
-    for e in in_period(LotLineage.objects, "created_at").select_related(
+    for e in in_period_dt(LotLineage.objects, "created_at").select_related(
             "parent_lot", "child_lot"):
         if e.relationship_type not in (LotLineage.Relationship.WHOLE_BLEND,
                                        LotLineage.Relationship.PARTIAL_BLEND):

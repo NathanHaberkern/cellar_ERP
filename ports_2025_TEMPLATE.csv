@@ -1,0 +1,8 @@
+lot_code,variety,kind,on_skins_date,booked_at,pg_drawn,spirit_proof,finished_wg,base_wg,target_abv,expected_tax_class,notes
+,Tinta Roriz,initial,,,,173.4,,,19.5,b,
+,Touriga Nacional,initial,,,,173.4,,,19.5,b,
+,Tinta Cao,initial,,,,173.4,,,19.5,b,
+,Souzao,initial,,,,173.4,,,19.5,b,
+,Bastardo,initial,,,,173.4,,,19.5,b,
+,Verdelho,initial,,,,173.4,,,19.5,b,
+,,adjustment,2025-06-10,2025-06-10,112.4,173.4,6876.32,6823,,b,spring racking alcohol adjustment
