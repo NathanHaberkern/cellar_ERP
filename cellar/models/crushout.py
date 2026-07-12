@@ -100,9 +100,7 @@ class PressingEvent(AppendOnly):
     recombined = models.BooleanField(default=True)
     settling_period_days = models.PositiveIntegerField(null=True, blank=True)
     disposition = models.CharField(max_length=12, choices=Disposition.choices, blank=True)
-    volume = models.ForeignKey(VolumeMeasurement, null=True, blank=True,
-                               on_delete=models.PROTECT, related_name="+",
-                               help_text="the post-press gauge, if any")
+
 
     def __str__(self):
         return f"{self.lot} pressed {self.pressed_at:%Y-%m-%d}"
