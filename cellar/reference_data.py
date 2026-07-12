@@ -138,6 +138,10 @@ CONFIG_CONSTANTS = [
     ("labor_bottling_per_case",  "0", "STUB — line labor allocated per case bottled"),
     ("estate_fruit_cost_per_ton", "0",
      "Superseded by FruitPrice rows (per vintage). Kept as the last-resort fallback."),
+    ("excise_removal_basis", "bottling",
+     "'bottling' = tax paid at bottling, Section B carries no balance (current practice). "
+     "'shipment' = case goods held in bond, C7 depletions book the removals. Switching "
+     "requires bonded case storage and an opening physical count."),
 ]
 
 

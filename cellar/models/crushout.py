@@ -102,8 +102,38 @@ class PressingEvent(AppendOnly):
 
 class FortificationEvent(AppendOnly):
     """Booked when T is determined. Creates the HPGS draw and holds the 5120.17 figures.
-    Enter PG drawn and the fortification target; the rest derives."""
+    Enter PG drawn and the fortification target; the rest derives.
+
+    TWO KINDS, and they report differently
+    --------------------------------------
+    INITIAL — Port fortified on skins. The base wine has just fermented, is under
+    16%, and has never been booked to bond. It is PRODUCED into col (a) line 2 and
+    immediately USED out of col (a) line 19; the finished wine is produced into
+    col (b) line 4. The base self-zeroes in col (a), which is why St. Amant's filed
+    reports (which put the base in col (b)) still balanced.
+
+    ADJUSTMENT — spring racking alcohol adjustment. Nothing fermented. The base is
+    wine that is ALREADY in a tax class, usually col (b). Reporting it as
+    "produced by fermentation" in col (a) would invent production that never
+    happened. So: line 19 in the base's OWN class, line 4 in the finished class,
+    and nothing on line 2 at all.
+
+    The base volume is also an INPUT for an adjustment, not a derivation. June 2025:
+    6,823 gal of port in, 112.4 PG (64.6 WG) of spirit added, 6,876.32 gal out. Base
+    + spirit = 6,887.6, so 11.3 gal was lost on the rack — and deriving base as
+    (finished − spirit) would have silently absorbed that loss into the production
+    figure instead of reporting it. Give both gauges; the service books the gap.
+    """
+    class Kind(models.TextChoices):
+        INITIAL = "initial", "Initial (fortified on skins)"
+        ADJUSTMENT = "adjustment", "Alcohol adjustment (already in bond)"
+
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="fortifications")
+    kind = models.CharField(max_length=12, choices=Kind.choices, default=Kind.INITIAL)
+    base_tax_class = models.CharField(
+        max_length=1, choices=TaxClass.choices, default=TaxClass.NOT_OVER_16,
+        help_text="the class the base wine was in BEFORE this event. Initial → (a): "
+                  "fresh base wine is under 16%. Adjustment → whatever it already was.")
     fortified_on_skins_date = models.DateField()
     booked_at = models.DateField(help_text="volume-determination date (press gauge or barrel-down)")
     spirit_proof = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
@@ -125,14 +155,22 @@ class FortificationEvent(AppendOnly):
     def save(self, *args, **kwargs):
         creating = self._state.adding and not self.pk
         if self.spirit_proof in (None, ""):
-            self.spirit_proof = Decimal(str(HighProofSpiritLedger.current_blended_proof()))
+            # the blended proof is a quotient and arrives with float dust on it;
+            # proof is reported to 2dp, so pin it there before it propagates into
+            # spirit_wg and then into base_wg.
+            self.spirit_proof = Decimal(
+                str(HighProofSpiritLedger.current_blended_proof())).quantize(Decimal("0.01"))
         if self.spirit_proof:
             self.spirit_wg = (self.proof_gallons_drawn * 100 / self.spirit_proof).quantize(Decimal("0.01"))
         if self.finished_wg in (None, ""):
             vm = VolumeMeasurement.booking_volume_for(self.lot)
             if vm:
                 self.finished_wg = vm.volume_gal
-        if self.finished_wg is not None and self.spirit_wg is not None:
+        if (self.base_wg in (None, "")
+                and self.finished_wg is not None and self.spirit_wg is not None):
+            # Only a derivation of LAST resort. Any real loss between the two gauges
+            # gets swallowed here, so the service supplies base_wg explicitly whenever
+            # the wine was gauged going in.
             self.base_wg = (self.finished_wg - self.spirit_wg).quantize(Decimal("0.1"))
         if creating and self.hpgs_draw_id is None:
             on_hand = HighProofSpiritLedger.on_hand_wg()
@@ -162,14 +200,27 @@ class FortificationEvent(AppendOnly):
         a, b = self.fortified_on_skins_date, self.booked_at
         return (a.year, a.month) != (b.year, b.month)
 
+    @property
+    def implied_loss(self):
+        """base + spirit − finished. Wine that went in and did not come out — the
+        racking loss on an alcohol adjustment. None if we can't compute it."""
+        if self.base_wg is None or self.spirit_wg is None or self.finished_wg is None:
+            return None
+        return (self.base_wg + self.spirit_wg - self.finished_wg).quantize(Decimal("0.1"))
+
     def form_5120_17_lines(self):
-        tc = self.get_expected_tax_class_display()
-        return {
-            "Part I col (a) line 2 — Produced by Fermentation": self.base_wg,
-            "Part I col (a) line 19 — Used for Addition of Wine Spirits": self.base_wg,
-            f"Part I {tc} line 4 — Produced by Addition of Wine Spirits": self.finished_wg,
-            "Part III — Wine spirits used (proof gallons)": self.proof_gallons_drawn,
-        }
+        fin = self.get_expected_tax_class_display()
+        base = self.get_base_tax_class_display()
+        lines = {}
+        if self.kind == self.Kind.INITIAL:
+            lines[f"Part I {base} line 2 — Produced by Fermentation"] = self.base_wg
+        lines[f"Part I {base} line 19 — Used for Addition of Wine Spirits"] = self.base_wg
+        lines[f"Part I {fin} line 4 — Produced by Addition of Wine Spirits"] = self.finished_wg
+        lines["Part III — Wine spirits used (proof gallons)"] = self.proof_gallons_drawn
+        loss = self.implied_loss
+        if loss:
+            lines[f"Part I {base} line 29 — Losses (other than inventory)"] = loss
+        return lines
 
     def yield_check(self):
         """Derived base wine vs. rough crush-yield estimate (tons × 165)."""
@@ -184,36 +235,12 @@ class FortificationEvent(AppendOnly):
 
 
 class BookToBond(AppendOnly):
-    """Straight-fermentation production booking (non-fortified lots).
-
-    This is the declaration that ends primary — the lot's status flips to
-    DONE_PRIMARY on it (see services/bonding.py), NOT on racking to barrel. Wine
-    that never sees oak (Verdelho: racked, booked, bottled out of tank) has to be
-    able to finish, and oak is not what finishes it.
-
-    `gauge_source` records HOW the produced figure was arrived at, which is a
-    compliance-relevant fact and not always obvious from the number alone: tanks
-    without a pressure sensor are gauged BY the barrel-down, so the sum of the
-    actual barrel fills is the booking volume.
-    """
-    class GaugeSource(models.TextChoices):
-        TANK_GAUGE = "tank_gauge", "Tank gauge (pressure sensor)"
-        BARREL_FILL = "barrel_fill", "Barrel fill (sum of actual fills)"
-        STATED = "stated", "Stated"
-
+    """Straight-fermentation production booking (non-fortified lots)."""
     lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="bond_bookings")
     booked_at = models.DateField()
     gallons_produced = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True,
                                            help_text="blank → the lot's booking-volume measurement")
-    tax_class = models.CharField(max_length=1, choices=TaxClass.choices, default=TaxClass.NOT_OVER_16,
-                                 help_text="col a (≤16%) at booking — INCLUDING Port base wine. "
-                                           "Fortification moves it to col b, not this row.")
-    gauge_source = models.CharField(max_length=12, choices=GaugeSource.choices,
-                                    default=GaugeSource.STATED,
-                                    help_text="how the produced volume was determined")
-    volume = models.ForeignKey(VolumeMeasurement, null=True, blank=True,
-                               on_delete=models.PROTECT, related_name="+",
-                               help_text="the authoritative gauge this booking was struck from")
+    tax_class = models.CharField(max_length=1, choices=TaxClass.choices, default=TaxClass.NOT_OVER_16)
 
     def save(self, *args, **kwargs):
         if self.gallons_produced in (None, ""):

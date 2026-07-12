@@ -33,12 +33,7 @@ from cellar.models.base import LotKind
 from cellar.services import generator
 from cellar.services import operations as ops
 
-# A parcel can only come off wine that has been DECLARED — i.e. booked to bond.
-#
-# This used to key on `status == DONE_PRIMARY`, which was only reachable by racking
-# to barrel. Gating on bond status is both more permissive (Verdelho, never oaked,
-# can now bottle) and stricter in the way that matters: you cannot bottle wine whose
-# production has never been booked, which is exactly the rule TTB cares about.
+# A parcel can only come off wine that's finished primary.
 SPLITTABLE = {Lot.Status.DONE_PRIMARY}
 
 
@@ -66,10 +61,7 @@ def parent_of(parcel):
 
 
 def can_split(lot):
-    from cellar.services import bonding
-    return (bonding.is_in_bond(lot)
-            and lot.status != Lot.Status.BOTTLED
-            and not is_parcel(lot))
+    return lot.status in SPLITTABLE and not is_parcel(lot)
 
 
 @transaction.atomic
@@ -140,7 +132,43 @@ def bottle_parcel(lot, *, sku, bottle_format, cases_produced, bottled_at=None,
 
     lot.status = Lot.Status.BOTTLED
     lot.save(update_fields=["status"])
+
+    _apply_removal_basis(run, actor=actor)
     return run
+
+
+# ======================================================================
+# Excise removal basis
+# ======================================================================
+REMOVAL_BASIS_KEY = "excise_removal_basis"
+
+
+def removal_basis():
+    """'bottling' — tax is paid when the wine is bottled; the whole run is removed
+    taxpaid on the bottling date and Section B never carries a balance. This is what
+    St. Amant does, and what every filed 2025 report reflects.
+
+    'shipment' — the run stays in bond as case goods and each C7 depletion books its
+    own TaxPaidRemoval. More accurate, defers the tax, and requires bonded case
+    storage plus an opening physical count.
+
+    At St. Amant's volume the whole year's excise is roughly $550 (first CBMA tier:
+    $1.07 − $1.00 = $0.07/gal on col (a); $1.57 − $1.00 = $0.57 on col (b)), so this
+    is a bookkeeping choice, not a cash one. Both paths are live; flip the constant.
+    """
+    from cellar.models import ConfigConstant
+    row = ConfigConstant.objects.filter(key=REMOVAL_BASIS_KEY).first()
+    return (row.value if row else "bottling").strip().lower()
+
+
+def _apply_removal_basis(run, actor=None):
+    """On the bottling basis, the run leaves bond the day it is bottled."""
+    if removal_basis() != "bottling":
+        return None
+    from cellar.models import TaxPaidRemoval
+    return TaxPaidRemoval.objects.create(
+        bottling_run=run, removed_at=run.bottled_at,
+        cases=run.cases_produced, channel=TaxPaidRemoval.Channel.OTHER)
 
 
 def runs_for(lot):

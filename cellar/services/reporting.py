@@ -63,14 +63,25 @@ def build_5120_17(year, month, opening_bulk=None, opening_bottled=None):
     # A2 produced by fermentation  (book-to-bond)
     for bb in in_period(BookToBond.objects, "booked_at"):
         A[2][bb.tax_class] += bb.gallons_produced or 0
-    # A4 produced by addition of spirits (finished, e.g. col b Port).
-    # A19 used for spirits = the base wine, which is UNDER 16% until fortified, so it is
-    # booked in col (a). (St. Amant's filed reports erroneously placed the base in col (b);
-    # because the base nets to zero in its column, their ENDING inventories stayed correct,
-    # but the correct classification is col (a) and that is what we book.)
+    # A4  produced by addition of spirits (the finished wine, e.g. col b Port)
+    # A19 used for addition of spirits (the base)
+    # A2  produced by fermentation — INITIAL fortifications only
+    #
+    # An INITIAL fortification is the production booking for a Port lot: the base
+    # wine has just fermented, is under 16%, and has never been booked to bond, so it
+    # is produced into col (a) line 2 and used out of col (a) line 19 in the same
+    # period. It self-zeroes, which is why St. Amant's filed reports — which put the
+    # base in col (b) — still balanced. Col (a) is the correct classification.
+    #
+    # An ADJUSTMENT (spring racking) produces nothing: the base is already in bond and
+    # already in a class. Line 19 lands in the base's OWN class and line 2 stays empty.
+    # Reporting it as fermentation would invent production that never happened.
     for fe in in_period(FortificationEvent.objects, "booked_at"):
+        base_col = getattr(fe, "base_tax_class", "a") or "a"
         A[4][fe.expected_tax_class] += fe.finished_wg or 0
-        A[19]["a"] += fe.base_wg or 0
+        A[19][base_col] += fe.base_wg or 0
+        if getattr(fe, "kind", "initial") == "initial":
+            A[2][base_col] += fe.base_wg or 0
     # A3 produced by sweetening / A18 used for sweetening
     for sw in in_period(SweeteningEvent.objects, "sweetened_at"):
         A[3][sw.tax_class] += sw.volume_produced
@@ -97,9 +108,12 @@ def build_5120_17(year, month, opening_bulk=None, opening_bottled=None):
     from cellar.models import BulkTaxPaidRemoval
     for r in in_period(BulkTaxPaidRemoval.objects, "removed_at"):
         A[14][r.tax_class] += r.wine_gallons
-    # A30 bulk losses (evaporation etc.)
+    # A29 LOSSES (OTHER THAN INVENTORY) — evaporation, topping, racking, angel's share.
+    # NOT line 30: that is INVENTORY LOSSES, i.e. a shortage found when you take a
+    # physical inventory. A known, dated, measured loss is a line 29 loss. (Line 30 is
+    # reached through BondAdjustment(kind=inventory_loss), below.)
     for vl in in_period(VolumeLoss.objects, "occurred_at"):
-        A[30][lot_tax_class(vl.lot)] += vl.volume_gal
+        A[29][lot_tax_class(vl.lot)] += vl.volume_gal
     # misc adjustments
     adj_map_A = {"inventory_loss": 30, "inventory_gain": 9, "dump_to_bulk": 8, "testing": 23}
     adj_map_B = {"tasting": 11, "family_use": 13, "taxpaid_return": 4, "breakage": 18,
