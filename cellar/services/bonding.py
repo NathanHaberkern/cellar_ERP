@@ -202,4 +202,4 @@ def book_to_bond(lot, *, gallons_produced, gauge_source=GaugeSource.STATED,
 
 def booking_for(lot):
     return (lot.bond_bookings.filter(voided_at__isnull=True)
-            .select_related("volume").order_by("-booked_at").first())
+            .order_by("-booked_at").first())
