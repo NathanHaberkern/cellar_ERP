@@ -46,6 +46,89 @@ def brix_per_day():
         return DEFAULT_BRIX_PER_DAY
 
 
+DEFAULT_PRESS_READY_BRIX = 0.0     # dryness target used to estimate a press date
+DEFAULT_SETTLING_DAYS = 2          # gap between press and barrel-down, before a
+                                    # real PressingEvent/settling reading exists
+
+
+def _config_float(key, default):
+    row = ConfigConstant.objects.filter(key=key).first()
+    try:
+        return float(row.value) if row else default
+    except (TypeError, ValueError):
+        return default
+
+
+def estimate_press_and_barrel_dates(lot, asof=None):
+    """Rough estimated press and barrel-down dates from the live Brix trend.
+
+    Unlike `_estimate_due` (which projects forward from the INITIAL brix at
+    inoculation, for scheduling nutrient additions), this projects forward
+    from the MOST RECENT actual reading — so the estimate tightens as real
+    readings come in, rather than staying pinned to day-one assumptions.
+
+    Needs at least two Brix readings to compute a rate; with only one (or
+    none), returns an estimate of None rather than guessing off a single
+    point or the global default rate, which would be more misleading than
+    useful this early in the ferment.
+
+    Returns {'press_date': date|None, 'barrel_down_date': date|None,
+             'basis': str} — `basis` explains what the estimate is built on
+    (or why there isn't one yet), meant to be shown next to the number so it
+    always reads as an estimate, never a commitment.
+    """
+    asof = asof or timezone.localdate()
+    readings = list(Reading.objects.filter(
+        lot=lot, analyte=Reading.Analyte.BRIX, voided_at__isnull=True
+    ).order_by("measured_at"))
+
+    if len(readings) < 2:
+        basis = "need at least two Brix readings to project a trend"
+        return {"press_date": None, "barrel_down_date": None, "basis": basis}
+
+    latest = readings[-1]
+    prior = readings[-2]
+    latest_date = timezone.localtime(latest.measured_at).date() if hasattr(latest.measured_at, "date") else latest.measured_at
+    prior_date = timezone.localtime(prior.measured_at).date() if hasattr(prior.measured_at, "date") else prior.measured_at
+    span_days = (latest_date - prior_date).days
+    observed_drop = float(prior.value) - float(latest.value)
+
+    if span_days <= 0 or observed_drop <= 0:
+        # Flat or rising reading (e.g. a re-check same day, or a stuck/rising
+        # ferment) — fall back to the configured average rather than divide
+        # by zero or project backwards.
+        rate = brix_per_day()
+        basis = f"flat/rising trend — using the {rate:g} °Brix/day default rate"
+    else:
+        rate = observed_drop / span_days
+        basis = f"{rate:.2f} °Brix/day, from the last two readings ({prior_date} → {latest_date})"
+
+    target = _config_float("press_ready_brix", DEFAULT_PRESS_READY_BRIX)
+    remaining = float(latest.value) - target
+    if remaining <= 0:
+        press_date = latest_date  # already at/below target
+    else:
+        days_out = math.ceil(remaining / rate) if rate > 0 else None
+        press_date = latest_date + timedelta(days=days_out) if days_out is not None else None
+
+    settling_days = int(_config_float("settling_days_before_barrel", DEFAULT_SETTLING_DAYS))
+    barrel_date = (press_date + timedelta(days=settling_days)) if press_date else None
+
+    return {"press_date": press_date, "barrel_down_date": barrel_date, "basis": basis}
+
+
+def brix_series(lot):
+    """Chronological (date, float) Brix readings — the sparkline's data."""
+    rows = (Reading.objects.filter(lot=lot, analyte=Reading.Analyte.BRIX,
+                                   voided_at__isnull=True)
+            .order_by("measured_at"))
+    out = []
+    for r in rows:
+        d = timezone.localtime(r.measured_at).date() if hasattr(r.measured_at, "date") else r.measured_at
+        out.append((d, float(r.value)))
+    return out
+
+
 # ----------------------------------------------------------- juice metrics
 def juice_metrics(lot):
     """(brix, yan, source) from the most recent full juice panel; falls back to

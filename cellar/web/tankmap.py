@@ -89,6 +89,7 @@ def _vessel_cell(vessel, shape, lot):
         "col": vessel.map_col,
         "occupied": occupied,
         "lot_code": (lot.code if occupied else ""),
+        "lot_pk": (lot.pk if occupied else None),
         "status": status,
         "status_label": (lot.get_status_display() if occupied else "Empty"),
         # css hook: cold / ferment / pressed for the big three, else 'other',

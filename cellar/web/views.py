@@ -183,6 +183,15 @@ def lot_detail(request, pk):
         "more": max(0, len(open_qs) - 3),
     }
 
+    # Sugar-depletion sparkline + press/barrel-down estimate — only meaningful
+    # while the lot is still pre-bond; same window as show_ferment above.
+    progress, progress_err = (_safe(lotpages.ferment_progress, lot) if show_ferment
+                               else (None, None))
+
+    # Merged timeline (additions + readings + movements) — the "what has
+    # actually happened here" glance for the summary card.
+    timeline_rows, timeline_err = _safe(lotpages.timeline, lot)
+
     return render(request, "web/lot_detail.html", {
         "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
         "overview_note": lotpages.section_note(lot, "overview"),
@@ -190,6 +199,8 @@ def lot_detail(request, pk):
         "show_bottling": show_bottling, "show_fortification": show_fortification,
         "task_summary": task_summary,
         "bond_card": bond_card,
+        "progress": progress, "progress_error": progress_err,
+        "timeline": timeline_rows or [], "timeline_error": timeline_err,
     })
 
 

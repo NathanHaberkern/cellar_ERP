@@ -132,6 +132,85 @@ def summary(lot):
     }
 
 
+# ----------------------------------------------------- fermentation progress
+_SPARK_W, _SPARK_H, _SPARK_PAD = 260, 56, 6
+
+
+def _sparkline_points(series):
+    """[(date, value), ...] -> SVG polyline 'points' string, normalized into a
+    fixed-size box. Returns None for <2 points (nothing to draw a line between).
+    Computed here rather than in the template — Django templates can't do the
+    min/max scaling arithmetic this needs.
+    """
+    if len(series) < 2:
+        return None
+    values = [v for _, v in series]
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    n = len(series)
+    xs = [_SPARK_PAD + i * (_SPARK_W - 2 * _SPARK_PAD) / (n - 1) for i in range(n)]
+    ys = [_SPARK_PAD + (1 - (v - lo) / span) * (_SPARK_H - 2 * _SPARK_PAD) for v in values]
+    return " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys))
+
+
+def ferment_progress(lot):
+    """Sugar-depletion sparkline + estimated press/barrel-down dates for the
+    lot summary card. Only meaningful pre-bond (see is_in_bond) — the caller
+    gates display on that, same as the existing 'Ferment (latest)' card.
+    """
+    from cellar.services import fermentation as ferm_svc
+    series = ferm_svc.brix_series(lot)
+    estimate = ferm_svc.estimate_press_and_barrel_dates(lot)
+    return {
+        "brix_series": series,
+        "spark_points": _sparkline_points(series),
+        "spark_w": _SPARK_W, "spark_h": _SPARK_H,
+        "latest_brix": series[-1][1] if series else None,
+        "estimate": estimate,
+    }
+
+
+# ------------------------------------------------------------------ timeline
+def timeline(lot, limit=25):
+    """Merged, read-only event history for the lot summary card: additions,
+    Brix/temp readings, and movements in one chronological list. Each source
+    already has its own full tab (Additions / Movement / etc.) — this exists
+    so the first thing you see after clicking a tank is 'what has actually
+    happened here', without clicking into each tab separately.
+
+    Capped at `limit` (most recent first) — this is a glance, not the ledger;
+    the individual tabs remain the source of the complete, uncapped history.
+    """
+    rows = []
+
+    for a in additions(lot):
+        rows.append({
+            "date": _d(a["date"]), "kind": "Addition",
+            "label": a["addition"],
+            "detail": (a["qty"] or "") + (f" · target {a['rate']}" if a["rate"] else ""),
+        })
+
+    for r in (Reading.objects.filter(lot=lot, voided_at__isnull=True)
+              .order_by("-measured_at")[:200]):
+        unit = "°Brix" if r.analyte == Reading.Analyte.BRIX else "°F"
+        rows.append({
+            "date": _d(r.measured_at), "kind": "Reading",
+            "label": f"{r.value} {unit}",
+            "detail": r.get_analyte_display(),
+        })
+
+    for m in movements(lot):
+        rows.append({
+            "date": m["date"], "kind": m["type"],
+            "label": f"{m['start']} → {m['end']}",
+            "detail": (f"{m['gallons']} gal" if m["gallons"] is not None else "") +
+                      (f" · {m['note']}" if m["note"] else ""),
+        })
+
+    rows.sort(key=lambda r: (r["date"] is None, r["date"]), reverse=True)
+    return rows[:limit]
+
+
 # ----------------------------------------------------------------- additions
 def additions(lot):
     rows = []
