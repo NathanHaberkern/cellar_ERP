@@ -279,7 +279,7 @@ def render_oak_panel(request, lot, error=None):
     and by the barrel-down/topping/rack-out POSTs, which swap this panel back in."""
     from cellar.services import barreling as bar
     from cellar.services import bonding as bond
-    from cellar.models import TankAssignment
+    from cellar.models import Container, TankAssignment
     from . import topping as top_web
     from . import vessels as vessels_web
 
@@ -290,8 +290,11 @@ def render_oak_panel(request, lot, error=None):
         "lot": lot, "section": "oak",
         "note": lotpages.section_note(lot, "oak"),
         "oak": data or {}, "error": error or err,
-        # barrel-down form
-        "barrels": bar.empty_oak_containers(),
+        # barrel-down form: the picker searches/scans (see oak_barrel_search) rather
+        # than rendering every empty barrel — at 1000+ barrels that list is unusable.
+        # These are just the filter dropdown options, which are small and cheap.
+        "barrel_types": [(Container.Type.BARREL, "Barrel"), (Container.Type.FOUDRE, "Foudre")],
+        "barrel_formats": bar.empty_oak_formats(),
         "can_rack": lot.status not in (Lot.Status.PLANNED, Lot.Status.BOTTLED),
         "still_in_tank": in_tank,
         "barrel_total": bond.barrel_fill_total(lot),

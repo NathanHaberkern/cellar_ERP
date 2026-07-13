@@ -33,31 +33,56 @@
 <h4 class="sub">Rack to barrel</h4>
 <div class="card">
   <p class="muted" style="margin:0 0 10px">
-    Enter the gallons that <b>actually</b> went into each barrel — prefilled with its
-    capacity, edit down for a partial. On tanks without a pressure sensor this sum
-    <b>is</b> the gauge: rack the lot down, then book to bond off the barrel fill.
-    {% if barrel_total %}<br>Already down: <b>{{ barrel_total|floatformat:1 }} gal</b>.{% endif %}
+    Search or scan the barrels you're filling — the cellar's full barrel count never
+    renders at once. Gallons prefill to capacity; edit down for a partial. On tanks
+    without a pressure sensor this sum <b>is</b> the gauge: rack the lot down, then
+    book to bond off the barrel fill.
+    {% if barrel_total %}<br>Already down this lot: <b>{{ barrel_total|floatformat:1 }} gal</b>.{% endif %}
   </p>
 
-  <form hx-post="{% url 'lot-rack-to-barrel' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
-    <label>Empty barrels</label>
-    <div class="barrel-fills" style="margin:6px 0">
-      {% for b in barrels %}
-        <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
-          <label class="inline" style="min-width:150px;margin:0">
-            <input type="checkbox" name="containers" value="{{ b.pk }}"
-                   onchange="document.getElementById('fill-{{ b.pk }}').disabled = !this.checked; window.__oakSum && window.__oakSum();">
-            {{ b.container_id }}
-            <span class="muted">{{ b.format|default:b.get_type_display }}</span>
-          </label>
-          <input type="number" step="0.1" id="fill-{{ b.pk }}" name="fill_{{ b.pk }}"
-                 class="fill-input" value="{{ b.capacity_gal|floatformat:1 }}" disabled
-                 style="max-width:100px" oninput="window.__oakSum && window.__oakSum();">
-          <span class="muted">gal</span>
-        </div>
-      {% empty %}
-        <span class="muted">No empty barrels — add containers first.</span>
-      {% endfor %}
+  <div class="row" style="gap:10px;align-items:flex-end;margin-bottom:4px">
+    <div style="flex:1 1 200px">
+      <label for="barrel-scan">Scan barrel</label>
+      <input type="text" id="barrel-scan" name="q" autocomplete="off"
+             placeholder="scan or type exact ID, Enter"
+             hx-get="{% url 'oak-barrel-search' lot.pk %}" hx-target="#barrel-scan-result"
+             hx-trigger="keyup[key=='Enter']" hx-include="this">
+    </div>
+  </div>
+  <div id="barrel-scan-result" style="display:none" hx-on::after-swap="__oakAutoAdd(this)"></div>
+
+  <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
+    <div style="flex:2 1 200px">
+      <label for="barrel-q">Search by ID / format</label>
+      <input type="text" id="barrel-q" name="q" autocomplete="off" placeholder="partial ID, e.g. 24F-"
+             hx-get="{% url 'oak-barrel-search' lot.pk %}" hx-target="#barrel-search-results"
+             hx-trigger="input changed delay:250ms" hx-include="#barrel-type,#barrel-fmt">
+    </div>
+    <div style="flex:0 1 140px">
+      <label for="barrel-type">Type</label>
+      <select id="barrel-type" name="type"
+              hx-get="{% url 'oak-barrel-search' lot.pk %}" hx-target="#barrel-search-results"
+              hx-trigger="change" hx-include="#barrel-q,#barrel-fmt">
+        <option value="">Any</option>
+        {% for val, lbl in barrel_types %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="flex:0 1 160px">
+      <label for="barrel-fmt">Format</label>
+      <select id="barrel-fmt" name="fmt"
+              hx-get="{% url 'oak-barrel-search' lot.pk %}" hx-target="#barrel-search-results"
+              hx-trigger="change" hx-include="#barrel-q,#barrel-type">
+        <option value="">Any</option>
+        {% for f in barrel_formats %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div id="barrel-search-results" style="margin:6px 0 12px"></div>
+
+  <form id="rack-form" hx-post="{% url 'lot-rack-to-barrel' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <label>Selected barrels</label>
+    <div class="barrel-fills" id="barrel-fills" style="margin:6px 0">
+      <span class="muted" id="barrel-fills-empty">None yet — search or scan above to add.</span>
     </div>
 
     <p class="muted" style="margin:6px 0 10px">
@@ -96,12 +121,63 @@
 <script>
   window.__oakSum = function () {
     var t = 0;
-    document.querySelectorAll('.barrel-fills .fill-input').forEach(function (i) {
-      if (!i.disabled && i.value) t += parseFloat(i.value) || 0;
+    document.querySelectorAll('#barrel-fills .fill-input').forEach(function (i) {
+      if (i.value) t += parseFloat(i.value) || 0;
     });
     var el = document.getElementById('oak-session-total');
     if (el) el.textContent = t.toFixed(1);
   };
+
+  // Adds one barrel row to the selected list. Guards against double-adding the
+  // same barrel (scan twice, or it appears in both a search result and a scan).
+  window.addBarrelFill = function (pk, label, capacity) {
+    if (document.getElementById('bf-' + pk)) return;
+    var empty = document.getElementById('barrel-fills-empty');
+    if (empty) empty.remove();
+    var wrap = document.createElement('div');
+    wrap.id = 'bf-' + pk;
+    wrap.className = 'row';
+    wrap.style.cssText = 'gap:8px;align-items:center;margin-bottom:4px';
+    var cap = (parseFloat(capacity) || 0).toFixed(1);
+    wrap.innerHTML =
+        '<input type="hidden" name="containers" value="' + pk + '">'
+      + '<span class="lot-code" style="min-width:110px;font-size:12px">' + label + '</span>'
+      + '<input type="number" step="0.1" name="fill_' + pk + '" value="' + cap + '" '
+      +   'class="fill-input" style="max-width:100px" oninput="window.__oakSum();">'
+      + '<span class="muted">gal</span>'
+      + '<button type="button" class="btn ghost sm" '
+      +   'onclick="document.getElementById(\'bf-' + pk + '\').remove(); window.__oakSum(); window.__oakFillsEmptyCheck();">&times;</button>';
+    document.getElementById('barrel-fills').appendChild(wrap);
+    window.__oakSum();
+  };
+
+  window.__oakFillsEmptyCheck = function () {
+    var fills = document.getElementById('barrel-fills');
+    if (fills && !fills.querySelector('.row')) {
+      fills.innerHTML = '<span class="muted" id="barrel-fills-empty">None yet — search or scan above to add.</span>';
+    }
+  };
+
+  // Bulk-add every barrel currently shown in the search results panel.
+  window.addAllBarrelResults = function () {
+    document.querySelectorAll('#barrel-search-results .barrel-search-row').forEach(function (r) {
+      addBarrelFill(r.dataset.pk, r.dataset.label, r.dataset.capacity);
+    });
+  };
+
+  // Fired after the scan box's Enter-triggered swap lands in #barrel-scan-result.
+  // If the server found an exact ID/barcode match, add it immediately — no click,
+  // matching the existing scan-to-move flow's one-step feel — then clear + refocus
+  // the scan box so the next barrel can be scanned right away.
+  window.__oakAutoAdd = function (el) {
+    var hit = el.querySelector('[data-autoadd]');
+    if (hit) {
+      addBarrelFill(hit.dataset.pk, hit.dataset.label, hit.dataset.capacity);
+      var scan = document.getElementById('barrel-scan');
+      if (scan) { scan.value = ''; scan.focus(); }
+    }
+  };
+
   window.__oakSum();
 </script>
 {% endif %}
@@ -116,8 +192,11 @@
     contribution the 5-gallon flag watches for.
   </p>
   <form hx-post="{% url 'lot-top-barrels' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
-    <label>Barrels to top</label>
-    <div class="barrel-fills" style="margin:6px 0">
+    <label class="inline" style="margin-bottom:6px">
+      <input type="checkbox" onchange="document.querySelectorAll('#top-barrel-list input[type=checkbox]').forEach(function(cb){cb.checked=this.checked;cb.dispatchEvent(new Event('change'));}, this)">
+      Select all — every listed barrel already defaults to fill-to-full, so this is usually the whole job
+    </label>
+    <div class="barrel-fills" id="top-barrel-list" style="margin:6px 0">
       {% for b in oak.barrels %}
         <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
           <label class="inline" style="min-width:150px;margin:0">
@@ -127,8 +206,9 @@
             <span class="muted">{{ b.current_gal }} gal now{% if b.is_flagged %} · <span class="badge danger">flagged</span>{% endif %}</span>
           </label>
           <input type="number" step="0.1" id="top-gal-{{ b.placement_pk }}" name="gal_{{ b.placement_pk }}"
+                 value="{{ b.ullage_gal|default_if_none:'' }}"
                  placeholder="even split" disabled style="max-width:110px">
-          <span class="muted">gal (blank → even split of total)</span>
+          <span class="muted">gal {% if b.ullage_gal %}(fill to full — edit if different){% else %}(blank → even split of total){% endif %}</span>
         </div>
       {% endfor %}
     </div>
@@ -163,8 +243,11 @@
     books — the difference is booked as a real loss (or backed out if over-accrued).
   </p>
   <form hx-post="{% url 'lot-rack-out' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
-    <label>Barrels to rack out</label>
-    <div class="barrel-fills" style="margin:6px 0">
+    <label class="inline" style="margin-bottom:6px">
+      <input type="checkbox" onchange="document.querySelectorAll('#rackout-barrel-list input[type=checkbox]').forEach(function(cb){cb.checked=this.checked;})">
+      Select all
+    </label>
+    <div class="barrel-fills" id="rackout-barrel-list" style="margin:6px 0">
       {% for b in oak.barrels %}
         <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
           <label class="inline" style="margin:0">

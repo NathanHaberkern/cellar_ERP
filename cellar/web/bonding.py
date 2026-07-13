@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
-from cellar.models import Lot, TaxClass
+from cellar.models import Container, Lot, TaxClass
 from cellar.services import barreling as bar
 from cellar.services import bonding as bond
 
@@ -66,6 +66,28 @@ def lot_book_to_bond(request, pk):
 
 
 # ------------------------------------------------------------------- barreling
+@login_required
+def oak_barrel_search(request, pk):
+    """HTMX GET — filtered/scanned empty-barrel lookup for the barrel-down picker.
+
+    Deliberately never returns an unbounded list (see
+    `barreling.search_empty_oak_containers`): the front end always sends at
+    least a text query, type, or format filter. If `q` is an exact ID/barcode
+    match (the scanner-wedge case — type or scan a code, hit Enter), we signal
+    that back so the client can auto-add without a click, matching the
+    scan-to-move flow's existing "resolve then act in one step" feel.
+    """
+    lot = get_object_or_404(Lot, pk=pk)
+    q = request.GET.get("q") or ""
+    ctype = request.GET.get("type") or ""
+    fmt = request.GET.get("fmt") or ""
+    result = bar.search_empty_oak_containers(q=q, type=ctype, fmt=fmt)
+    exact = bar.find_empty_oak_container(q) if q else None
+    return render(request, "web/_barrel_search_results.html", {
+        "lot": lot, "q": q, "result": result, "exact": exact,
+    })
+
+
 @login_required
 @require_http_methods(["POST"])
 def lot_rack_to_barrel(request, pk):

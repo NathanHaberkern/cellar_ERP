@@ -1,0 +1,36 @@
+{# Barrel-down picker results. Rendered into TWO different targets by the same
+   view (cellar.web.bonding.oak_barrel_search):
+     - #barrel-scan-result (hidden) — the scan/Enter box uses this purely for the
+       data-autoadd marker below; JS reads it and adds the barrel with no click.
+     - #barrel-search-results (visible) — the live-search/filter box uses this
+       for a real pick-from-results list, capped at barreling.SEARCH_LIMIT so it
+       is always one glance, never a scroll through hundreds of barrels. #}
+{% if exact %}
+<div data-autoadd="1" data-pk="{{ exact.pk }}" data-label="{{ exact.container_id }}"
+     data-capacity="{{ exact.capacity_gal|default:0 }}"></div>
+{% endif %}
+{% if result.rows %}
+  <div class="barrel-fills">
+    {% for c in result.rows %}
+      <div class="row barrel-search-row" data-pk="{{ c.pk }}" data-label="{{ c.container_id }}"
+           data-capacity="{{ c.capacity_gal|default:0 }}"
+           style="gap:8px;align-items:center;margin-bottom:4px">
+        <span class="lot-code" style="min-width:110px;font-size:12px">{{ c.container_id }}</span>
+        <span class="muted">{{ c.format|default:c.get_type_display }}{% if c.capacity_gal %} · {{ c.capacity_gal|floatformat:0 }} gal{% endif %}</span>
+        <button type="button" class="btn ghost sm"
+                onclick="addBarrelFill('{{ c.pk }}','{{ c.container_id|escapejs }}',{{ c.capacity_gal|default:0 }})">+ Add</button>
+      </div>
+    {% endfor %}
+  </div>
+  <p class="muted" style="margin:4px 0 0;font-size:12px">
+    {% if result.truncated %}
+      {{ result.total }} match{{ result.total|pluralize:"es" }} — showing the first {{ result.rows|length }}. Narrow your search to see the rest.
+    {% endif %}
+    {% if result.rows|length > 1 %}
+      <button type="button" class="btn ghost sm" onclick="addAllBarrelResults()" style="margin-left:4px">
+        + Add all shown ({{ result.rows|length }})</button>
+    {% endif %}
+  </p>
+{% elif q or result.total == 0 %}
+  <p class="muted" style="font-size:12px;margin:4px 0 0">No empty barrels match — check the ID or widen the filter.</p>
+{% endif %}

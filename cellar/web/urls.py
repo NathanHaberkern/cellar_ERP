@@ -65,6 +65,7 @@ urlpatterns = [
     path("lots/<int:pk>/bond/", bond.lot_bond_card, name="lot-bond-card"),
     path("lots/<int:pk>/bond/book/", bond.lot_book_to_bond, name="lot-book-to-bond"),
     path("lots/<int:pk>/oak/rack/", bond.lot_rack_to_barrel, name="lot-rack-to-barrel"),
+    path("lots/<int:pk>/oak/barrel-search/", bond.oak_barrel_search, name="oak-barrel-search"),  # HTMX
     path("lots/<int:pk>/oak/top/", top.lot_top_barrels, name="lot-top-barrels"),
     path("lots/<int:pk>/oak/rack-out/", top.lot_rack_out, name="lot-rack-out"),
 

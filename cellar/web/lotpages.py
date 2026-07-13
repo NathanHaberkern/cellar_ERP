@@ -332,6 +332,8 @@ def oak(lot):
             continue
         cur_vol = float(vol_svc.placement_volume(p))
         total_gal += cur_vol
+        capacity = float(c.capacity_gal) if c.capacity_gal else None
+        ullage = round(capacity - cur_vol, 1) if capacity is not None else None
         barrels.append({
             "placement_pk": p.pk,
             "container_id": c.container_id,
@@ -339,6 +341,10 @@ def oak(lot):
             "tier": p.get_oak_tier_display(),
             "location": (c.effective_location().code if c.effective_location() else "—"),
             "current_gal": round(cur_vol, 1),
+            "capacity_gal": capacity,
+            # ullage = gap to full; used to default a routine topping amount so the
+            # operator isn't stuck typing a number for every barrel — see _lot_oak.html
+            "ullage_gal": ullage if (ullage is not None and ullage > 0) else None,
             "is_flagged": p.is_flagged,
         })
 
