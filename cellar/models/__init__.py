@@ -28,7 +28,7 @@ from .bottling import (
 from .reporting import (
     Phase, BondTransfer, Material, MaterialTransaction, SweeteningEvent, BondAdjustment, BulkTaxPaidRemoval,
 )
-from .tasks import Task, TaskEvent, TaskRule
+from .tasks import Task, TaskEvent, TaskRule, DailyPlan
 
 __all__ = [
     "Program", "LotKind", "SourceType", "AppendOnly",

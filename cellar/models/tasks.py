@@ -110,3 +110,32 @@ class TaskEvent(AppendOnly):
 
     def __str__(self):
         return f"task {self.task_id} {self.kind} {self.created_at:%Y-%m-%d}"
+
+
+class DailyPlan(models.Model):
+    """One editable plan per date — press schedule, fruit processing, barrel-down,
+    barrel prep. Auto-drafted from live data the first time a date is opened
+    (see services.daily_plan.draft_items), then edited freely: checking items
+    off, adding your own, removing suggestions that don't apply. A later
+    'Add suggestions' pass only APPENDS items whose auto_key isn't already
+    present — it never overwrites or re-adds something you already dealt with.
+
+    Deliberately a single JSON blob rather than a relational item table: a
+    day's plan is edited as a whole, read as a whole, and never queried by
+    item across dates — a normalized schema would add join overhead for no
+    real benefit here. `items` is a list of:
+      {id, category, label, detail, lot_id, done, source, auto_key}
+    category in {'press', 'barrel_down', 'barrel_prep', 'fruit', 'other'};
+    source in {'auto', 'manual'}; auto_key is the dedupe key for auto items
+    (None for manual ones, which are never deduped against a regeneration).
+    """
+    date = models.DateField(unique=True)
+    items = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date",)
+
+    def __str__(self):
+        return f"Daily plan {self.date}"

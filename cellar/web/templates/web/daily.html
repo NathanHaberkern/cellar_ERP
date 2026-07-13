@@ -1,0 +1,25 @@
+{% extends "web/base.html" %}
+{% block title %}Daily{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Crush &amp; cellar</p>
+    <h1>Daily</h1>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost sm" href="?date={{ prev_date }}">&larr; {{ prev_date }}</a>
+    {% if not is_today %}<a class="btn ghost sm" href="{% url 'daily' %}">Today</a>{% endif %}
+    <a class="btn ghost sm" href="?date={{ next_date }}">{{ next_date }} &rarr;</a>
+  </div>
+</div>
+
+<div class="cards" style="grid-template-columns:1fr;gap:20px">
+  <section class="card" id="daily-checklist">
+    {% include "web/_daily_checklist.html" %}
+  </section>
+
+  <section class="card" id="daily-plan">
+    {% include "web/_daily_plan.html" %}
+  </section>
+</div>
+{% endblock %}

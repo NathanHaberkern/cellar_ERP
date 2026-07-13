@@ -1,0 +1,41 @@
+{% load web_extras %}
+<h2 style="margin:0 0 4px">Checklist — {{ today|date:"D, M j" }}</h2>
+<p class="muted" style="margin:0 0 12px">Cap management and Brix/temp for every lot in fermentation or cold soak.</p>
+
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+{% if checklist %}
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Lot</th><th>Latest Brix</th><th>Brix today</th><th>Temp today</th><th>Cap mgmt today</th><th>Quick log</th>
+    </tr></thead>
+    <tbody>
+      {% for r in checklist %}
+      <tr>
+        <td><a href="{% url 'lot-detail' r.lot.pk %}" class="lot-code">{{ r.lot.code }}</a></td>
+        <td>{% if r.latest_brix is not None %}{{ r.latest_brix }} °Brix{% else %}—{% endif %}</td>
+        <td>{% if r.brix_done %}<span class="badge ok">logged</span>{% else %}<span class="badge danger">missing</span>{% endif %}</td>
+        <td>{% if r.temp_done %}<span class="badge ok">logged</span>{% else %}<span class="badge danger">missing</span>{% endif %}</td>
+        <td>{% if r.cap_done %}<span class="badge ok">done</span>{% else %}<span class="badge danger">not yet</span>{% endif %}</td>
+        <td>
+          <form hx-post="{% url 'daily-quick-log' r.lot.pk %}?date={{ today|date:'Y-m-d' }}"
+                hx-target="#daily-checklist" hx-swap="innerHTML" class="row" style="gap:6px;flex-wrap:nowrap">
+            <input type="number" step="0.1" name="brix" placeholder="Brix" style="max-width:80px" {% if r.brix_done %}disabled{% endif %}>
+            <input type="number" step="0.1" name="temp" placeholder="°F" style="max-width:80px" {% if r.temp_done %}disabled{% endif %}>
+            <select name="cap" style="max-width:120px" {% if r.cap_done %}disabled{% endif %}>
+              <option value="">— cap —</option>
+              <option value="pumpover">Pump-over</option>
+              <option value="punchdown">Punch-down</option>
+            </select>
+            <button class="btn ghost sm" type="submit">Log</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="empty">Nothing fermenting or in cold soak right now.</div>
+{% endif %}

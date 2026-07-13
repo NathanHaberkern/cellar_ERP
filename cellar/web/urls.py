@@ -20,6 +20,7 @@ from . import fortification as fort
 from . import topping as top
 from . import blend as blend_web
 from . import reference as ref
+from . import daily as daily_web
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -29,6 +30,14 @@ urlpatterns = [
 
     # app
     path("", views.dashboard, name="dashboard"),
+
+    # daily checklist + plan
+    path("daily/", daily_web.daily_index, name="daily"),
+    path("daily/quick-log/<int:lot_pk>/", daily_web.daily_quick_log, name="daily-quick-log"),  # HTMX
+    path("daily/<int:plan_pk>/toggle/<str:item_id>/", daily_web.daily_item_toggle, name="daily-item-toggle"),  # HTMX
+    path("daily/<int:plan_pk>/add/", daily_web.daily_item_add, name="daily-item-add"),  # HTMX
+    path("daily/<int:plan_pk>/remove/<str:item_id>/", daily_web.daily_item_remove, name="daily-item-remove"),  # HTMX
+    path("daily/<int:plan_pk>/regenerate/", daily_web.daily_regenerate, name="daily-regenerate"),  # HTMX
 
     # guided receiving-fruit intake
     path("intake/", intake.intake_index, name="intake"),

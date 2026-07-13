@@ -1,0 +1,53 @@
+<div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:4px">
+  <h2 style="margin:0">Plan — {{ plan.date|date:"D, M j" }}</h2>
+  <button class="btn ghost sm" type="button"
+          hx-post="{% url 'daily-regenerate' plan.pk %}" hx-target="#daily-plan" hx-swap="innerHTML">
+    Add fresh suggestions</button>
+</div>
+{% if added is not None %}
+  <p class="msg ok" style="margin:0 0 10px">{{ added }} new suggestion{{ added|pluralize }} added.</p>
+{% endif %}
+<p class="muted" style="margin:0 0 14px">Auto-drafted from press/barrel-down estimates and fruit on hand — check items off, add your own, or remove anything that doesn't apply. Nothing here is recomputed out from under you.</p>
+
+{% for g in groups %}
+  <h4 class="sub">{{ g.label }}</h4>
+  {% if g.items %}
+    <div class="table-wrap" style="margin-bottom:10px">
+      <table><tbody>
+        {% for i in g.items %}
+        <tr class="{% if i.done %}voided-row{% endif %}">
+          <td style="width:1%">
+            <form hx-post="{% url 'daily-item-toggle' plan.pk i.id %}" hx-target="#daily-plan" hx-swap="innerHTML">
+              <label class="inline"><input type="checkbox" onchange="this.form.requestSubmit()" {% if i.done %}checked{% endif %}></label>
+            </form>
+          </td>
+          <td>
+            {% if i.lot_id %}<a href="{% url 'lot-detail' i.lot_id %}" class="lot-code" style="font-size:12px">{{ i.lot_code }}</a>{% endif %}
+            {{ i.label }}
+            {% if i.detail %}<span class="muted">· {{ i.detail }}</span>{% endif %}
+            {% if i.source == "manual" %}<span class="badge" style="margin-left:6px">manual</span>{% endif %}
+          </td>
+          <td class="actions">
+            <form hx-post="{% url 'daily-item-remove' plan.pk i.id %}" hx-target="#daily-plan" hx-swap="innerHTML">
+              <button class="btn ghost sm" type="submit" title="remove">&times;</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </div>
+  {% else %}
+    <div class="empty" style="padding:10px 0;margin-bottom:10px">Nothing here.</div>
+  {% endif %}
+  <details class="add-form" style="margin-bottom:16px">
+    <summary>+ Add to {{ g.label|lower }}</summary>
+    <form hx-post="{% url 'daily-item-add' plan.pk %}" hx-target="#daily-plan" hx-swap="innerHTML">
+      <input type="hidden" name="category" value="{{ g.key }}">
+      <div class="form-grid">
+        <div><label>Item</label><input type="text" name="label" placeholder="what needs doing" required></div>
+        <div><label>Detail <span class="muted">(optional)</span></label><input type="text" name="detail"></div>
+      </div>
+      <div class="note-actions"><button class="btn sm" type="submit">Add</button></div>
+    </form>
+  </details>
+{% endfor %}
