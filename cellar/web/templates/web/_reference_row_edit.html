@@ -1,0 +1,22 @@
+{% if form_errors %}
+  <tr><td colspan="20"><div class="msg err">
+    {% for field, errs in form_errors.items %}{{ field }}: {{ errs|join:", " }} {% endfor %}
+  </div></td></tr>
+{% endif %}
+<tr id="ref-row-{{ spec.slug }}-{{ obj.pk }}">
+  <td colspan="20">
+    <form class="row" style="flex-wrap:wrap;gap:8px;align-items:flex-end;padding:6px 0"
+          hx-post="{% url 'reference-update' spec.slug obj.pk %}"
+          hx-target="#ref-row-{{ spec.slug }}-{{ obj.pk }}" hx-swap="outerHTML">
+      {% for field in form %}
+        <div style="flex:1 1 140px;min-width:110px">
+          <label for="{{ field.id_for_label }}" class="muted" style="font-size:11px">{{ field.label }}</label>
+          {{ field }}
+        </div>
+      {% endfor %}
+      <button class="btn sm" type="submit">Save</button>
+      <button class="btn ghost sm" type="button"
+              onclick="this.closest('tr').remove()">Cancel</button>
+    </form>
+  </td>
+</tr>

@@ -61,7 +61,7 @@ def excise_on_removals(removals, period_start, period_end):
             credit += credit_for_block(cum, g)
             gallons[cls] += g
         cum += g
-    gross_total = sum(gross.values())
+    gross_total = sum(gross.values(), Decimal("0"))
     net = gross_total - credit
     return {
         "gallons_by_class": {c: g for c, g in gallons.items()},

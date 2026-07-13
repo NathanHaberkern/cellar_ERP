@@ -33,6 +33,7 @@ from cellar.models import (
 from cellar.services import aging as aging_svc
 from cellar.services import operations as ops
 from cellar.services import labpanels
+from cellar.services import volumes as vol_svc
 
 
 # --------------------------------------------------------------- disposition
@@ -329,12 +330,16 @@ def oak(lot):
         c = p.container
         if not c.is_oak:
             continue
-        total_gal += float(p.volume_gal or 0)
+        cur_vol = float(vol_svc.placement_volume(p))
+        total_gal += cur_vol
         barrels.append({
+            "placement_pk": p.pk,
             "container_id": c.container_id,
             "size": c.format or (f"{c.capacity_gal:g} gal" if c.capacity_gal else c.get_type_display()),
             "tier": p.get_oak_tier_display(),
             "location": (c.effective_location().code if c.effective_location() else "—"),
+            "current_gal": round(cur_vol, 1),
+            "is_flagged": p.is_flagged,
         })
 
     racks = []

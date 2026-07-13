@@ -12,8 +12,12 @@
 <h4 class="sub">Current barrels</h4>
 {% if oak.barrels %}
 <div class="table-wrap"><table>
-  <thead><tr><th>Barrel</th><th>Size</th><th>Tier</th><th>Location</th></tr></thead>
-  <tbody>{% for b in oak.barrels %}<tr><td>{{ b.container_id }}</td><td>{{ b.size }}</td><td>{{ b.tier }}</td><td>{{ b.location }}</td></tr>{% endfor %}</tbody>
+  <thead><tr><th>Barrel</th><th>Size</th><th>Tier</th><th>Location</th><th>Current gal</th><th></th></tr></thead>
+  <tbody>{% for b in oak.barrels %}<tr>
+    <td>{{ b.container_id }}</td><td>{{ b.size }}</td><td>{{ b.tier }}</td><td>{{ b.location }}</td>
+    <td>{{ b.current_gal }}</td>
+    <td>{% if b.is_flagged %}<span class="badge danger" title="More than 5 gal of foreign wine topped in — clears on rack-out">foreign &gt;5gal</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
 </table></div>
 {% else %}<div class="empty">No barrels currently holding this lot.</div>{% endif %}
 
@@ -100,6 +104,92 @@
   };
   window.__oakSum();
 </script>
+{% endif %}
+
+{% if oak.barrels %}
+<h4 class="sub">Top barrels</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    Replacing evaporation in a full barrel (routine) books the loss automatically.
+    Bringing a short barrel up to full (partial fill) books no loss — that wine was
+    never there to evaporate. Topping from a lot other than this one is the foreign
+    contribution the 5-gallon flag watches for.
+  </p>
+  <form hx-post="{% url 'lot-top-barrels' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <label>Barrels to top</label>
+    <div class="barrel-fills" style="margin:6px 0">
+      {% for b in oak.barrels %}
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
+          <label class="inline" style="min-width:150px;margin:0">
+            <input type="checkbox" name="placements" value="{{ b.placement_pk }}"
+                   onchange="document.getElementById('top-gal-{{ b.placement_pk }}').disabled = !this.checked;">
+            {{ b.container_id }}
+            <span class="muted">{{ b.current_gal }} gal now{% if b.is_flagged %} · <span class="badge danger">flagged</span>{% endif %}</span>
+          </label>
+          <input type="number" step="0.1" id="top-gal-{{ b.placement_pk }}" name="gal_{{ b.placement_pk }}"
+                 placeholder="even split" disabled style="max-width:110px">
+          <span class="muted">gal (blank → even split of total)</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-grid">
+      <div><label>Source lot</label>
+        <select name="source_lot">
+          <option value="">This lot ({{ lot.code }})</option>
+          {% for l in topping_sources %}<option value="{{ l.pk }}">{{ l.code }}</option>{% endfor %}
+        </select></div>
+      <div><label>Total gallons drawn</label>
+        <input type="number" step="0.1" name="total_gal" placeholder="ignored if per-barrel gal entered"></div>
+      <div><label>Kind</label>
+        <select name="kind">
+          <option value="routine">Routine (replacing evaporation)</option>
+          <option value="partial_fill">Partial fill (bringing a short barrel up to full)</option>
+        </select></div>
+      <div><label>Topped on</label><input type="date" name="topped_at" value="{{ today }}"></div>
+    </div>
+
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit">Top barrels</button>
+    </div>
+  </form>
+</div>
+
+<h4 class="sub">Rack out</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    Empties selected barrels back to a vessel and clears their foreign-wine flag.
+    Gauge what actually comes out to true up any accrued evaporation against the
+    books — the difference is booked as a real loss (or backed out if over-accrued).
+  </p>
+  <form hx-post="{% url 'lot-rack-out' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <label>Barrels to rack out</label>
+    <div class="barrel-fills" style="margin:6px 0">
+      {% for b in oak.barrels %}
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:4px">
+          <label class="inline" style="margin:0">
+            <input type="checkbox" name="placements" value="{{ b.placement_pk }}">
+            {{ b.container_id }}
+            <span class="muted">{{ b.current_gal }} gal on books{% if b.is_flagged %} · <span class="badge danger">flagged</span>{% endif %}</span>
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-grid">
+      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="rackout" label="To vessel (blank → paperwork only, wine already moved)" %}
+      <div><label>Racked out on</label><input type="date" name="racked_at" value="{{ today }}"></div>
+      <div><label>Gauged gallons (optional true-up)</label>
+        <input type="number" step="0.1" name="gauged_gal" placeholder="blank → no true-up, books stand"></div>
+    </div>
+
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit"
+              hx-confirm="Rack out the selected barrel(s)? This clears their foreign-wine flag.">
+        Rack out</button>
+    </div>
+  </form>
+</div>
 {% endif %}
 
 {% include "web/_lot_note.html" with section="oak" note=note %}

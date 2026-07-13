@@ -1,0 +1,42 @@
+{% extends "web/base.html" %}
+{% block title %}{{ spec.label }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Reference</p><h1>{{ spec.label }}</h1></div></div>
+
+<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:18px">
+  <a class="btn ghost sm" href="{% url 'additives' %}">Additives</a>
+  {% for t in tables %}
+    <a class="btn ghost sm {% if t.slug == spec.slug %}on{% endif %}" href="{% url 'reference-table' t.slug %}">{{ t.label }}</a>
+  {% endfor %}
+</div>
+
+<div class="card" style="max-width:900px;margin-bottom:18px">
+  <p class="eyebrow" style="margin:0 0 10px">Add {{ spec.label|slice:":-1" }}</p>
+  <form hx-post="{% url 'reference-create' spec.slug %}" hx-target="#ref-rows" hx-swap="afterbegin"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="row" style="flex-wrap:wrap">
+      {% for field in form %}
+        <div style="flex:1 1 160px;min-width:120px">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+        </div>
+      {% endfor %}
+      <div style="flex:0 0 auto;align-self:flex-end"><button class="btn" type="submit">Add</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:1%">ID</th>
+      {% for field in form %}<th>{{ field.label }}</th>{% endfor %}
+      <th></th>
+    </tr></thead>
+    <tbody id="ref-rows">
+      {% for obj, display in row_objs %}{% include "web/_reference_row.html" %}{% endfor %}
+      {% if not row_objs %}<tr><td colspan="20"><div class="empty">No {{ spec.label|lower }} yet. Add one above.</div></td></tr>{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

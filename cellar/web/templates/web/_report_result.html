@@ -5,7 +5,10 @@
   <div class="page-head" style="margin-bottom:12px">
     <div><p class="eyebrow">{% if period.year %}{{ period.year }}{% endif %}</p>
       <h2 style="margin:0">{{ title }}</h2></div>
-    {% if download %}<a class="btn ghost sm" href="{{ download }}">Download PDF</a>{% endif %}
+    <div class="row" style="gap:8px">
+      {% if download %}<a class="btn ghost sm" href="{{ download }}">Download PDF</a>{% endif %}
+      {% if download_csv %}<a class="btn ghost sm" href="{{ download_csv }}">Download CSV</a>{% endif %}
+    </div>
   </div>
   {% if value == None %}
     <div class="empty">No data returned for this period.</div>

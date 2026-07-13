@@ -22,6 +22,8 @@
       <input type="text" name="start" id="start" form="report-form" placeholder="2025-10-01"></div>
     <div><label for="end">Period end</label>
       <input type="text" name="end" id="end" form="report-form" placeholder="2026-01-01"></div>
+    <div><label for="serial">5000.24 serial (optional, enables PDF)</label>
+      <input type="text" name="serial" id="serial" form="report-form" placeholder="2025-4"></div>
   </div>
   <form id="report-form" hx-post="{% url 'report-run' %}" hx-target="#report-out" hx-swap="innerHTML"
         style="margin-top:14px">

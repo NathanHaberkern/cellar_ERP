@@ -1,0 +1,78 @@
+{# Blend card — lives on the Movement tab, below the plain tank-transfer form.
+   Adds one or more source lots into THIS lot in a single session. Each row picks
+   its own kind (whole/partial) and, for partial, its own gallons; the preview
+   checks balance sufficiency and flags a cross-tax-class blend before commit. #}
+<div id="blend-card" class="card" style="margin-top:16px">
+  <p class="eyebrow" style="margin:0 0 10px">Blend into {{ lot.code }}</p>
+  {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+  {% if ok %}<div class="msg" style="background:var(--cream);border:1px solid var(--line-strong)">{{ ok }}</div>{% endif %}
+  <p class="muted" style="margin:0 0 10px">
+    Whole blend moves a source lot's entire current balance in — it stops holding
+    its own wine from here on. Partial blend moves only the gallons you enter; the
+    source keeps the rest as its own wine. Blending across tax classes is allowed —
+    the preview flags it so it's a deliberate choice.
+  </p>
+
+  <form id="blend-form" hx-post="{% url 'lot-blend-commit' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div id="blend-rows"></div>
+    <button type="button" class="btn ghost sm" onclick="addBlendRow()" style="margin-top:4px">+ Add source lot</button>
+
+    <div class="form-grid" style="margin-top:12px">
+      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="blend" label="To vessel (blank → paperwork only, wine already physically combined)" %}
+      <div><label>Blended on</label><input type="date" name="blended_at" value="{{ today }}"></div>
+    </div>
+
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit"
+              hx-confirm="Commit this blend into {{ lot.code }}? This writes a permanent lineage record.">
+        Commit blend</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  var BLEND_SOURCES = [{% for l in sources %}{id:"{{ l.pk }}", code:"{{ l.code|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
+  var BLEND_PREVIEW_URL = "{% url 'blend-preview' lot.pk %}";
+  var blendRowN = 0;
+
+  function blendSourceOptions(){
+    var h = '<option value="">— choose source lot —</option>';
+    BLEND_SOURCES.forEach(function(l){ h += '<option value="'+l.id+'">'+l.code+'</option>'; });
+    return h;
+  }
+
+  function addBlendRow(){
+    var n = blendRowN++;
+    var wrap = document.createElement('div');
+    wrap.className = 'blend-row';
+    wrap.style.cssText = 'border-top:1px solid var(--line);padding-top:10px;margin-top:8px';
+    var inc = "closest .blend-row";
+    wrap.innerHTML =
+      '<div class="row" style="gap:8px;align-items:flex-end">'
+      + '<div style="flex:2 1 180px"><label>Source lot</label>'
+      +   '<select name="source_lot" hx-post="'+BLEND_PREVIEW_URL+'" hx-target="#blend-preview-'+n+'" '
+      +     'hx-trigger="change" hx-include="'+inc+'">'+blendSourceOptions()+'</select></div>'
+      + '<div style="flex:1 1 160px"><label>Kind</label>'
+      +   '<select name="kind" onchange="toggleBlendVol(this)" hx-post="'+BLEND_PREVIEW_URL+'" '
+      +     'hx-target="#blend-preview-'+n+'" hx-trigger="change" hx-include="'+inc+'">'
+      +     '<option value="whole_blend">Whole blend (entire balance)</option>'
+      +     '<option value="partial_blend_contribution">Partial blend (enter gallons)</option>'
+      +   '</select></div>'
+      + '<div class="blend-vol" style="flex:0 1 130px;display:none"><label>Gallons</label>'
+      +   '<input type="number" step="0.1" name="volume_gal" hx-post="'+BLEND_PREVIEW_URL+'" '
+      +     'hx-target="#blend-preview-'+n+'" hx-trigger="input changed delay:300ms" hx-include="'+inc+'"></div>'
+      + '<div style="flex:0 0 auto"><button type="button" class="btn ghost sm" title="remove" '
+      +     'onclick="this.closest(\'.blend-row\').remove()">&times;</button></div>'
+      + '</div><div id="blend-preview-'+n+'"></div>';
+    document.getElementById('blend-rows').appendChild(wrap);
+    if (window.htmx) htmx.process(wrap);
+  }
+
+  function toggleBlendVol(sel){
+    var row = sel.closest('.blend-row');
+    var volDiv = row.querySelector('.blend-vol');
+    volDiv.style.display = (sel.value === 'partial_blend_contribution') ? '' : 'none';
+  }
+
+  addBlendRow();
+</script>

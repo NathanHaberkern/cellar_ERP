@@ -32,4 +32,6 @@
   </form>
 </details>
 
+{% include "web/_lot_blend.html" with sources=blend_sources vessel_options=vessel_options today=today %}
+
 {% include "web/_lot_note.html" with section="movement" note=note %}

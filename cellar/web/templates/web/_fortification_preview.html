@@ -1,0 +1,12 @@
+{% if error %}
+  <div class="msg err" style="margin-top:10px">{{ error }}</div>
+{% elif result %}
+  <div class="msg {% if not result.sufficient %}err{% endif %}" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
+    <table class="kv"><tbody>
+      <tr><th>Spirit needed</th><td><b>{{ result.spirit_wg }}</b> WG ({{ result.proof_gallons }} PG at {{ result.spirit_proof }} proof)</td></tr>
+      <tr><th>Finished volume (expected)</th><td>{{ result.finished_wg_expected }} gal</td></tr>
+      <tr><th>HPGS on hand</th><td>{{ result.hpgs_on_hand_wg }} WG
+        {% if not result.sufficient %}<span class="badge danger">insufficient</span>{% endif %}</td></tr>
+    </tbody></table>
+  </div>
+{% endif %}

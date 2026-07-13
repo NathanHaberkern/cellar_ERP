@@ -1,6 +1,47 @@
 <h3 style="margin:0 0 12px">Fermentation</h3>
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 
+{# ---- White/rosé: Press (before fermentation) ---- #}
+{% if show_press_first %}
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Press to tank</p>
+    <p class="muted" style="margin:0 0 10px">
+      Whites and rosés press before fermentation — this gauge is juice, not wine,
+      and is <b>not</b> the booking volume. It settles, then racks off the gross
+      lees, then inoculates. The booking gauge comes later, after fermentation.
+    </p>
+    <form hx-post="{% url 'ferment-press-first' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+      <div class="form-grid">
+        {% include "web/_vessel_picker.html" with options=vessel_options field="vessel" picker_id="pf" label="To vessel" %}
+        <div><label>Gallons off the press</label>
+          <input type="number" step="0.1" name="volume" value="{{ est_volume|default:'' }}" required></div>
+        <div><label>Pressed at</label><input type="datetime-local" name="pressed_at" value="{{ now_local }}"></div>
+      </div>
+      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit">Record press</button></div>
+    </form>
+  </div>
+{% endif %}
+
+{# ---- White/rosé: Rack off gross lees ---- #}
+{% if show_rack_lees %}
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Rack off gross lees</p>
+    <p class="muted" style="margin:0 0 10px">
+      Settled {{ press_gauge|default:"—" }} gal off the press. Enter what comes off
+      clear — the difference is booked as a loss.
+    </p>
+    <form hx-post="{% url 'ferment-rack-lees' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+      <div class="form-grid">
+        {% include "web/_vessel_picker.html" with options=vessel_options field="vessel" picker_id="rl" label="To vessel (blank → stays put)" %}
+        <div><label>Clear juice (gal)</label>
+          <input type="number" step="0.1" name="clear_gal" required></div>
+        <div><label>Racked at</label><input type="datetime-local" name="racked_at" value="{{ now_local }}"></div>
+      </div>
+      <div class="note-actions" style="margin-top:10px"><button class="btn sm" type="submit">Rack off lees</button></div>
+    </form>
+  </div>
+{% endif %}
+
 {# ---- Step 1 · Inoculation + nutrition plan ---- #}
 {% if show_inoculate %}
   <div class="card">

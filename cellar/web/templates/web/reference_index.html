@@ -1,0 +1,14 @@
+{% extends "web/base.html" %}
+{% block title %}Reference{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Reference</p><h1>Reference data</h1></div></div>
+
+<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:18px">
+  <a class="btn ghost sm" href="{% url 'additives' %}">Additives</a>
+  {% for t in tables %}
+    <a class="btn ghost sm" href="{% url 'reference-table' t.slug %}">{{ t.label }}</a>
+  {% endfor %}
+</div>
+
+<div class="empty">Pick a table above to view or edit it.</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% load web_extras %}
+<h3 style="margin:0 0 12px">Fortification / Port</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if ok %}<div class="msg" style="background:var(--cream);border:1px solid var(--line-strong)">{{ ok }}</div>{% endif %}
+
+{% if not is_port %}
+  <div class="empty">This lot isn't designated to the Port program — nothing to fortify.</div>
+{% else %}
+
+<div class="cards">
+  <div class="card"><div class="l">HPGS on hand</div><div class="n">{{ hpgs_on_hand_wg|floatformat:1 }} WG</div></div>
+  <div class="card"><div class="l">Proof gallons on hand</div><div class="n">{{ hpgs_on_hand_pg|floatformat:1 }} PG</div></div>
+  <div class="card"><div class="l">Blended proof</div><div class="n">{{ hpgs_blended_proof|floatformat:2 }}</div></div>
+</div>
+
+<h4 class="sub">Fortification history</h4>
+{% if events %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Kind</th><th>On skins</th><th>Booked</th><th>Base WG</th><th>Spirit WG</th><th>Finished WG</th><th>Class</th></tr></thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.get_kind_display }}</td>
+      <td>{{ e.fortified_on_skins_date|date:"M j, Y" }}</td>
+      <td>{{ e.booked_at|date:"M j, Y" }}</td>
+      <td>{{ e.base_wg|default:"—" }}</td>
+      <td>{{ e.spirit_wg|default:"—" }}</td>
+      <td>{{ e.finished_wg|default:"—" }}</td>
+      <td>{{ e.get_expected_tax_class_display }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% else %}
+<div class="empty">No fortification recorded yet.</div>
+{% endif %}
+
+{% if can_fortify_initial %}
+<h4 class="sub">Fortify on skins (initial)</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    Port fortified on skins — the base wine has just fermented, is under 16%, and has
+    never been booked to bond. This event <b>is</b> the production booking; do not also
+    book this lot to bond separately.
+  </p>
+  <form id="fortify-initial-form" hx-post="{% url 'lot-fortify-initial' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>Fortified on skins</label>
+        <input type="date" name="fortified_on_skins_date" value="{{ today }}" required></div>
+      <div><label>Booked (volume determined)</label>
+        <input type="date" name="booked_at" value="{{ today }}" required></div>
+      <div><label>Current ABV (%)</label>
+        <input type="number" step="0.1" name="current_abv" id="init-cur-abv" value="0"
+               hx-post="{% url 'fortification-preview' lot.pk %}" hx-target="#init-preview"
+               hx-trigger="input changed delay:300ms" hx-include="#fortify-initial-form [name]"></div>
+      <div><label>Target ABV (%)</label>
+        <input type="number" step="0.1" name="target_abv" id="init-target-abv" placeholder="e.g. 19.5"
+               hx-post="{% url 'fortification-preview' lot.pk %}" hx-target="#init-preview"
+               hx-trigger="input changed delay:300ms" hx-include="#fortify-initial-form [name]"></div>
+      <div><label>Volume being fortified (gal, for preview only)</label>
+        <input type="number" step="0.1" name="volume_gal" id="init-vol" placeholder="e.g. 648"
+               title="Used only to size the spirit preview below — does not get saved. The base gauge itself is derived from the finished gauge minus the spirit drawn, per FortificationEvent."
+               hx-post="{% url 'fortification-preview' lot.pk %}" hx-target="#init-preview"
+               hx-trigger="input changed delay:300ms" hx-include="#fortify-initial-form [name]"></div>
+      <div><label>Spirit proof</label>
+        <input type="number" step="0.01" name="spirit_proof" placeholder="blank → current blended proof"
+               hx-post="{% url 'fortification-preview' lot.pk %}" hx-target="#init-preview"
+               hx-trigger="input changed delay:300ms" hx-include="#fortify-initial-form [name]"></div>
+      <div><label>Expected tax class</label>
+        <select name="expected_tax_class">
+          <option value="">— from target ABV —</option>
+          {% for val, label in tax_classes %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div id="init-preview"></div>
+    <div class="form-grid" style="margin-top:10px">
+      <div><label>PG drawn (actual)</label>
+        <input type="number" step="0.01" name="proof_gallons_drawn" required
+               title="The proof gallons you're actually drawing from HPGS — the preview above is a guide."></div>
+      <div><label>Finished gauge (gal, optional)</label>
+        <input type="number" step="0.1" name="finished_wg" placeholder="blank → lot's booking volume"></div>
+    </div>
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit"
+              hx-confirm="Fortify {{ lot.code }} on skins? This is the production booking for this lot.">
+        Fortify on skins</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if can_adjust %}
+<h4 class="sub">Alcohol adjustment (spring racking)</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    Re-fortify wine already in bond. Give both the base gauge (what you racked) and the
+    finished gauge (what came out) — the gap between (base + spirit) and finished is
+    booked as a real loss on line 29, not silently absorbed into production.
+  </p>
+  <form hx-post="{% url 'lot-fortify-adjust' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>Adjusted on</label>
+        <input type="date" name="adjusted_at" value="{{ today }}" required></div>
+      <div><label>PG drawn</label>
+        <input type="number" step="0.01" name="proof_gallons_drawn" required></div>
+      <div><label>Spirit proof</label>
+        <input type="number" step="0.01" name="spirit_proof" placeholder="blank → current blended proof"></div>
+      <div><label>Base gauge — going in (gal)</label>
+        <input type="number" step="0.1" name="base_wg" required
+               title="What you racked before adding spirit."></div>
+      <div><label>Finished gauge — coming out (gal)</label>
+        <input type="number" step="0.1" name="finished_wg" required
+               title="What actually came out after the spirit is in."></div>
+      <div><label>Expected tax class</label>
+        <select name="expected_tax_class">
+          <option value="">— same as base —</option>
+          {% for val, label in tax_classes %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit"
+              hx-confirm="Record this alcohol adjustment for {{ lot.code }}?">
+        Record adjustment</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% endif %}

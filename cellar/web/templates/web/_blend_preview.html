@@ -1,0 +1,22 @@
+{% if error %}
+  <div class="msg err" style="margin-top:10px">{{ error }}</div>
+{% elif result %}
+  <div class="msg {% if result.class_mismatch %}err{% endif %}" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
+    <table class="kv"><tbody>
+      <tr><th>{{ result.source_code }} balance</th><td>{{ result.source_balance }} gal</td></tr>
+      <tr><th>Blending in</th><td><b>{{ result.volume }}</b> gal</td></tr>
+      <tr><th>{{ result.source_code }} remaining after</th><td>{{ result.source_remaining }} gal</td></tr>
+      <tr><th>{{ lot.code }} balance before</th><td>{{ result.dest_balance_before }} gal</td></tr>
+    </tbody></table>
+    {% if not result.sufficient %}
+      <p class="muted" style="margin:8px 0 0"><span class="badge danger">insufficient</span>
+        {{ result.source_code }} doesn't hold enough wine to cover this draw.</p>
+    {% endif %}
+    {% if result.class_mismatch %}
+      <p class="muted" style="margin:8px 0 0"><span class="badge danger">tax class change</span>
+        {{ result.source_code }} is class {{ result.source_tax_class }}, {{ lot.code }} is class
+        {{ result.dest_tax_class }}. This is a change-of-tax-class blend — Part X will
+        narrate it on the 5120.17. Make sure that's intended before committing.</p>
+    {% endif %}
+  </div>
+{% endif %}

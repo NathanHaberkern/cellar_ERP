@@ -196,6 +196,35 @@ class LotSectionNote(models.Model):
         return f"{self.lot} · {self.get_section_display()} note"
 
 
+class LotCompositionOverride(models.Model):
+    """Manual composition percentages for label/marketing use, stated independently
+    of the computed genealogy on the Composition tab.
+
+    `composition_of()` in aging.py derives exact percentages from LotLineage — the
+    real, ledger-backed record of what was blended into what. That figure is
+    correct for compliance but isn't always what a label wants to say: TTB
+    varietal-labeling rules allow rounding and minimums that don't match the
+    computed genealogy exactly, and some blends are described by house style
+    rather than measured percentage. This is a SEPARATE, clearly-labeled stated
+    value — it never feeds reporting and never overwrites the computed figure.
+
+    One row per lot; `components` is [{label, pct}], entered free-form since the
+    label copy may name a variety or region rather than a leaf lot code.
+    """
+    lot = models.OneToOneField(Lot, on_delete=models.CASCADE, related_name="composition_override")
+    components = models.JSONField(default=list, help_text="[{label, pct}] — for label/marketing use")
+    notes = models.CharField(max_length=200, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.PROTECT, related_name="+")
+
+    def total_pct(self):
+        return sum((float(c.get("pct") or 0) for c in (self.components or [])), 0.0)
+
+    def __str__(self):
+        return f"{self.lot} · label composition override"
+
+
 class WeighTagAllocation(AppendOnly):
     """Many-to-many between weigh tags and lots, carrying allocated pounds."""
     weigh_tag = models.ForeignKey(WeighTag, on_delete=models.PROTECT, related_name="allocations")

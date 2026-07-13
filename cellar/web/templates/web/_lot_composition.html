@@ -10,6 +10,73 @@
   </tbody>
 </table></div>
 {% else %}<div class="empty">No composition recorded yet.</div>{% endif %}
-<p class="verify">Computed from lot genealogy (blends, splits, topping) — read-only.</p>
+<p class="verify">Computed from lot genealogy (blends, splits, topping) — read-only. This is
+  the figure compliance reporting reads.</p>
+
+<h4 class="sub">Label / marketing composition (manual)</h4>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">
+    A separate, hand-entered statement for label or marketing copy — TTB varietal
+    labeling allows rounding and phrasing that won't always match the computed
+    genealogy above exactly. This never feeds reporting and never overwrites the
+    computed figure; it's stored purely for reference when writing label copy.
+  </p>
+
+  {% if override %}
+    <table class="kv" style="margin-bottom:10px"><tbody>
+      {% for c in override.components %}
+        <tr><th>{{ c.label }}</th><td>{{ c.pct }}%</td></tr>
+      {% endfor %}
+      {% if override.notes %}<tr><th>Notes</th><td>{{ override.notes }}</td></tr>{% endif %}
+    </tbody></table>
+    <p class="muted" style="margin:0 0 10px">
+      Updated {{ override.updated_at|date:"M j, Y" }}{% if override.updated_by %} by {{ override.updated_by.username }}{% endif %}.
+      {% if override.total_pct != 100 %}<span class="badge danger">totals {{ override.total_pct }}%, not 100%</span>{% endif %}
+    </p>
+  {% endif %}
+
+  <form id="comp-override-form" hx-post="{% url 'lot-composition-override' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div id="comp-override-rows"></div>
+    <button type="button" class="btn ghost sm" onclick="addCompRow()" style="margin-top:4px">+ Add component</button>
+    <div style="margin-top:10px"><label>Notes</label>
+      <textarea name="notes" rows="2" placeholder="optional">{{ override.notes|default:"" }}</textarea></div>
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit">Save label composition</button>
+    </div>
+  </form>
+  {% if override %}
+    <form hx-post="{% url 'lot-composition-override' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML"
+          style="margin-top:6px">
+      <button class="btn ghost sm" type="submit"
+              hx-confirm="Clear the manual label composition for {{ lot.code }}?">Clear</button>
+    </form>
+  {% endif %}
+</div>
+
+<script>
+  var COMP_EXISTING = [{% for c in override.components %}{label:"{{ c.label|escapejs }}", pct:"{{ c.pct }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
+  var compRowN = 0;
+
+  function addCompRow(label, pct){
+    var n = compRowN++;
+    var wrap = document.createElement('div');
+    wrap.className = 'row';
+    wrap.style.cssText = 'gap:8px;align-items:flex-end;margin-bottom:4px';
+    wrap.innerHTML =
+      '<div style="flex:2 1 200px"><label class="muted" style="font-size:11px">Label</label>'
+      + '<input type="text" name="label" value="'+(label||'')+'" placeholder="e.g. Zinfandel, Mohr-Fry Ranches"></div>'
+      + '<div style="flex:0 1 100px"><label class="muted" style="font-size:11px">%</label>'
+      + '<input type="number" step="0.1" name="pct" value="'+(pct||'')+'"></div>'
+      + '<div style="flex:0 0 auto"><button type="button" class="btn ghost sm" title="remove" '
+      + 'onclick="this.closest(\'.row\').remove()">&times;</button></div>';
+    document.getElementById('comp-override-rows').appendChild(wrap);
+  }
+
+  if (COMP_EXISTING.length) {
+    COMP_EXISTING.forEach(function(c){ addCompRow(c.label, c.pct); });
+  } else {
+    addCompRow();
+  }
+</script>
 
 {% include "web/_lot_note.html" with section="composition" note=note %}

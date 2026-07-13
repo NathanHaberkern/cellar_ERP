@@ -1,0 +1,16 @@
+{% if form_errors %}
+  <tr><td colspan="20"><div class="msg err">
+    {% for field, errs in form_errors.items %}{{ field }}: {{ errs|join:", " }} {% endfor %}
+  </div></td></tr>
+{% endif %}
+{% if obj %}
+<tr id="ref-row-{{ spec.slug }}-{{ obj.pk }}">
+  <td style="color:var(--muted)">{{ obj.pk }}</td>
+  {% for fname, val in display %}<td>{{ val }}</td>{% endfor %}
+  <td>
+    <button class="btn ghost sm" type="button"
+            hx-get="{% url 'reference-edit-row' spec.slug obj.pk %}"
+            hx-target="#ref-row-{{ spec.slug }}-{{ obj.pk }}" hx-swap="outerHTML">Edit</button>
+  </td>
+</tr>
+{% endif %}

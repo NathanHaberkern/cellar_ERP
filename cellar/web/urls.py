@@ -16,6 +16,10 @@ from . import tasks
 from . import fermentation as ferment
 from . import bottling as bottle
 from . import bonding as bond
+from . import fortification as fort
+from . import topping as top
+from . import blend as blend_web
+from . import reference as ref
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -42,6 +46,7 @@ urlpatterns = [
     path("lots/<int:pk>/labs/", views.lot_labs, name="lot-labs"),
     path("lots/<int:pk>/movement/", views.lot_movement, name="lot-movement"),
     path("lots/<int:pk>/composition/", views.lot_composition, name="lot-composition"),
+    path("lots/<int:pk>/composition/override/", views.lot_composition_override_save, name="lot-composition-override"),  # HTMX
     path("lots/<int:pk>/oak/", views.lot_oak, name="lot-oak"),
     path("lots/<int:pk>/cost/", views.lot_cost, name="lot-cost"),
     path("lots/<int:pk>/tasks/", views.lot_tasks, name="lot-tasks"),
@@ -51,6 +56,8 @@ urlpatterns = [
     path("lots/<int:pk>/ferment/inoculate/", ferment.ferment_inoculate, name="ferment-inoculate"),
     path("lots/<int:pk>/ferment/daily/", ferment.ferment_daily, name="ferment-daily"),
     path("lots/<int:pk>/ferment/confirm/<int:task_pk>/", ferment.ferment_confirm, name="ferment-confirm"),
+    path("lots/<int:pk>/ferment/press-first/", ferment.ferment_press_first, name="ferment-press-first"),
+    path("lots/<int:pk>/ferment/rack-lees/", ferment.ferment_rack_lees, name="ferment-rack-lees"),
     path("lots/<int:pk>/ferment/press/", ferment.ferment_press, name="ferment-press"),
     # ferment-rack RETIRED — racking to barrel moved to the Oak tab (lot-rack-to-barrel);
     # it is an aging move and no longer ends primary. Book-to-bond does that now.
@@ -58,6 +65,18 @@ urlpatterns = [
     path("lots/<int:pk>/bond/", bond.lot_bond_card, name="lot-bond-card"),
     path("lots/<int:pk>/bond/book/", bond.lot_book_to_bond, name="lot-book-to-bond"),
     path("lots/<int:pk>/oak/rack/", bond.lot_rack_to_barrel, name="lot-rack-to-barrel"),
+    path("lots/<int:pk>/oak/top/", top.lot_top_barrels, name="lot-top-barrels"),
+    path("lots/<int:pk>/oak/rack-out/", top.lot_rack_out, name="lot-rack-out"),
+
+    # blending (on the Movement tab)
+    path("lots/<int:pk>/blend/preview/", blend_web.blend_preview, name="blend-preview"),  # HTMX
+    path("lots/<int:pk>/blend/commit/", blend_web.lot_blend_commit, name="lot-blend-commit"),
+
+    # fortification / Port (own tab; Port-designated lots only)
+    path("lots/<int:pk>/fortification/", fort.lot_fortification, name="lot-fortification"),
+    path("lots/<int:pk>/fortification/preview/", fort.fortification_preview, name="fortification-preview"),  # HTMX
+    path("lots/<int:pk>/fortification/initial/", fort.lot_fortify_initial, name="lot-fortify-initial"),
+    path("lots/<int:pk>/fortification/adjust/", fort.lot_fortify_adjust, name="lot-fortify-adjust"),
 
     # bottling (parcel split + run)
     path("lots/<int:pk>/bottling/", bottle.lot_bottling, name="lot-bottling"),
@@ -101,4 +120,11 @@ urlpatterns = [
     path("reference/additives/", views.additives, name="additives"),
     path("reference/additives/create/", views.additive_create, name="additive-create"),  # HTMX
     path("reference/additives/<int:pk>/update/", views.additive_update, name="additive-update"),  # HTMX
+
+    # generic reference table editors
+    path("reference/", ref.reference_index, name="reference-index"),
+    path("reference/<slug:slug>/", ref.reference_table, name="reference-table"),
+    path("reference/<slug:slug>/create/", ref.reference_create, name="reference-create"),  # HTMX
+    path("reference/<slug:slug>/<int:pk>/edit/", ref.reference_edit_row, name="reference-edit-row"),  # HTMX
+    path("reference/<slug:slug>/<int:pk>/update/", ref.reference_update, name="reference-update"),  # HTMX
 ]

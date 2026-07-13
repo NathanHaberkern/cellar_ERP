@@ -159,6 +159,10 @@ def lot_detail(request, pk):
     from cellar.services import bottling as bz
     show_bottling = bz.can_split(lot) or bz.is_parcel(lot) or bool(bz.parcels_of(lot))
 
+    # Fortification / Port tab — only Port-designated lots ever see this.
+    from cellar.services import lotmeta
+    show_fortification = lotmeta.is_port(lot)
+
     # Book-to-bond card on the summary — the act that ends primary.
     from .bonding import bond_ctx
     bond_card = bond_ctx(lot)
@@ -177,7 +181,8 @@ def lot_detail(request, pk):
         "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
         "overview_note": lotpages.section_note(lot, "overview"),
         "show_ferment": show_ferment, "hide_additions": hide_additions,
-        "show_bottling": show_bottling, "task_summary": task_summary,
+        "show_bottling": show_bottling, "show_fortification": show_fortification,
+        "task_summary": task_summary,
         "bond_card": bond_card,
     })
 
@@ -219,11 +224,14 @@ def lot_movement(request, pk):
     def extra(lot):
         rows, err = _safe(lotpages.movements, lot)
         from .vessels import vessel_options
+        from .blend import blend_source_lots
         # Every tank/tote is offered; occupied ones are shown with their current lot
         # and unlocked only by the co-occupancy checkbox. Filtering them out here is
         # what made that checkbox dead.
         return {"rows": rows or [], "error": err,
                 "vessel_options": vessel_options(exclude_lot=lot),
+                "blend_sources": blend_source_lots(exclude_lot=lot),
+                "today": timezone.localdate().isoformat(),
                 "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
     return _panel(request, pk, "movement", "web/_lot_movement.html", extra)
 
@@ -232,16 +240,48 @@ def lot_movement(request, pk):
 def lot_composition(request, pk):
     def extra(lot):
         data, err = _safe(lotpages.composition, lot)
-        return {"composition": data or {}, "error": err}
+        override = getattr(lot, "composition_override", None)
+        return {"composition": data or {}, "error": err, "override": override}
     return _panel(request, pk, "composition", "web/_lot_composition.html", extra)
+
+
+@login_required
+@require_http_methods(["POST"])
+def lot_composition_override_save(request, pk):
+    """Save (or clear) the manual label/marketing composition. Entirely separate
+    from the computed genealogy above it — never feeds reporting."""
+    from cellar.models import LotCompositionOverride
+    lot = get_object_or_404(Lot, pk=pk)
+    labels = request.POST.getlist("label")
+    pcts = request.POST.getlist("pct")
+    components = []
+    for label, pct in zip(labels, pcts):
+        label = (label or "").strip()
+        pct = (pct or "").strip()
+        if label and pct:
+            try:
+                components.append({"label": label, "pct": float(pct)})
+            except ValueError:
+                continue
+    notes = (request.POST.get("notes") or "").strip()
+
+    if not components:
+        LotCompositionOverride.objects.filter(lot=lot).delete()
+    else:
+        LotCompositionOverride.objects.update_or_create(
+            lot=lot, defaults={"components": components, "notes": notes,
+                               "updated_by": request.user})
+    return lot_composition(request, pk)
 
 
 def render_oak_panel(request, lot, error=None):
     """The Oak tab, rendered from a lot we already have. Shared by the tab itself
-    and by the barrel-down POST, which swaps this panel back in."""
+    and by the barrel-down/topping/rack-out POSTs, which swap this panel back in."""
     from cellar.services import barreling as bar
     from cellar.services import bonding as bond
     from cellar.models import TankAssignment
+    from . import topping as top_web
+    from . import vessels as vessels_web
 
     data, err = _safe(lotpages.oak, lot)
     in_tank = TankAssignment.objects.filter(
@@ -257,6 +297,9 @@ def render_oak_panel(request, lot, error=None):
         "barrel_total": bond.barrel_fill_total(lot),
         "in_bond": bond.is_in_bond(lot),
         "today": timezone.localdate().isoformat(),
+        # topping / rack-out forms — operate on THIS lot's own filled barrels
+        "topping_sources": top_web.topping_source_lots(exclude_lot=None),
+        "vessel_options": vessels_web.vessel_options(exclude_lot=lot),
     })
 
 
@@ -417,9 +460,12 @@ def lot_labs_with_error(request, pk, msg):
 
 def lot_movement_with_error(request, pk, msg):
     from .vessels import vessel_options
+    from .blend import blend_source_lots
     lot = get_object_or_404(Lot, pk=pk)
     return _inject_error(request, pk, "web/_lot_movement.html", None, msg, lotpages.movements, "rows",
                          {"vessel_options": vessel_options(exclude_lot=lot),
+                          "blend_sources": blend_source_lots(exclude_lot=lot),
+                          "today": timezone.localdate().isoformat(),
                           "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")})
 
 
@@ -474,6 +520,7 @@ def report_run(request):
             raise ValueError("Year is required.")
         totals = None
         download = None
+        download_csv = None
         if needs == "year_month":
             month = _int(request, "month")
             if month is None:
@@ -482,8 +529,11 @@ def report_run(request):
                   "5120-17-p3": reporting_svc.build_5120_17_part3,
                   "5120-17-p4": reporting_svc.build_5120_17_part4}[key]
             value = fn(year, month)
-            if key == "5120-17":
-                download = f"/api/reports/5120-17/pdf/?year={year}&month={month}"
+            # All three views (Part I / III / IV) render into ONE combined 5120.17
+            # PDF — there's no separate per-part PDF endpoint, because the filing
+            # itself is one document. Offer the same download regardless of which
+            # part the person is looking at.
+            download = f"/api/reports/5120-17/pdf/?year={year}&month={month}"
         elif needs == "year_dates":
             start = request.POST.get("start") or ""
             end = request.POST.get("end") or ""
@@ -491,17 +541,22 @@ def report_run(request):
                 raise ValueError("Start and end dates are required (YYYY-MM-DD).")
             value = excise_svc.compute_period_excise(
                 year, _date.fromisoformat(start), _date.fromisoformat(end))
+            serial = (request.POST.get("serial") or "").strip()
+            if serial:
+                download = (f"/api/reports/5000-24/pdf/?year={year}&start={start}"
+                            f"&end={end}&serial={serial}")
         else:  # year only -> crush
             rows = crush_svc.ca_crush_report(year)
             totals = crush_svc.crush_report_totals(rows)
             value = rows
             download = f"/api/reports/crush/pdf/?year={year}"
+            download_csv = f"/api/reports/crush/csv/?year={year}"
     except Exception as e:  # noqa: BLE001
         return render(request, "web/_report_result.html", {"error": str(e), "title": title})
 
     return render(request, "web/_report_result.html",
                   {"title": title, "value": value, "totals": totals,
-                   "download": download, "report_key": key,
+                   "download": download, "download_csv": download_csv, "report_key": key,
                    "period": {"year": year}})
 
 
@@ -510,10 +565,12 @@ def report_run(request):
 # append-only), so straight create/update. `unit_cost` is a documented field.
 @login_required
 def additives(request):
+    from .reference import REGISTRY
     return render(request, "web/additives.html",
                   {"nav": "reference",
                    "additives": Additive.objects.order_by("name"),
-                   "categories": Additive.Category.choices})
+                   "categories": Additive.Category.choices,
+                   "tables": REGISTRY.values()})
 
 
 @login_required
