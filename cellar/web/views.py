@@ -188,6 +188,18 @@ def lot_detail(request, pk):
     progress, progress_err = (_safe(lotpages.ferment_progress, lot) if show_ferment
                                else (None, None))
 
+    # Red skin-contact minimum: only surfaced as an editable control when the
+    # lot is actually on a skin-contact red path (see fermentation.RED_SKIN_CONTACT_PATHS).
+    from cellar.services import fermentation as ferm_svc
+    skin_floor_date, skin_floor_days = ferm_svc.skin_contact_floor_date(lot)
+    skin_contact_ctx = None
+    if skin_floor_days is not None:
+        skin_contact_ctx = {
+            "days": skin_floor_days,
+            "floor_date": skin_floor_date,
+            "override": getattr(lot, "fermentation_override", None),
+        }
+
     # Merged timeline (additions + readings + movements) — the "what has
     # actually happened here" glance for the summary card.
     timeline_rows, timeline_err = _safe(lotpages.timeline, lot)
@@ -200,8 +212,36 @@ def lot_detail(request, pk):
         "task_summary": task_summary,
         "bond_card": bond_card,
         "progress": progress, "progress_error": progress_err,
+        "skin_contact": skin_contact_ctx,
         "timeline": timeline_rows or [], "timeline_error": timeline_err,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def lot_skin_contact_override_save(request, pk):
+    """Save (or clear, on blank) the per-lot minimum skin-contact override.
+    Always editable from the lot page — see LotFermentationOverride's
+    docstring for why this is separate from the append-only destemming record.
+    Plain form POST (not HTMX — lot_detail.html is a full page, not a
+    fragment), so this redirects back rather than re-rendering directly.
+    """
+    from django.shortcuts import redirect
+    from cellar.models import LotFermentationOverride
+    lot = get_object_or_404(Lot, pk=pk)
+    raw = (request.POST.get("min_skin_contact_days") or "").strip()
+    if raw == "":
+        LotFermentationOverride.objects.filter(lot=lot).delete()
+    else:
+        try:
+            days = int(raw)
+            if days < 0:
+                raise ValueError
+        except ValueError:
+            return redirect("lot-detail", pk=pk)
+        LotFermentationOverride.objects.update_or_create(
+            lot=lot, defaults={"min_skin_contact_days": days, "updated_by": request.user})
+    return redirect("lot-detail", pk=pk)
 
 
 # -- sub-panels (HTMX fragments swapped into #lot-panel) ---------------------

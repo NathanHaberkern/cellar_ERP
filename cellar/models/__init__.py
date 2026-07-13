@@ -13,7 +13,7 @@ from .ledger import Reading, Addition
 from .fermentation import (
     DestemmingEvent, TankAssignment, ColdSoakSchedule, PumpOverEvent, PunchDownEvent,
     InoculationEvent, LabRequest, LabResult, LabResultValue, CellarNote,
-    LabSampleAlias,
+    LabSampleAlias, LotFermentationOverride,
 )
 from .crushout import (
     TaxClass, VolumeMeasurement, PressingEvent, FortificationEvent, BookToBond,

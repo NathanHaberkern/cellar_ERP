@@ -5,6 +5,7 @@ All append-only, all following the pattern Reading/Addition established.
 Pressing, barrel-down, transfers, and the fortification event are the
 next tranche (crush-out), not here.
 """
+from django.conf import settings
 from django.db import models
 from .base import AppendOnly
 
@@ -232,3 +233,31 @@ class LabSampleAlias(models.Model):
 
     def __str__(self):
         return f"{self.description} → {self.lot}"
+
+
+class LotFermentationOverride(models.Model):
+    """Per-lot override for fermentation-estimate parameters.
+
+    Currently just the mandatory minimum skin-contact days used to floor the
+    estimated press date on red skin-contact paths (see
+    services.fermentation.skin_contact_floor_date). Deliberately a separate,
+    always-editable row rather than a field on DestemmingEvent: the
+    destemming record is append-only and documents what actually happened at
+    crush, while this is a tunable *planning* parameter you may want to
+    adjust mid-ferment (e.g. deciding on a longer extended maceration) without
+    touching the historical record of how the lot was processed.
+
+    Blank/null min_skin_contact_days falls back to the winery-wide
+    ConfigConstant default — this row only needs to exist when a lot departs
+    from that default.
+    """
+    lot = models.OneToOneField("cellar.Lot", on_delete=models.CASCADE,
+                               related_name="fermentation_override")
+    min_skin_contact_days = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="blank → use the winery-wide default")
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.PROTECT, related_name="+")
+
+    def __str__(self):
+        return f"{self.lot} fermentation override"

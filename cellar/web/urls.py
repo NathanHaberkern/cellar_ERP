@@ -85,6 +85,8 @@ urlpatterns = [
     path("lots/<int:pk>/bottling/run/", bottle.bottling_run, name="bottling-run"),
     # section scratchpad note + on-page entry actions
     path("lots/<int:pk>/note/<slug:section>/", views.lot_note_save, name="lot-note-save"),
+    path("lots/<int:pk>/ferment/skin-contact-override/", views.lot_skin_contact_override_save,
+         name="lot-skin-contact-override"),  # HTMX
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),
     path("lots/<int:pk>/labs/add/", views.lot_lab_create, name="lot-lab-create"),
     path("lots/<int:pk>/movement/transfer/", views.lot_transfer_create, name="lot-transfer-create"),

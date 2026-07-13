@@ -49,6 +49,9 @@ def brix_per_day():
 DEFAULT_PRESS_READY_BRIX = 0.0     # dryness target used to estimate a press date
 DEFAULT_SETTLING_DAYS = 2          # gap between press and barrel-down, before a
                                     # real PressingEvent/settling reading exists
+DEFAULT_MIN_SKIN_CONTACT_DAYS = 10 # red-wine mandatory floor (Nate's call, Jul 2026)
+LOGIT_EPS = 1e-3                   # keeps logit() finite near f=0/1
+MIN_LOGISTIC_READINGS = 3          # below this, fall back to the two-point rate
 
 
 def _config_float(key, default):
@@ -59,62 +62,186 @@ def _config_float(key, default):
         return default
 
 
+def _as_date(value):
+    return timezone.localtime(value).date() if hasattr(value, "hour") else value
+
+
+# ------------------------------------------------------ fermentation kinetics
+def _logit(f):
+    f = min(max(f, LOGIT_EPS), 1 - LOGIT_EPS)
+    return math.log(f / (1 - f))
+
+
+def _fit_logistic_days_remaining(series, target):
+    """Project days-from-last-reading to `target` Brix using a logistic
+    (S-curve) fit instead of a straight line.
+
+    WHY: real fermentation isn't linear — slow start, fast middle third, long
+    decelerating tail as sugar depletes and alcohol/temperature stress the
+    yeast. A straight-line projection from two points is consistently wrong
+    in the tail, which is exactly when an accurate "how much longer" matters
+    most. Cumulative fraction-fermented f(t) is well approximated by a
+    logistic curve, and a logistic curve is LINEAR after a logit transform:
+    logit(f) = ln(f/(1-f)) = a + b·t. That means an ordinary least-squares
+    fit — the same tool the old two-point method already used — captures the
+    S-curve shape once it's fit in transformed space, no new dependency
+    needed.
+
+    series[0] anchors f=0 (the starting sugar level, S0) and is not itself a
+    fit point (logit(0) is undefined) — the fit runs on the remaining
+    readings, so this needs >= 3 total readings (1 anchor + >= 2 fit points).
+
+    Returns (days_remaining, note) — note explains the fit or, on failure,
+    why it fell back. days_remaining can be negative (already past target).
+    """
+    s0 = series[0][1]
+    t0 = series[0][0]
+    span = s0 - target
+    if span <= 0:
+        return None, "initial Brix was already at/below the press-ready target"
+
+    pts = []
+    for d, v in series[1:]:
+        t_days = (d - t0).days
+        if t_days <= 0:
+            continue  # same-day re-check as the anchor; not a usable fit point
+        f = (s0 - v) / span
+        pts.append((t_days, _logit(f)))
+    if len(pts) < 2:
+        return None, "not enough post-anchor readings for a logistic fit"
+
+    n = len(pts)
+    mean_t = sum(p[0] for p in pts) / n
+    mean_y = sum(p[1] for p in pts) / n
+    num = sum((t - mean_t) * (y - mean_y) for t, y in pts)
+    den = sum((t - mean_t) ** 2 for t, y in pts)
+    if den == 0:
+        return None, "all usable readings fall on the same day"
+    b = num / den
+    a = mean_y - b * mean_t
+    if b <= 0:
+        return None, "fitted trend is flat or rising — logistic fit not usable"
+
+    # Time at which the fitted curve crosses "practically at target" (f
+    # clamped to 1-LOGIT_EPS, since f=1 exactly is asymptotic).
+    t_target = (_logit(1 - LOGIT_EPS) - a) / b
+    last_t = (series[-1][0] - t0).days
+    days_remaining = t_target - last_t
+    return days_remaining, f"logistic fit (S-curve, {n} readings past the {s0:g} °Brix start)"
+
+
 def estimate_press_and_barrel_dates(lot, asof=None):
-    """Rough estimated press and barrel-down dates from the live Brix trend.
+    """Estimated press and barrel-down dates.
 
-    Unlike `_estimate_due` (which projects forward from the INITIAL brix at
-    inoculation, for scheduling nutrient additions), this projects forward
-    from the MOST RECENT actual reading — so the estimate tightens as real
-    readings come in, rather than staying pinned to day-one assumptions.
+    Two independent inputs, combined by taking the LATER date:
+      1. A kinetics estimate from the live Brix trend — logistic fit with 3+
+         readings (see `_fit_logistic_days_remaining`), the simple observed
+         two-point rate with exactly 2, or nothing with fewer than 2.
+      2. A mandatory minimum skin-contact floor for red wine on the skin (see
+         `skin_contact_floor_date`) — a wine can always be held longer than
+         the kinetics alone would suggest, so the floor wins when it's later.
+         This never blocks pressing early in the real workflow; it only
+         floors the *estimate* shown here.
 
-    Needs at least two Brix readings to compute a rate; with only one (or
-    none), returns an estimate of None rather than guessing off a single
-    point or the global default rate, which would be more misleading than
-    useful this early in the ferment.
-
-    Returns {'press_date': date|None, 'barrel_down_date': date|None,
-             'basis': str} — `basis` explains what the estimate is built on
-    (or why there isn't one yet), meant to be shown next to the number so it
-    always reads as an estimate, never a commitment.
+    Returns {'press_date', 'barrel_down_date', 'basis'} — `basis` always
+    explains what produced the number, so it reads as a planning estimate to
+    verify, never a commitment.
     """
     asof = asof or timezone.localdate()
-    readings = list(Reading.objects.filter(
-        lot=lot, analyte=Reading.Analyte.BRIX, voided_at__isnull=True
-    ).order_by("measured_at"))
-
-    if len(readings) < 2:
-        basis = "need at least two Brix readings to project a trend"
-        return {"press_date": None, "barrel_down_date": None, "basis": basis}
-
-    latest = readings[-1]
-    prior = readings[-2]
-    latest_date = timezone.localtime(latest.measured_at).date() if hasattr(latest.measured_at, "date") else latest.measured_at
-    prior_date = timezone.localtime(prior.measured_at).date() if hasattr(prior.measured_at, "date") else prior.measured_at
-    span_days = (latest_date - prior_date).days
-    observed_drop = float(prior.value) - float(latest.value)
-
-    if span_days <= 0 or observed_drop <= 0:
-        # Flat or rising reading (e.g. a re-check same day, or a stuck/rising
-        # ferment) — fall back to the configured average rather than divide
-        # by zero or project backwards.
-        rate = brix_per_day()
-        basis = f"flat/rising trend — using the {rate:g} °Brix/day default rate"
-    else:
-        rate = observed_drop / span_days
-        basis = f"{rate:.2f} °Brix/day, from the last two readings ({prior_date} → {latest_date})"
-
     target = _config_float("press_ready_brix", DEFAULT_PRESS_READY_BRIX)
-    remaining = float(latest.value) - target
-    if remaining <= 0:
-        press_date = latest_date  # already at/below target
-    else:
-        days_out = math.ceil(remaining / rate) if rate > 0 else None
-        press_date = latest_date + timedelta(days=days_out) if days_out is not None else None
+    series = brix_series(lot)  # ascending [(date, brix), ...]
+
+    kinetics_date = None
+    basis_parts = []
+    simple_rate = None
+    latest_date = latest_val = None
+
+    if len(series) >= 2:
+        latest_date, latest_val = series[-1]
+        prior_date, prior_val = series[-2]
+        span_days = (latest_date - prior_date).days
+        observed_drop = prior_val - latest_val
+        if span_days > 0 and observed_drop > 0:
+            simple_rate = observed_drop / span_days
+
+    if len(series) >= MIN_LOGISTIC_READINGS and simple_rate:
+        days_remaining, note = _fit_logistic_days_remaining(series, target)
+        if days_remaining is not None:
+            # Sanity-bound the fit against the plain observed rate so one
+            # noisy early reading can't swing the projection wildly — a
+            # transform-shaped fit is only worth trusting within shouting
+            # distance of what the raw data plainly shows.
+            simple_days = (latest_val - target) / simple_rate if simple_rate else None
+            if simple_days and simple_days > 0:
+                lo, hi = 0.2 * simple_days, 4 * simple_days
+                if not (lo <= days_remaining <= hi):
+                    days_remaining = None
+                    note = "logistic projection was out of a plausible range vs. the observed rate — falling back"
+            if days_remaining is not None:
+                kinetics_date = latest_date + timedelta(days=max(0, math.ceil(days_remaining)))
+                basis_parts.append(note)
+
+    if kinetics_date is None and len(series) >= 2:
+        if simple_rate:
+            remaining = latest_val - target
+            days_out = math.ceil(remaining / simple_rate) if remaining > 0 else 0
+            kinetics_date = latest_date + timedelta(days=days_out)
+            basis_parts.append(f"{simple_rate:.2f} °Brix/day, from the last two readings "
+                                f"({prior_date} → {latest_date})")
+        else:
+            rate = brix_per_day()
+            remaining = latest_val - target
+            days_out = math.ceil(remaining / rate) if (rate > 0 and remaining > 0) else 0
+            kinetics_date = latest_date + timedelta(days=days_out)
+            basis_parts.append(f"flat/rising trend — using the {rate:g} °Brix/day default rate")
+
+    if len(series) < 2:
+        basis_parts.append("need at least two Brix readings to project a trend")
+
+    floor_date, floor_days = skin_contact_floor_date(lot)
+    press_date = kinetics_date
+    if floor_date is not None and (press_date is None or floor_date > press_date):
+        if press_date is not None:
+            basis_parts.append(f"floored to the {floor_days}-day minimum skin contact "
+                                f"(kinetics alone suggested pressing earlier)")
+        else:
+            basis_parts.append(f"{floor_days}-day minimum skin contact — no Brix trend yet")
+        press_date = floor_date
 
     settling_days = int(_config_float("settling_days_before_barrel", DEFAULT_SETTLING_DAYS))
     barrel_date = (press_date + timedelta(days=settling_days)) if press_date else None
 
-    return {"press_date": press_date, "barrel_down_date": barrel_date, "basis": basis}
+    return {"press_date": press_date, "barrel_down_date": barrel_date,
+            "basis": "; ".join(basis_parts) if basis_parts else "—"}
+
+
+# ---------------------------------------------------- red skin-contact floor
+# Only genuine skin-contact red paths — NOT rosé (Path B, deliberately short
+# skin contact by style) and NOT direct-press (Path C). Whole-cluster red
+# (E) macerates same as destemmed red (D), so both count.
+RED_SKIN_CONTACT_PATHS = ("D", "E")
+
+
+def min_skin_contact_days(lot):
+    """Effective minimum, per-lot override if set, else the winery default."""
+    override = getattr(lot, "fermentation_override", None)
+    if override is not None and override.min_skin_contact_days is not None:
+        return override.min_skin_contact_days
+    return int(_config_float("min_skin_contact_days_red", DEFAULT_MIN_SKIN_CONTACT_DAYS))
+
+
+def skin_contact_floor_date(lot):
+    """(floor_date, days) if this lot is on a red skin-contact path and has a
+    recorded destem date, else (None, None). This is a planning floor on the
+    ESTIMATE only — it never blocks a real Press action if you choose to
+    press earlier for your own reasons; that stays entirely up to you.
+    """
+    destem = (lot.destemmings.filter(voided_at__isnull=True)
+              .order_by("destem_at").first())
+    if destem is None or destem.processing_path not in RED_SKIN_CONTACT_PATHS:
+        return None, None
+    days = min_skin_contact_days(lot)
+    return _as_date(destem.destem_at) + timedelta(days=days), days
 
 
 def brix_series(lot):
