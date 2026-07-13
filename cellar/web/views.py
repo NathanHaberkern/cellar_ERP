@@ -53,15 +53,21 @@ def _safe(fn, *args, **kwargs):
 # ---------------------------------------------------------------- dashboard --
 @login_required
 def dashboard(request):
+    from cellar.services import dashboard_mode, cellar_board
     active_lots = Lot.objects.count()
-    tank_map, tank_map_error = _safe(build_tank_map)
+    mode = dashboard_mode.detect_mode()
     ctx = {
         "nav": "dashboard",
         "active_lots": active_lots,
         "today": timezone.localdate(),
-        "tank_map": tank_map or [],
-        "tank_map_error": tank_map_error,
+        "mode": mode,
     }
+    if mode == "crush":
+        tank_map, tank_map_error = _safe(build_tank_map)
+        ctx.update({"tank_map": tank_map or [], "tank_map_error": tank_map_error})
+    else:
+        board, board_error = _safe(cellar_board.board_context)
+        ctx.update({"board": board or {}, "board_error": board_error})
     from . import tasks as tasks_web
     ctx.update(tasks_web.dash_tasks_ctx(request))
     return render(request, "web/dashboard.html", ctx)

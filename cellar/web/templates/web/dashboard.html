@@ -6,6 +6,9 @@
     <p class="eyebrow">{{ today|date:"l, F j, Y" }}</p>
     <h1>Dashboard</h1>
   </div>
+  <div class="lot-status" title="Auto-detected from lot statuses — see dashboard_mode.py">
+    {% if mode == "crush" %}Crush mode{% else %}Cellar mode{% endif %}
+  </div>
 </div>
 <div class="cards">
   <div class="card"><div class="n">{{ active_lots }}</div><div class="l">Active lots</div></div>
@@ -26,5 +29,9 @@
   </div>
 </section>
 
-{% include "web/_tank_map.html" %}
+{% if mode == "crush" %}
+  {% include "web/_tank_map.html" %}
+{% else %}
+  {% include "web/_cellar_board.html" %}
+{% endif %}
 {% endblock %}

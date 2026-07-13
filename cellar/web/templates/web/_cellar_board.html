@@ -1,0 +1,67 @@
+{# Cellar Mode board — shown on the dashboard when no lot is in the pre-primary
+   pipeline (see cellar.services.dashboard_mode). Three panels: what needs
+   topping/SO2, which barrels are sitting partial, which lots need VA watched. #}
+<div class="tankmap">
+  <div class="tankmap-head">
+    <h2>Cellar board</h2>
+    <span class="muted">No fruit in the pipeline right now — showing barrel-aging status instead of the tank map.</span>
+  </div>
+
+  {% if board_error %}<div class="msg err">{{ board_error }}</div>{% endif %}
+
+  <div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+
+    <div class="card">
+      <div class="l disp bond" style="margin-bottom:8px">Topping / SO2 due</div>
+      {% if board.topping_due %}
+        <table class="kv"><tbody>
+          {% for r in board.topping_due %}
+            <tr>
+              <th><a href="{% url 'lot-detail' r.lot.pk %}">{{ r.lot.code }}</a></th>
+              <td>{{ r.days_since }}d since last top
+                <span class="muted">· {{ r.barrel_count }} barrel{{ r.barrel_count|pluralize }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody></table>
+      {% else %}
+        <div class="empty" style="padding:10px 0">Nothing overdue.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="l disp ferment" style="margin-bottom:8px">Partial-fill barrels</div>
+      {% if board.partial_barrels %}
+        <table class="kv"><tbody>
+          {% for r in board.partial_barrels %}
+            <tr>
+              <th><a href="{% url 'lot-detail' r.lot.pk %}">{{ r.container_id }}</a></th>
+              <td>{{ r.volume_gal|floatformat:1 }} / {{ r.capacity_gal|floatformat:1 }} gal
+                <span class="muted">· {{ r.ullage_gal|floatformat:1 }} gal short · {{ r.lot.code }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody></table>
+      {% else %}
+        <div class="empty" style="padding:10px 0">No partial barrels.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="l disp" style="margin-bottom:8px;color:var(--red-ink)">VA watch</div>
+      {% if board.va_watch %}
+        <table class="kv"><tbody>
+          {% for r in board.va_watch %}
+            <tr>
+              <th><a href="{% url 'lot-detail' r.lot.pk %}">{{ r.lot.code }}</a></th>
+              <td>{{ r.latest_va }} g/L
+                <span class="badge danger">{{ r.reason }}</span>
+                {% if r.delta %}<span class="muted">· {{ r.delta|floatformat:2 }} since last</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody></table>
+      {% else %}
+        <div class="empty" style="padding:10px 0">Nothing flagged.</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
