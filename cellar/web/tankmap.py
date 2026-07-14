@@ -18,8 +18,11 @@ from cellar.models.reference import Vessel
 from cellar.models.fermentation import TankAssignment
 
 # Lot statuses that get their own highlight color on the map. Everything else
-# (planned / receiving / processing / settling / done_primary) renders neutral.
-HIGHLIGHT = {"cold_soak": "cold", "fermenting": "ferment", "pressed": "pressed"}
+# (planned / receiving / processing / done_primary) renders neutral.
+# Settling shares cold_soak's color: both are "juice/wine sitting cold,
+# nothing fermenting yet, needs the next step" — visually the same kind of
+# active-but-quiet state, and worth standing out the same way.
+HIGHLIGHT = {"cold_soak": "cold", "settling": "cold", "fermenting": "ferment", "pressed": "pressed"}
 
 _BIN_TYPES = (Vessel.Type.MACRO_BIN, Vessel.Type.ONE_TON_BIN)
 _ROOM_ORDER = [

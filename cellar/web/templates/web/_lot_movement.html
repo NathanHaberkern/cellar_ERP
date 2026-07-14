@@ -54,8 +54,9 @@
       </div>
       <div><label>Kind</label>
         <select name="kind">
-          <option value="taxpaid">Bulk taxpaid sale</option>
-          <option value="in_bond">In-bond transfer (to another bonded winery)</option>
+          <option value="taxpaid">Bulk taxpaid sale (wine)</option>
+          <option value="in_bond">In-bond transfer (wine, to another bonded winery)</option>
+          <option value="must_sale">Bulk sale of must/juice (pre-fermentation)</option>
         </select></div>
       <div><label>Channel <span class="muted">(taxpaid only)</span></label>
         <select name="channel">
@@ -71,7 +72,7 @@
     <label>Note</label><textarea name="note" rows="2"></textarea>
     <div class="note-actions">
       <button class="btn sm" type="submit"
-              hx-confirm="Book this as leaving the winery? This closes {{ lot.code }}'s current vessel and, for wine, writes the 5120.17 entry.">
+              hx-confirm="Book this as leaving the winery? A full-balance sale closes {{ lot.code }}'s current vessel; a partial sale just reduces its tracked volume. Wine sales also write the 5120.17 entry.">
         Book external transfer</button>
     </div>
   </form>

@@ -31,6 +31,7 @@ from cellar.models.ledger import Reading, Addition
 from cellar.models.crushout import FortificationEvent, PressingEvent
 from cellar.models.aging import ToppingEvent, VolumeLoss, RackAssignment
 from cellar.models.bottling import BottlingRun, TaxPaidRemoval
+from cellar.models.reporting import BulkTaxPaidRemoval, BondTransfer, MustSale
 
 LEDGER = {
     "additions":        ("Additions",          Addition,          None),
@@ -42,6 +43,9 @@ LEDGER = {
     "volume-losses":    ("Volume losses",      VolumeLoss,        None),
     "bottling-runs":    ("Bottling runs",      BottlingRun,       None),
     "tax-paid-removals":("Tax-paid removals",  TaxPaidRemoval,    None),
+    "bulk-taxpaid-removals": ("Bulk taxpaid removals", BulkTaxPaidRemoval, None),
+    "bond-transfers":   ("Bond transfers",     BondTransfer,      None),
+    "must-sales":       ("Must/juice sales",   MustSale,          None),
 }
 
 

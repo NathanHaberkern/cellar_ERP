@@ -41,6 +41,7 @@ from decimal import Decimal
 
 from cellar.models import (
     AgingPlacement, BottlingRun, BulkTaxPaidRemoval, LotLineage, VolumeLoss,
+    BondTransfer, MustSale,
 )
 from cellar.services.aging import _lot_volume
 
@@ -101,16 +102,36 @@ def bulk_removed_gal(lot):
                 BulkTaxPaidRemoval.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
 
 
+def bond_transferred_out_gal(lot):
+    """BondTransfer OUT rows tied to this lot. The docstring formula at the top
+    of this file already listed 'bulk taxpaid removals' as a balance deduction
+    but not in-bond transfers out — an oversight, since both are wine actually
+    leaving the lot. Fixed here."""
+    return sum((_d(t.gallons) for t in
+                BondTransfer.objects.filter(
+                    lot=lot, direction=BondTransfer.Direction.OUT,
+                    voided_at__isnull=True)), ZERO)
+
+
+def must_sold_gal(lot):
+    """Bulk juice/must sold before the lot was ever inoculated — see
+    services/external_transfer.py and models.MustSale."""
+    return sum((_d(s.gallons) for s in
+                MustSale.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+
+
 def lot_balance(lot):
-    """Wine currently in the lot, in gallons. None if the lot has never booked a
-    volume AND has no inbound liquid (i.e. nothing to balance yet)."""
+    """Wine (or juice/must, pre-ferment) currently in the lot, in gallons. None
+    if the lot has never booked a volume AND has no inbound liquid (i.e.
+    nothing to balance yet)."""
     booked = booked_volume(lot)
     inbound = inbound_gal(lot)
     if booked is None and inbound == ZERO:
         return None
     bal = ((booked or ZERO) + inbound
            - outbound_gal(lot) - losses_gal(lot)
-           - bottled_gal(lot) - bulk_removed_gal(lot))
+           - bottled_gal(lot) - bulk_removed_gal(lot)
+           - bond_transferred_out_gal(lot) - must_sold_gal(lot))
     return bal.quantize(GAL)
 
 
@@ -124,6 +145,8 @@ def lot_balance_detail(lot):
         "losses": losses_gal(lot).quantize(GAL),
         "bottled": bottled_gal(lot).quantize(GAL),
         "bulk_removed": bulk_removed_gal(lot).quantize(GAL),
+        "bond_transferred_out": bond_transferred_out_gal(lot).quantize(GAL),
+        "must_sold": must_sold_gal(lot).quantize(GAL),
         "balance": lot_balance(lot),
     }
 

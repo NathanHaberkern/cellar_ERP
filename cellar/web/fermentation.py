@@ -84,7 +84,7 @@ def ferment_ctx(lot):
         "show_rack": show_rack,
     }
 
-    if show_press_first or show_press:
+    if show_press_first or show_press or show_rack_lees:
         from .vessels import vessel_options
         ctx["vessel_options"] = vessel_options(exclude_lot=lot)
 

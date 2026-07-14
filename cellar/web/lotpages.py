@@ -416,6 +416,13 @@ def movements(lot):
                      "gallons": -r.wine_gallons if r.wine_gallons is not None else None,
                      "note": "bulk taxpaid removal"})
 
+    # Sale — bulk must/juice, pre-fermentation (never a TTB wine-gallon event)
+    for s in lot.must_sales.filter(voided_at__isnull=True):
+        rows.append({"type": "Sale", "date": _d(s.sold_at), "start": lot.code,
+                     "end": s.destination.name if s.destination else "—",
+                     "gallons": -s.gallons if s.gallons is not None else None,
+                     "note": s.notes or "must/juice sale"})
+
     # Bond transfer to / from another bonded premises
     for t in BondTransfer.objects.filter(lot=lot, voided_at__isnull=True):
         out = t.direction == BondTransfer.Direction.OUT

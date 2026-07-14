@@ -547,6 +547,13 @@ class BulkTaxPaidRemovalAdmin(AuditMixin, admin.ModelAdmin):
     list_filter = ("tax_class", "channel")
 
 
+from cellar.models import MustSale
+@admin.register(MustSale)
+class MustSaleAdmin(AuditMixin, admin.ModelAdmin):
+    list_display = ("sold_at", "lot", "gallons", "destination", "price_per_gallon")
+    list_filter = ("destination",)
+
+
 # ------------------------------------------------------------------- tasks
 class TaskEventInline(admin.TabularInline):
     model = TaskEvent

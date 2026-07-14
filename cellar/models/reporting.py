@@ -140,6 +140,28 @@ class BulkTaxPaidRemoval(AppendOnly):
         return f"bulk taxpaid {self.wine_gallons} gal ({self.tax_class}) {self.removed_at}"
 
 
+class MustSale(AppendOnly):
+    """Bulk sale of unfermented juice or must — grapes/juice that left the winery
+    before ever being inoculated (e.g. "100 gal sold to Pat Dold" mid-settling).
+
+    Deliberately NOT a BulkTaxPaidRemoval or BondTransfer: those both represent
+    WINE leaving under a TTB tax class, and juice that has never fermented has
+    no tax class to report on the 5120.17 (same rule external_transfer.is_wine()
+    already uses to skip that report). This still needs to reduce the lot's
+    tracked volume and show up in its history — it just isn't a tax event.
+    """
+    lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="must_sales")
+    gallons = models.DecimalField(max_digits=10, decimal_places=1)
+    sold_at = models.DateField()
+    price_per_gallon = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True,
+                                           help_text="optional — accounting reference only")
+    destination = models.ForeignKey(ExternalDestination, null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name="+")
+
+    def __str__(self):
+        return f"must sale {self.gallons} gal {self.sold_at}"
+
+
 class BondAdjustment(AppendOnly):
     """The minor 5120.17 movements captured simply for now."""
     class Kind(models.TextChoices):

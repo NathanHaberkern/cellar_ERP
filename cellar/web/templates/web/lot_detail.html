@@ -151,10 +151,12 @@
   <button class="{% if hide_additions %}on{% endif %}" hx-get="{% url 'lot-ferment' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Fermentation</button>
   {% endif %}
-  {% if not hide_additions %}
-  <button class="on" hx-get="{% url 'lot-additions' lot.pk %}" hx-target="#lot-panel"
+  {# Additions stays reachable through cold soak / fermenting / pressed / settling —
+     ad hoc additions (acid adjustments, fining, anything outside the scheduled
+     nutrient plan) still happen in that window. Fermentation just gets the
+     default-active tab there, same as before. #}
+  <button class="{% if not hide_additions %}on{% endif %}" hx-get="{% url 'lot-additions' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Additions</button>
-  {% endif %}
   <button hx-get="{% url 'lot-labs' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Labs</button>
   <button hx-get="{% url 'lot-movement' lot.pk %}" hx-target="#lot-panel"

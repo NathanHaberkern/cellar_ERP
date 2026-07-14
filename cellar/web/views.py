@@ -153,7 +153,11 @@ def _lot_filter_ctx(request):
 def lot_detail(request, pk):
     lot = get_object_or_404(Lot, pk=pk)
     summary, err = _safe(lotpages.summary, lot)
-    # tab gate (C1): fermentation replaces additions through the ferment window
+    # tab gate (C1): during cold soak/fermenting/pressed/settling, Fermentation
+    # is the default-active tab — but Additions stays visible and reachable the
+    # whole time (ad hoc additions like acid adjustments or fining don't stop
+    # just because the lot is settling or mid-ferment). hide_additions only
+    # picks the default tab now; see lot_detail.html.
     ferment_window = {Lot.Status.COLD_SOAK, Lot.Status.FERMENTING,
                       Lot.Status.PRESSED, Lot.Status.SETTLING}
     show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
@@ -507,13 +511,19 @@ def lot_external_transfer_create(request, pk):
             at=_parse_dt(request.POST.get("transferred_at")), kind=kind,
             channel=request.POST.get("channel") or None,
             note=request.POST.get("note", ""), actor=request.user)
-        if result["wine"]:
-            kind_label = "in-bond transfer" if kind == "in_bond" else "bulk taxpaid removal"
+        extent = "The lot is now empty." if result["full_sale"] else \
+                 "The remaining balance stays in its current vessel."
+        if kind == ext.KIND_MUST_SALE:
+            ok = (f"Recorded {result['gallons']} gal must/juice sale to {dest.name}. "
+                  f"No 5120.17 entry needed — {lot.code} is still juice/must "
+                  f"(never inoculated). {extent}")
+        elif result["wine"]:
+            kind_label = "in-bond transfer" if kind == ext.KIND_IN_BOND else "bulk taxpaid removal"
             ok = (f"Recorded {result['gallons']} gal to {dest.name} — the 5120.17 "
-                  f"{kind_label} entry has been written.")
+                  f"{kind_label} entry has been written. {extent}")
         else:
             ok = (f"Recorded {result['gallons']} gal to {dest.name}. No 5120.17 entry "
-                  f"needed — {lot.code} is still juice/grapes (never inoculated).")
+                  f"needed — {lot.code} is still juice/grapes (never inoculated). {extent}")
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001
         return lot_movement_with_error(request, pk, str(e))
