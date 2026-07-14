@@ -26,24 +26,28 @@ from cellar.models import (
     LabAnalyte, LabAnalyteSynonym, ConfigConstant,
     Room, Location, BarrelOrder, Container, Rack,
     BottleFormat, DryGood, Material, ExternalDestination,
+    TankAssignment,
 )
 
 
 class TableSpec:
     """One reference table's editor config.
 
-    slug     : URL segment, e.g. 'varieties'
-    model    : the Django model
-    label    : plural display name
-    fields   : field names to show as columns / form inputs, in order
-    order_by : queryset ordering
+    slug       : URL segment, e.g. 'varieties'
+    model      : the Django model
+    label      : plural display name
+    fields     : field names to show as columns / form inputs, in order
+    order_by   : queryset ordering
+    row_filter : optional (qs, request) -> qs hook for tables that need a
+                 default filter with a toggle (e.g. hiding emptied bin vessels)
     """
-    def __init__(self, slug, model, label, fields, order_by=None):
+    def __init__(self, slug, model, label, fields, order_by=None, row_filter=None):
         self.slug = slug
         self.model = model
         self.label = label
         self.fields = fields
         self.order_by = order_by or fields[:1]
+        self.row_filter = row_filter
 
     def form_class(self):
         spec = self
@@ -54,8 +58,29 @@ class TableSpec:
                 fields = spec.fields
         return _Form
 
-    def queryset(self):
-        return self.model.objects.order_by(*self.order_by)
+    def queryset(self, request=None):
+        qs = self.model.objects.order_by(*self.order_by)
+        if self.row_filter:
+            qs = self.row_filter(qs, request)
+        return qs
+
+
+# Macro-bin / 1-ton-bin vessels are created fresh per crush (see
+# services/operations.py) and are meaningless clutter once their lot has moved
+# on. A vessel is "current" if it has an open (unvacated) TankAssignment; real
+# tanks are never filtered regardless of occupancy. `?show_empty_bins=1`
+# reveals them — same "hide by default, toggle to see" pattern as the ledger's
+# hide_voided checkbox.
+def _vessel_row_filter(qs, request):
+    if request and request.GET.get("show_empty_bins") == "1":
+        return qs
+    bin_types = (Vessel.Type.MACRO_BIN, Vessel.Type.ONE_TON_BIN)
+    open_bin_ids = TankAssignment.objects.filter(
+        voided_at__isnull=True, emptied_at__isnull=True,
+        vessel__type__in=bin_types,
+    ).values_list("vessel_id", flat=True)
+    from django.db.models import Q
+    return qs.exclude(Q(type__in=bin_types) & ~Q(pk__in=open_bin_ids))
 
 
 # ----------------------------------------------------------------- registry
@@ -73,7 +98,8 @@ REGISTRY = {
                   ["variety", "program", "abbreviation", "block", "vineyard", "is_curated"]),
         TableSpec("vessels", Vessel, "Vessels",
                   ["code", "type", "capacity_gal", "max_fruit_tons", "refrigerated",
-                   "temp_controlled", "volume_method", "room"]),
+                   "temp_controlled", "volume_method", "room"],
+                  row_filter=_vessel_row_filter),
         TableSpec("rooms", Room, "Rooms",
                   ["name", "notes"]),
         TableSpec("locations", Location, "Locations",
@@ -136,11 +162,12 @@ def reference_index(request):
 def reference_table(request, slug):
     spec = get_object_or_404_spec(slug)
     Form = spec.form_class()
-    rows = spec.queryset()
+    rows = spec.queryset(request)
     return render(request, "web/reference_table.html", {
         "nav": "reference", "spec": spec, "tables": REGISTRY.values(),
         "row_objs": [(obj, _display_row(spec, obj)) for obj in rows],
         "form": Form(),
+        "show_empty_bins": request.GET.get("show_empty_bins") == "1",
     })
 
 

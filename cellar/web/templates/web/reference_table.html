@@ -1,7 +1,16 @@
 {% extends "web/base.html" %}
 {% block title %}{{ spec.label }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><p class="eyebrow">Reference</p><h1>{{ spec.label }}</h1></div></div>
+<div class="page-head">
+  <div><p class="eyebrow">Reference</p><h1>{{ spec.label }}</h1></div>
+  {% if spec.slug == "vessels" %}
+    {% if show_empty_bins %}
+      <a class="btn ghost sm" href="{% url 'reference-table' spec.slug %}">Hide emptied bins</a>
+    {% else %}
+      <a class="btn ghost sm" href="?show_empty_bins=1">Show emptied bins</a>
+    {% endif %}
+  {% endif %}
+</div>
 
 <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:18px">
   <a class="btn ghost sm" href="{% url 'additives' %}">Additives</a>

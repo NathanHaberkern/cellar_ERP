@@ -1,0 +1,38 @@
+{% extends "web/base.html" %}
+{% block title %}Weigh tags{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Receiving</p><h1>Weigh tags</h1></div>
+</div>
+
+<form method="get" style="margin-bottom:14px;max-width:280px">
+  <label class="l">Search</label>
+  <input type="text" name="q" value="{{ q }}" placeholder="Tag number…">
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Tag #</th><th>Vineyard</th><th>Block</th><th>Disposition</th>
+      <th>Net lbs</th><th>Allocated lbs</th><th>Remaining lbs</th><th style="width:1%"></th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><a href="{% url 'weightag-detail' r.wt.pk %}">{{ r.wt.weigh_tag_number }}</a></td>
+        <td>{{ r.vineyard|default:"—" }}</td>
+        <td>{{ r.block|default:"—" }}</td>
+        <td>{{ r.wt.get_disposition_display }}</td>
+        <td>{{ r.net_total|floatformat:1 }}</td>
+        <td>{{ r.allocated_lbs|floatformat:1 }}</td>
+        <td>{{ r.remaining_lbs|floatformat:1 }}</td>
+        <td><a class="btn ghost sm" href="{% url 'weightag-detail' r.wt.pk %}">View</a></td>
+      </tr>
+      {% endfor %}
+      {% if not rows %}
+        <tr><td colspan="8"><div class="empty">No weigh tags yet.</div></td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

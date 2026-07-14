@@ -72,6 +72,9 @@ class AppendOnly(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
+        from django.conf import settings
+        if getattr(settings, "ALLOW_HARD_DELETE", False):
+            return super().delete(*args, **kwargs)
         raise ValueError(f"{type(self).__name__} is append-only; void it instead of deleting.")
 
     @property

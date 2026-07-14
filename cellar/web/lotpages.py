@@ -29,7 +29,12 @@ from django.utils import timezone
 from cellar.models import (
     Lot, TankAssignment, Reading, VolumeMeasurement, LotLineage, VolumeLoss,
     BottlingRun, AgingPlacement, BulkTaxPaidRemoval, BondTransfer, LotSectionNote,
+    Vessel, WeighTagAllocation,
 )
+
+# Bin-type vessels crushed together (same lot, same instant) collapse to one
+# summary movement row instead of one "Racking" row per bin — see movements().
+_BIN_TYPES = (Vessel.Type.MACRO_BIN, Vessel.Type.ONE_TON_BIN)
 from cellar.services import aging as aging_svc
 from cellar.services import operations as ops
 from cellar.services import labpanels
@@ -285,15 +290,52 @@ def movements(lot):
     rows = []
 
     # Racking / tank moves — each assignment; 'from' = the lot's prior vessel.
+    # Bin-type assignments made together at crush (same instant, several macro/
+    # 1-ton bins) collapse to one summary row — a 14-bin crush shouldn't read as
+    # 14 separate "Racking" lines. Anything else (single bin, or a later rack
+    # move onto a real tank) keeps the normal per-assignment row.
     assigns = list(TankAssignment.objects.filter(lot=lot, voided_at__isnull=True)
                    .select_related("vessel").order_by("assigned_at", "id"))
     prev_vessel = None
-    for a in assigns:
-        rows.append({
-            "type": "Racking", "date": _d(a.assigned_at),
-            "start": prev_vessel or "—", "end": a.vessel.code,
-            "gallons": None, "note": a.notes or ""})
-        prev_vessel = a.vessel.code
+    i = 0
+    while i < len(assigns):
+        a = assigns[i]
+        if a.vessel.type in _BIN_TYPES:
+            group = [a]
+            j = i + 1
+            while (j < len(assigns) and assigns[j].vessel.type in _BIN_TYPES
+                   and assigns[j].assigned_at == a.assigned_at):
+                group.append(assigns[j])
+                j += 1
+            if len(group) > 1:
+                tags = (WeighTagAllocation.objects.filter(lot=lot, voided_at__isnull=True)
+                        .select_related("weigh_tag").order_by("id"))
+                tag_label = ", ".join(dict.fromkeys(
+                    t.weigh_tag.weigh_tag_number for t in tags)) or "fruit"
+                vm = VolumeMeasurement.objects.filter(
+                    lot=lot, voided_at__isnull=True, measured_at=a.assigned_at).first()
+                gallons = vm.volume_gal if vm else sum(
+                    (g.vessel.capacity_gal or 0) for g in group)
+                rows.append({
+                    "type": "Crush", "date": _d(a.assigned_at),
+                    "start": prev_vessel or "—", "end": f"{len(group)} macro bins",
+                    "gallons": gallons,
+                    "note": f"Crush {tag_label} \u2192 {len(group)} macro bins"})
+                prev_vessel = None  # ambiguous which single bin is "current" after a group
+            else:
+                rows.append({
+                    "type": "Racking", "date": _d(a.assigned_at),
+                    "start": prev_vessel or "—", "end": a.vessel.code,
+                    "gallons": None, "note": a.notes or ""})
+                prev_vessel = a.vessel.code
+            i = j
+        else:
+            rows.append({
+                "type": "Racking", "date": _d(a.assigned_at),
+                "start": prev_vessel or "—", "end": a.vessel.code,
+                "gallons": None, "note": a.notes or ""})
+            prev_vessel = a.vessel.code
+            i += 1
 
     # Blending (lot is child = received blend; lot is parent = blended out)
     blend_rels = {LotLineage.Relationship.WHOLE_BLEND, LotLineage.Relationship.PARTIAL_BLEND}

@@ -21,6 +21,7 @@ from . import topping as top
 from . import blend as blend_web
 from . import reference as ref
 from . import daily as daily_web
+from . import weightags
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -46,6 +47,9 @@ urlpatterns = [
     path("intake/destem/", intake.intake_destem, name="intake-destem"),            # HTMX
     path("intake/dose/", intake.dose_preview, name="intake-dose"),                 # HTMX
     path("intake/<int:lot_pk>/addition/", intake.intake_addition, name="intake-addition"),  # HTMX
+
+    path("weigh-tags/", weightags.weightag_list, name="weightag-list"),
+    path("weigh-tags/<int:pk>/", weightags.weightag_detail, name="weightag-detail"),
 
     path("lots/", views.lots_list, name="lots"),
     path("lots/search/", views.lots_search, name="lots-search"),          # HTMX

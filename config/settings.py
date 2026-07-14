@@ -27,6 +27,13 @@ def _env_list(name):
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-key-change-in-production")
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("1", "true", "yes", "on")
 
+# Testing-only escape hatch: AppendOnly.delete() and the admin's delete UI for
+# append-only models are hard-blocked unless this is on. NEVER set this in
+# production — it exists so the parallel-run/test phase can clean up mistaken
+# entries without weakening the compliance guard once the system goes live.
+ALLOW_HARD_DELETE = os.environ.get("ALLOW_HARD_DELETE", "False").lower() in (
+    "1", "true", "yes", "on")
+
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS") + [".herokuapp.com"]
 if DEBUG:
     ALLOWED_HOSTS += ["localhost", "127.0.0.1"]

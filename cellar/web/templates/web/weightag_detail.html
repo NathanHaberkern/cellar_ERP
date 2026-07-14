@@ -1,0 +1,72 @@
+{% extends "web/base.html" %}
+{% block title %}{{ wt.weigh_tag_number }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{% url 'weightag-list' %}">Weigh tags</a></p>
+    <h1>{{ wt.weigh_tag_number }}</h1></div>
+</div>
+
+<div class="card" style="max-width:640px;margin-bottom:18px">
+  <p class="eyebrow" style="margin:0 0 10px">Summary</p>
+  <table class="kv">
+    <tr><th>Vineyard / block</th>
+        <td>
+          {% if wt.harvest_event.block %}
+            {{ wt.harvest_event.block.vineyard.name }} — {{ wt.harvest_event.block.name }}
+          {% else %}—{% endif %}
+        </td></tr>
+    <tr><th>Harvest date</th><td>{{ wt.harvest_event.harvest_date|default:"—" }}</td></tr>
+    <tr><th>Source type</th><td>{{ wt.get_source_type_display }}</td></tr>
+    <tr><th>Disposition</th><td>{{ wt.get_disposition_display }}</td></tr>
+    <tr><th>Net total</th><td>{{ wt.net_total|floatformat:1 }} lb ({{ wt.net_tons|floatformat:2 }} tons)</td></tr>
+    <tr><th>Allocated</th><td>{{ wt.allocated_lbs|floatformat:1 }} lb</td></tr>
+    <tr><th>Remaining</th><td>{{ wt.remaining_lbs|floatformat:1 }} lb</td></tr>
+    <tr><th>MOG / rot</th><td>{{ wt.get_mog_severity_display }} / {{ wt.get_rot_severity_display }}
+        {% if wt.rot_type %}({{ wt.rot_type }}){% endif %}</td></tr>
+    {% if wt.notes %}<tr><th>Notes</th><td>{{ wt.notes }}</td></tr>{% endif %}
+  </table>
+</div>
+
+{% if bins %}
+<div class="table-wrap" style="margin-bottom:18px">
+  <p class="eyebrow">Bin lines</p>
+  <table>
+    <thead><tr><th>Bin label</th><th># bins</th><th>Gross lbs</th><th>Net lbs</th><th>Assigned lot</th></tr></thead>
+    <tbody>
+      {% for b in bins %}
+      <tr>
+        <td>{{ b.bin_label }}</td>
+        <td>{{ b.bin_count }}</td>
+        <td>{{ b.gross_lbs|floatformat:1 }}</td>
+        <td>{{ b.net_lbs|floatformat:1 }}</td>
+        <td>
+          {% if b.assigned_lot %}
+            <a href="{% url 'lot-detail' b.assigned_lot.pk %}">{{ b.assigned_lot.code }}</a>
+          {% else %}<span class="muted">unassigned</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <p class="eyebrow">Lots fed by this tag</p>
+  {% if lots %}
+  <table>
+    <thead><tr><th>Lot</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for lot in lots %}
+      <tr>
+        <td><a href="{% url 'lot-detail' lot.pk %}">{{ lot.code }}</a></td>
+        <td>{{ lot.get_status_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty">Not yet assigned to a lot.</div>
+  {% endif %}
+</div>
+{% endblock %}
