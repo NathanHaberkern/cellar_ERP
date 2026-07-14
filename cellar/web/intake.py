@@ -98,7 +98,8 @@ def intake_index(request):
                        .order_by("vineyard__name", "name"),
         "tanks": tanks,
         "weigh_tags": open_tags,
-        "additives": Additive.objects.exclude(dose_mode=Additive.DoseMode.BENCH)
+        "has_open_weigh_tags": bool(open_tags),
+        "additives": Additive.objects.filter(crush_addition=True)
                           .order_by("category", "name"),
         "severities": WeighTag._meta.get_field("mog_severity").choices,
         "default_vintage": timezone.now().year % 100,
@@ -249,8 +250,6 @@ def intake_destem(request):
     lot = r["lot"]
     resp = render(request, "web/_intake_result.html", {
         "r": r, "lot": lot,
-        "additives": Additive.objects.exclude(dose_mode=Additive.DoseMode.BENCH)
-                          .order_by("category", "name"),
         "additions": lot.additions.filter(voided_at__isnull=True).order_by("id"),
     })
     # Swap the whole form out for the summary so the same entry can't be submitted

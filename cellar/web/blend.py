@@ -1,7 +1,9 @@
 """
 Blending — front end (HTMX). Lives on the Movement tab, next to the plain tank
 transfer form, since a blend both moves wine and writes the compliance edge
-that transfer_lot(allow_blend=True) alone never did — see services/blending.py.
+that a plain transfer never did — see services/blending.py. Any move into an
+already-occupied tank is now required to go through this form; the plain
+transfer form rejects an occupied destination outright.
 
 The form takes ONE destination lot and one or more source rows (lot + kind +
 gallons for a partial). Cross-tax-class blends are allowed — that's exactly

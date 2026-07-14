@@ -27,6 +27,7 @@ from .bottling import (
 )
 from .reporting import (
     Phase, BondTransfer, Material, MaterialTransaction, SweeteningEvent, BondAdjustment, BulkTaxPaidRemoval,
+    ExternalDestination,
 )
 from .tasks import Task, TaskEvent, TaskRule, DailyPlan
 
@@ -45,6 +46,7 @@ __all__ = [
     "VolumeLoss", "ToppingEvent", "ToppingTarget", "Room", "Location",
     "BottleFormat", "DryGood", "BottlingRun", "BottlingDryGoodUse", "TaxPaidRemoval",
     "Phase", "BondTransfer", "Material", "MaterialTransaction", "SweeteningEvent", "BondAdjustment", "BulkTaxPaidRemoval",
-    "Task", "TaskEvent", "TaskRule",
-    "LabSampleAlias",
+    "ExternalDestination",
+    "Task", "TaskEvent", "TaskRule", "DailyPlan",
+    "LabSampleAlias", "LotFermentationOverride",
 ]

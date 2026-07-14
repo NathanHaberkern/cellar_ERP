@@ -33,7 +33,7 @@
   <form hx-post="{% url 'lot-lab-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
     <div class="form-grid">
       <div><label>Lab</label>
-        <select name="source">
+        <select name="source" id="lab-source" onchange="toggleInHouse(this)">
           {% for val, label in sources %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
         </select></div>
       <div><label>Sample ID <span class="muted">(ETS / Lodi)</span></label><input type="text" name="sample_id"></div>
@@ -42,8 +42,11 @@
     <label>Analyses <span class="muted">(value may be a number, or ND / Dry / &lt;0.05 / FAIL)</span></label>
     <div class="lab-values">
       {% for i in "12345" %}
-      <div class="lab-value-row">
-        <select name="analyte"><option value="">&mdash;</option>{% for a in analytes %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}</select>
+      <div class="lab-value-row" data-row="{{ forloop.counter }}">
+        <select name="analyte" class="lab-analyte-select">
+          <option value="">&mdash;</option>
+          {% for a in analytes %}<option value="{{ a.pk }}" data-in-house="{{ a.in_house|yesno:"1,0" }}" data-slug="{{ a.slug }}">{{ a.name }}</option>{% endfor %}
+        </select>
         <input type="text" name="value" placeholder="value">
       </div>
       {% endfor %}
@@ -52,5 +55,38 @@
     <div class="note-actions"><button class="btn sm" type="submit">Add result</button></div>
   </form>
 </details>
+
+<script>
+function toggleInHouse(sel){
+  var rows = document.querySelectorAll('.lab-value-row');
+  var inHouse = sel.value === 'in_house';
+  rows.forEach(function(row, i){
+    var select = row.querySelector('.lab-analyte-select');
+    Array.prototype.forEach.call(select.options, function(o){
+      if (o.value === '') return;
+      o.disabled = inHouse && o.dataset.inHouse !== '1';
+    });
+    if (inHouse) {
+      // rows 1-2 prepopulate brix / temperature; the rest hide entirely
+      if (i === 0 || i === 1) {
+        row.style.display = '';
+        var wantSlug = (i === 0) ? 'brix' : 'temperature';
+        var opt = Array.prototype.find.call(select.options, function(o){ return o.dataset.slug === wantSlug; });
+        if (opt) select.value = opt.value;
+      } else {
+        row.style.display = 'none';
+        select.value = '';
+      }
+    } else {
+      row.style.display = '';
+      Array.prototype.forEach.call(select.options, function(o){ o.disabled = false; });
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var sel = document.getElementById('lab-source');
+  if (sel) toggleInHouse(sel);
+});
+</script>
 
 {% include "web/_lot_note.html" with section="labs" note=note %}

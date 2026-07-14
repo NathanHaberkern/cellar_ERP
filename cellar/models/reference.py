@@ -107,6 +107,12 @@ class Vessel(models.Model):
     room = models.CharField(max_length=12, choices=Room.choices, blank=True)
     map_row = models.PositiveSmallIntegerField(null=True, blank=True)
     map_col = models.PositiveSmallIntegerField(null=True, blank=True)
+    # The ERP's record of what the glycol dial SHOULD read right now — set by
+    # the glycol tasks (cold soak / settling / off / standard), not a live
+    # sensor reading. Null = not currently being tracked (glycol off, or the
+    # vessel isn't temp_controlled).
+    glycol_setpoint_f = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True,
+        help_text="Target glycol setpoint (°F) — informational; the human still sets the dial.")
 
     def __str__(self):
         return self.code
@@ -145,6 +151,10 @@ class Additive(models.Model):
                                              help_text="ppm_target additives, e.g. SO₂ 40 at crush")
     so2_fraction = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True,
                                        help_text="ppm_target: SO₂ mass fraction of the product (KMBS 0.5764)")
+    crush_addition = models.BooleanField(default=False,
+        help_text="Show in the crush/intake additions picker (Section 5). "
+                  "Everything else stays off that list but is still usable "
+                  "from a lot's regular Additions tab.")
 
     def __str__(self):
         return self.name

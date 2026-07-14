@@ -25,7 +25,7 @@ from cellar.models import (
     Variety, Grower, Vineyard, Block, VarietalDesignation, Vessel,
     LabAnalyte, LabAnalyteSynonym, ConfigConstant,
     Room, Location, BarrelOrder, Container, Rack,
-    BottleFormat, DryGood, Material,
+    BottleFormat, DryGood, Material, ExternalDestination,
 )
 
 
@@ -99,6 +99,8 @@ REGISTRY = {
                   ["key", "value", "unit", "notes"]),
         TableSpec("materials", Material, "Materials",
                   ["name", "kind", "unit", "unit_cost"]),
+        TableSpec("external-destinations", ExternalDestination, "External destinations",
+                  ["name", "bw_number", "notes"]),
     ]
 }
 

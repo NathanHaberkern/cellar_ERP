@@ -10,10 +10,11 @@ Both screens had the same job and got it wrong in opposite directions:
     can't press into).
 
 One helper now serves both. Every candidate vessel is offered; occupied ones show
-the lot that's in them and are disabled until the user ticks co-occupancy, at which
-point they become selectable and `allow_blend` is passed through to
-`operations.transfer_lot`. The cellar can always SEE the full tank farm — the
-checkbox governs whether they may blend into it, which is the actual decision.
+the lot that's in them and stay disabled on a plain transfer/press/rack pick —
+combining two wines into one tank is a blend, so an occupied destination there
+routes to the Blend card (`blend=True` on `_vessel_picker.html`), the only picker
+where occupied options are selectable. The cellar can always SEE the full tank
+farm either way; only the Blend form may write into an occupied one.
 
 Type note: the totes (SS-Tote 1 / 2, 450 gal) are typed `tank` in the vessel table,
 so filtering to TANK yields tanks AND totes while correctly excluding the macro /

@@ -282,12 +282,16 @@ def lot_movement(request, pk):
         rows, err = _safe(lotpages.movements, lot)
         from .vessels import vessel_options
         from .blend import blend_source_lots
+        from cellar.models import ExternalDestination
+        from cellar.services import volumes as vol_svc
         # Every tank/tote is offered; occupied ones are shown with their current lot
         # and unlocked only by the co-occupancy checkbox. Filtering them out here is
         # what made that checkbox dead.
         return {"rows": rows or [], "error": err,
                 "vessel_options": vessel_options(exclude_lot=lot),
                 "blend_sources": blend_source_lots(exclude_lot=lot),
+                "external_destinations": ExternalDestination.objects.order_by("name"),
+                "current_balance": vol_svc.lot_balance(lot),
                 "today": timezone.localdate().isoformat(),
                 "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
     return _panel(request, pk, "movement", "web/_lot_movement.html", extra)
@@ -476,13 +480,58 @@ def lot_transfer_create(request, pk):
     try:
         vessel = get_object_or_404(Vessel, pk=request.POST.get("to_vessel"))
         at = _parse_dt(request.POST.get("moved_at"))
-        allow_blend = request.POST.get("allow_blend") == "on"
-        assignment = ops.transfer_lot(lot, vessel, at, allow_blend=allow_blend)
+        assignment = ops.transfer_lot(lot, vessel, at)
         if request.POST.get("note"):
             type(assignment).objects.filter(pk=assignment.pk).update(notes=request.POST["note"])
     except Exception as e:  # noqa: BLE001
         return lot_movement_with_error(request, pk, str(e))
     return lot_movement(request, pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def lot_external_transfer_create(request, pk):
+    """Book a lot leaving the winery — a bulk taxpaid sale or an in-bond move
+    to another bonded premises. See services/external_transfer.py: juice and
+    grapes (never inoculated) skip the 5120.17 entry; anything that has
+    started fermenting gets one written in the same action."""
+    lot = get_object_or_404(Lot, pk=pk)
+    try:
+        from cellar.models import ExternalDestination
+        from cellar.services import external_transfer as ext
+
+        dest = get_object_or_404(ExternalDestination, pk=request.POST.get("destination"))
+        kind = request.POST.get("kind") or "taxpaid"
+        result = ext.book_external_sale(
+            lot, destination=dest, gallons=request.POST.get("gallons"),
+            at=_parse_dt(request.POST.get("transferred_at")), kind=kind,
+            channel=request.POST.get("channel") or None,
+            note=request.POST.get("note", ""), actor=request.user)
+        if result["wine"]:
+            kind_label = "in-bond transfer" if kind == "in_bond" else "bulk taxpaid removal"
+            ok = (f"Recorded {result['gallons']} gal to {dest.name} — the 5120.17 "
+                  f"{kind_label} entry has been written.")
+        else:
+            ok = (f"Recorded {result['gallons']} gal to {dest.name}. No 5120.17 entry "
+                  f"needed — {lot.code} is still juice/grapes (never inoculated).")
+        lot.refresh_from_db()
+    except Exception as e:  # noqa: BLE001
+        return lot_movement_with_error(request, pk, str(e))
+
+    def extra(l):
+        rows, err = _safe(lotpages.movements, l)
+        from .vessels import vessel_options
+        from .blend import blend_source_lots
+        from cellar.models import ExternalDestination as ED
+        from cellar.services import volumes as vol_svc
+        return {"rows": rows or [], "error": err, "ok": ok,
+                "vessel_options": vessel_options(exclude_lot=l),
+                "blend_sources": blend_source_lots(exclude_lot=l),
+                "external_destinations": ED.objects.order_by("name"),
+                "current_balance": vol_svc.lot_balance(l),
+                "today": timezone.localdate().isoformat(),
+                "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
+    return _panel(request, pk, "movement", "web/_lot_movement.html", extra)
 
 
 def _parse_dt(raw):
@@ -521,10 +570,14 @@ def lot_labs_with_error(request, pk, msg):
 def lot_movement_with_error(request, pk, msg):
     from .vessels import vessel_options
     from .blend import blend_source_lots
+    from cellar.models import ExternalDestination
+    from cellar.services import volumes as vol_svc
     lot = get_object_or_404(Lot, pk=pk)
     return _inject_error(request, pk, "web/_lot_movement.html", None, msg, lotpages.movements, "rows",
                          {"vessel_options": vessel_options(exclude_lot=lot),
                           "blend_sources": blend_source_lots(exclude_lot=lot),
+                          "external_destinations": ExternalDestination.objects.order_by("name"),
+                          "current_balance": vol_svc.lot_balance(lot),
                           "today": timezone.localdate().isoformat(),
                           "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")})
 
@@ -644,7 +697,8 @@ def additive_create(request):
         return render(request, "web/_additive_row.html",
                       {"error": "Name, a valid category, and unit are all required.",
                        "additive": None}, status=400)
-    obj = Additive(name=name, category=category, unit=unit)
+    obj = Additive(name=name, category=category, unit=unit,
+                  crush_addition=(request.POST.get("crush_addition") == "on"))
     _apply_unit_cost(obj, request.POST.get("unit_cost"))
     obj.save()
     return render(request, "web/_additive_row.html", {"additive": obj})
@@ -663,6 +717,7 @@ def additive_update(request, pk):
     unit = (request.POST.get("unit") or "").strip()
     if unit:
         obj.unit = unit
+    obj.crush_addition = request.POST.get("crush_addition") == "on"
     _apply_unit_cost(obj, request.POST.get("unit_cost"))
     obj.save()
     return render(request, "web/_additive_row.html", {"additive": obj})

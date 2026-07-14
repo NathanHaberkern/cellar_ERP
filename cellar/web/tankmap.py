@@ -66,21 +66,37 @@ def _display_size(vessel):
 
 def _open_assignments():
     """vessel_id -> Lot for every vessel with an open (unvacated) assignment.
-    One query, newest-first, first-seen-wins so a vessel maps to its latest
-    open occupant even if stray older opens exist."""
+    Normally exactly one lot per vessel — the Blend workflow is the only path
+    that ever writes a second open assignment into an occupied tank, and it
+    closes the source's assignment in the same transaction, so real
+    co-occupancy shouldn't outlive that one write. `_open_assignments_all()`
+    below is the defensive version that surfaces a stray case instead of
+    silently picking the newest and hiding the rest."""
+    return {vid: lots[0] for vid, lots in _open_assignments_all().items()}
+
+
+def _open_assignments_all():
+    """vessel_id -> [Lot, ...] for every vessel with an open assignment,
+    newest first. A vessel normally maps to a single-lot list; more than one
+    means a stray co-occupancy slipped through outside the Blend workflow and
+    is worth a human's attention rather than silently hiding all but the
+    latest lot."""
     qs = (TankAssignment.objects
           .filter(voided_at__isnull=True, emptied_at__isnull=True)
           .select_related("lot", "lot__current_designation")
           .order_by("-assigned_at"))
     current = {}
     for a in qs:
-        current.setdefault(a.vessel_id, a.lot)
+        current.setdefault(a.vessel_id, []).append(a.lot)
     return current
 
 
-def _vessel_cell(vessel, shape, lot):
-    occupied = lot is not None
+def _vessel_cell(vessel, shape, lots):
+    lots = lots or []
+    occupied = bool(lots)
+    lot = lots[0] if lots else None
     status = lot.status if occupied else ""
+    extra = len(lots) - 1
     return {
         "code": vessel.code,
         "shape": shape,
@@ -90,6 +106,8 @@ def _vessel_cell(vessel, shape, lot):
         "occupied": occupied,
         "lot_code": (lot.code if occupied else ""),
         "lot_pk": (lot.pk if occupied else None),
+        "co_occupied": extra > 0,
+        "extra_lots": [l.code for l in lots[1:]],
         "status": status,
         "status_label": (lot.get_status_display() if occupied else "Empty"),
         # css hook: cold / ferment / pressed for the big three, else 'other',
@@ -99,7 +117,7 @@ def _vessel_cell(vessel, shape, lot):
 
 
 def build_tank_map():
-    current = _open_assignments()
+    current = _open_assignments_all()
     placed = (Vessel.objects
               .exclude(room="")
               .exclude(map_row__isnull=True)

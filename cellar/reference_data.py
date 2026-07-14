@@ -15,29 +15,31 @@ The installers are ADOPTIVE and per-row:
 """
 
 ANALYTES = [
+    # slug, name, unit, sort_order, in_house
     # --- juice / shared core ---
-    ("brix",             "brix",                           "degrees",     10),
-    ("ph",               "pH",                             "",            20),
-    ("ta",               "titratable acidity",             "g/L",         30),
-    ("va",               "volatile acidity (acetic acid)", "g/L",         40),
-    ("glucose_fructose", "glucose + fructose",             "g/L",         50),
-    ("l_malic",          "L-malic acid",                   "g/L",         60),
-    ("tartaric",         "tartaric acid",                  "g/L",         70),
-    ("yan",              "yeast assimilable nitrogen",     "mg/L (as N)", 80),
-    ("ammonia",          "ammonia",                        "mg/L",        90),
-    ("amino",            "alpha-amino compounds (as N)",   "mg/L",       100),
-    ("potassium",        "potassium",                      "mg/L",       110),
+    ("brix",             "brix",                           "degrees",     10, True),
+    ("temperature",      "temperature",                    "°F",           5, True),
+    ("ph",               "pH",                             "",            20, False),
+    ("ta",               "titratable acidity",             "g/L",         30, False),
+    ("va",               "volatile acidity (acetic acid)", "g/L",         40, False),
+    ("glucose_fructose", "glucose + fructose",             "g/L",         50, False),
+    ("l_malic",          "L-malic acid",                   "g/L",         60, False),
+    ("tartaric",         "tartaric acid",                  "g/L",         70, False),
+    ("yan",              "yeast assimilable nitrogen",     "mg/L (as N)", 80, False),
+    ("ammonia",          "ammonia",                        "mg/L",        90, False),
+    ("amino",            "alpha-amino compounds (as N)",   "mg/L",       100, False),
+    ("potassium",        "potassium",                      "mg/L",       110, False),
     # --- chemistry-panel additions ---
-    ("fso2",             "free sulfur dioxide",            "mg/L",       120),
-    ("tso2",             "total sulfur dioxide",           "mg/L",       130),
-    ("molecular_so2",    "molecular sulfur dioxide",       "mg/L",       140),
-    ("ethanol_20c",      "ethanol at 20C",                 "% vol",      150),
-    ("ethanol_60f",      "ethanol at 60F",                 "% vol",      160),
+    ("fso2",             "free sulfur dioxide",            "mg/L",       120, False),
+    ("tso2",             "total sulfur dioxide",           "mg/L",       130, False),
+    ("molecular_so2",    "molecular sulfur dioxide",       "mg/L",       140, False),
+    ("ethanol_20c",      "ethanol at 20C",                 "% vol",      150, False),
+    ("ethanol_60f",      "ethanol at 60F",                 "% vol",      160, False),
     # --- stability / smoke (not part of the two full panels) ---
-    ("heat_stability",   "heat stability (Pocock & Waters)", "NTU",      200),
-    ("turbidity",        "turbidity (turbidimeter)",        "NTU",       210),
-    ("guaiacol",         "guaiacol GC MS/MS",               "µg/L",      220),
-    ("methylguaiacol",   "4-methylguaiacol GC MS/MS",       "µg/L",      230),
+    ("heat_stability",   "heat stability (Pocock & Waters)", "NTU",      200, False),
+    ("turbidity",        "turbidity (turbidimeter)",        "NTU",       210, False),
+    ("guaiacol",         "guaiacol GC MS/MS",               "µg/L",      220, False),
+    ("methylguaiacol",   "4-methylguaiacol GC MS/MS",       "µg/L",      230, False),
 ]
 
 # raw ETS 'Analysis Name' string -> analyte slug. Exact-name matches don't need an
@@ -152,7 +154,7 @@ def install_analytes(LabAnalyte, LabAnalyteSynonym):
     created = adopted = updated = 0
     by_slug = {}
 
-    for slug, name, unit, order in ANALYTES:
+    for slug, name, unit, order, in_house in ANALYTES:
         obj = LabAnalyte.objects.filter(slug=slug).first()
         if obj is None:
             # adopt a pre-existing row that matches on name (unique) but has no slug
@@ -168,6 +170,7 @@ def install_analytes(LabAnalyte, LabAnalyteSynonym):
         obj.name = name
         obj.unit = unit
         obj.sort_order = order
+        obj.in_house = in_house
         obj.save()
         by_slug[slug] = obj
 

@@ -62,30 +62,62 @@ def open_assignment_for(vessel):
             .select_related("lot").order_by("-assigned_at").first())
 
 
-def assign_lot_to_vessel(lot, vessel, at, *, allow_blend=False):
-    """Assign a lot to a vessel, enforcing one lot per vessel — UNLESS this is a
-    deliberate blend (allow_blend=True), which permits co-occupancy:
-      • scenario A — two lots racked into the same (new) tank together, and
-      • scenario B — a lot racked into a tank another lot already occupies.
-    Fresh-fruit intake never blends, so it calls this with allow_blend=False and
-    an occupied tank is rejected. Returns the TankAssignment."""
+def assign_lot_to_vessel(lot, vessel, at):
+    """Assign a lot to a vessel — one lot per vessel, always.
+
+    A destination already occupied by a DIFFERENT lot is never a plain
+    assign/transfer: two wines in one tank is a blend, and a blend without a
+    LotLineage edge is exactly the bug this closed (no compliance record, and
+    the tank map could only ever show one of the two occupants). Any such
+    move now has to go through the Blend workflow — `blending.blend()` calls
+    `force_assign_lot_to_vessel` below, which is the only path that may write
+    a co-occupying assignment.
+
+    A destination the lot ALREADY occupies is also rejected — pressing or
+    transferring "into" the vessel a lot is already sitting in isn't a real
+    move, just a same-vessel no-op that used to slip through and re-open a
+    fresh assignment on top of itself.
+    """
     occ = open_assignment_for(vessel)
-    if occ and occ.lot_id != lot.id and not allow_blend:
+    if occ and occ.lot_id == lot.id:
+        raise ValueError(f"{lot.code} already occupies {vessel.code} — "
+                         f"choose a different destination vessel.")
+    if occ and occ.lot_id != lot.id:
         raise ValueError(
             f"{vessel.code} is occupied by {occ.lot.code}. Empty it first, "
-            f"or record this as a blend to co-occupy.")
+            f"or use the Blend workflow below to combine the two wines.")
     return TankAssignment.objects.create(lot=lot, vessel=vessel, assigned_at=at)
 
 
-def transfer_lot(lot, to_vessel, at, *, allow_blend=False):
+def force_assign_lot_to_vessel(lot, vessel, at):
+    """Blend-only escape hatch: opens `vessel` for `lot` without the
+    occupied-tank check, so `blending.blend()` can co-occupy a tank while it
+    writes the LotLineage edge that makes the combination a real compliance
+    record. Nothing else should call this — every other write path goes
+    through `assign_lot_to_vessel`/`transfer_lot` above."""
+    return TankAssignment.objects.create(lot=lot, vessel=vessel, assigned_at=at)
+
+
+def transfer_lot(lot, to_vessel, at):
     """Book a tank move for a lot: close its open tank assignment(s) by stamping
     emptied_at (a CLOSE_FIELD), then open a new assignment on `to_vessel`. This is
     how a lot's location changes — there's no separate TankTransfer row. Returns
-    the new TankAssignment; raises if the destination is occupied (unless blend)."""
+    the new TankAssignment; raises if the destination is occupied by a
+    different lot (use Blend) or is the lot's own current vessel.
+
+    The same-vessel check has to happen BEFORE closing the current assignment:
+    closing it first would make the vessel look empty by the time
+    `assign_lot_to_vessel` looks, silently letting a same-vessel "move" through
+    as close-then-reopen instead of being rejected as a no-op.
+    """
+    occ = open_assignment_for(to_vessel)
+    if occ and occ.lot_id == lot.id:
+        raise ValueError(f"{lot.code} already occupies {to_vessel.code} — "
+                         f"choose a different destination vessel.")
     (TankAssignment.objects
      .filter(lot=lot, voided_at__isnull=True, emptied_at__isnull=True)
      .update(emptied_at=at))
-    return assign_lot_to_vessel(lot, to_vessel, at, allow_blend=allow_blend)
+    return assign_lot_to_vessel(lot, to_vessel, at)
 
 
 def generate_weigh_tag_number(block, harvest_date) -> str:
@@ -288,6 +320,8 @@ def receive_and_destem(*, vintage, variety, program, path, destem_at,
         tank = Vessel.objects.get(code=tank_code)
         assign_lot_to_vessel(lot, tank, destem_at)   # fresh fruit never blends
         vessels.append(tank)
+        from cellar.services import glycol as glycol_svc
+        glycol_svc.on_lot_created_into_tank(lot, tank, path)
 
     est_intake = intake_volume_estimate(total_lbs, path)
     _record_volume(lot, est_intake, destem_at)

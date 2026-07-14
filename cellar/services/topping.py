@@ -209,7 +209,7 @@ def rack_out(placements, *, racked_at, to_vessel=None, gauged_gal=None,
 
     if to_vessel is not None:
         from cellar.services import operations as ops
-        ops.transfer_lot(lot, to_vessel, racked_at, allow_blend=True)
+        ops.transfer_lot(lot, to_vessel, racked_at)
 
     return {"lot": lot, "barrels": len(rows), "on_books": on_books,
             "gauged": _d(gauged_gal) if gauged_gal else None,

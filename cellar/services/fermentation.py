@@ -130,31 +130,18 @@ def _fit_logistic_days_remaining(series, target):
     return days_remaining, f"logistic fit (S-curve, {n} readings past the {s0:g} °Brix start)"
 
 
-def estimate_press_and_barrel_dates(lot, asof=None):
-    """Estimated press and barrel-down dates.
-
-    Two independent inputs, combined by taking the LATER date:
-      1. A kinetics estimate from the live Brix trend — logistic fit with 3+
-         readings (see `_fit_logistic_days_remaining`), the simple observed
-         two-point rate with exactly 2, or nothing with fewer than 2.
-      2. A mandatory minimum skin-contact floor for red wine on the skin (see
-         `skin_contact_floor_date`) — a wine can always be held longer than
-         the kinetics alone would suggest, so the floor wins when it's later.
-         This never blocks pressing early in the real workflow; it only
-         floors the *estimate* shown here.
-
-    Returns {'press_date', 'barrel_down_date', 'basis'} — `basis` always
-    explains what produced the number, so it reads as a planning estimate to
-    verify, never a commitment.
+def _kinetics_date_for_target(series, target, asof):
+    """Shared projection core: given ascending (date, brix) readings and a
+    target Brix, returns (date_or_None, basis_str) using a logistic fit with
+    3+ readings, the plain two-point rate with exactly 2, or the configured
+    flat brix_per_day() default with a flat/rising trend or too few readings.
+    Used by both the press-date estimate and the Fermaid O due-date estimate
+    below — one kinetics model, not two.
     """
-    asof = asof or timezone.localdate()
-    target = _config_float("press_ready_brix", DEFAULT_PRESS_READY_BRIX)
-    series = brix_series(lot)  # ascending [(date, brix), ...]
-
     kinetics_date = None
     basis_parts = []
     simple_rate = None
-    latest_date = latest_val = None
+    latest_date = latest_val = prior_date = None
 
     if len(series) >= 2:
         latest_date, latest_val = series[-1]
@@ -168,9 +155,7 @@ def estimate_press_and_barrel_dates(lot, asof=None):
         days_remaining, note = _fit_logistic_days_remaining(series, target)
         if days_remaining is not None:
             # Sanity-bound the fit against the plain observed rate so one
-            # noisy early reading can't swing the projection wildly — a
-            # transform-shaped fit is only worth trusting within shouting
-            # distance of what the raw data plainly shows.
+            # noisy early reading can't swing the projection wildly.
             simple_days = (latest_val - target) / simple_rate if simple_rate else None
             if simple_days and simple_days > 0:
                 lo, hi = 0.2 * simple_days, 4 * simple_days
@@ -197,6 +182,33 @@ def estimate_press_and_barrel_dates(lot, asof=None):
 
     if len(series) < 2:
         basis_parts.append("need at least two Brix readings to project a trend")
+
+    return kinetics_date, ("; ".join(basis_parts) if basis_parts else "—")
+
+
+def estimate_press_and_barrel_dates(lot, asof=None):
+    """Estimated press and barrel-down dates.
+
+    Two independent inputs, combined by taking the LATER date:
+      1. A kinetics estimate from the live Brix trend — logistic fit with 3+
+         readings (see `_fit_logistic_days_remaining`), the simple observed
+         two-point rate with exactly 2, or nothing with fewer than 2.
+      2. A mandatory minimum skin-contact floor for red wine on the skin (see
+         `skin_contact_floor_date`) — a wine can always be held longer than
+         the kinetics alone would suggest, so the floor wins when it's later.
+         This never blocks pressing early in the real workflow; it only
+         floors the *estimate* shown here.
+
+    Returns {'press_date', 'barrel_down_date', 'basis'} — `basis` always
+    explains what produced the number, so it reads as a planning estimate to
+    verify, never a commitment.
+    """
+    asof = asof or timezone.localdate()
+    target = _config_float("press_ready_brix", DEFAULT_PRESS_READY_BRIX)
+    series = brix_series(lot)  # ascending [(date, brix), ...]
+
+    kinetics_date, basis = _kinetics_date_for_target(series, target, asof)
+    basis_parts = [basis] if basis and basis != "—" else []
 
     floor_date, floor_days = skin_contact_floor_date(lot)
     press_date = kinetics_date
@@ -304,6 +316,11 @@ class PlanPreview:
 
 
 def _estimate_due(start_date, initial_brix, trigger_brix, per_day):
+    """Day-one guess at inoculation, before any Brix reading exists to fit a
+    trend against — necessarily the flat brix_per_day() rate. Once readings
+    start coming in, `on_brix_reading()` below re-projects every open Fermaid
+    O task's due date from the same kinetics model the press-date estimate
+    uses, instead of leaving it pinned to this initial flat-rate guess."""
     if trigger_brix is None:
         return start_date
     drop = max(0.0, float(initial_brix) - float(trigger_brix))
@@ -414,24 +431,38 @@ def _complete_daily(lot, kind, actor):
 
 
 def on_brix_reading(lot, brix, actor=None):
-    """Advance any staged Fermaid O task whose trigger the reading has reached, so
-    it surfaces as due today rather than on its estimated date (C3)."""
+    """Keep every open Fermaid O task's due date honest as readings come in:
+    advance it to today the moment the reading reaches its trigger Brix (C3),
+    and otherwise RE-PROJECT the estimate from the live kinetics model — the
+    same logistic/two-point/flat-rate fallback `estimate_press_and_barrel_dates`
+    uses — instead of leaving it pinned to the flat-rate guess made at
+    inoculation with no readings yet to learn from."""
+    from cellar.models import TaskEvent
     advanced = 0
+    series = brix_series(lot)
+    today = timezone.localdate()
     for t in Task.objects.filter(lot=lot, status=Task.Status.OPEN):
         p = t.payload or {}
         trig = p.get("trigger_brix")
         if trig is None or p.get("advanced"):
             continue
         if float(brix) <= float(trig):
-            t.due_date = timezone.localdate()
+            t.due_date = today
             p["advanced"] = True
             t.payload = p
             t.save(update_fields=["due_date", "payload"])
-            from cellar.models import TaskEvent
             TaskEvent.objects.create(task=t, kind=TaskEvent.Kind.EDITED,
                                      detail=f"trigger reached (Brix {brix})",
                                      operator=actor if getattr(actor, "is_authenticated", False) else None)
             advanced += 1
+        else:
+            new_due, basis = _kinetics_date_for_target(series, float(trig), today)
+            if new_due is not None and new_due != t.due_date:
+                t.due_date = new_due
+                t.save(update_fields=["due_date"])
+                TaskEvent.objects.create(task=t, kind=TaskEvent.Kind.EDITED,
+                                         detail=f"due date re-projected to {new_due} ({basis})",
+                                         operator=actor if getattr(actor, "is_authenticated", False) else None)
     return advanced
 
 
@@ -457,7 +488,7 @@ def record_daily(lot, *, brix=None, temp=None, measured_at=None, cap=None, actor
 
 # --------------------------------------------------------------- Step 3 / 4
 @transaction.atomic
-def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, actor=None):
+def press_to_vessel(lot, *, vessel, volume_gal, at=None, actor=None):
     """Step 3: press the lot to a new vessel, gauge it, and RECORD THE PRESS.
 
     This used to move the wine and state a volume without writing a PressingEvent —
@@ -466,8 +497,9 @@ def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, acto
     fermentation and go straight on (disposition=TO_BARREL, no settling), so the
     press gauge is the booking volume: this is the number book_to_bond() will read.
 
-    `allow_blend` co-occupies an already-occupied tank (same semantics as a Movement
-    transfer) instead of raising "SS-1 is occupied by ...".
+    A destination already occupied by a different lot (or the lot's own
+    current vessel) is rejected by the underlying transfer/press call — see
+    `operations.assign_lot_to_vessel`. Use the Blend workflow to combine wines.
     """
     from cellar.models import PressingEvent
     from cellar.services import pressing
@@ -475,7 +507,7 @@ def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, acto
     at = at or timezone.now()
     if volume_gal in (None, ""):
         # no gauge — fall back to the old behaviour rather than book a phantom press
-        ops.transfer_lot(lot, vessel, at, allow_blend=allow_blend)
+        ops.transfer_lot(lot, vessel, at)
         lot.status = Lot.Status.PRESSED
         lot.save(update_fields=["status"])
         return None
@@ -483,7 +515,7 @@ def press_to_vessel(lot, *, vessel, volume_gal, at=None, allow_blend=False, acto
     return pressing.press(
         lot, pressed_at=at, total_gal=volume_gal, to_vessel=vessel,
         settling_days=None, disposition=PressingEvent.Disposition.TO_BARREL,
-        is_booking_volume=True, allow_blend=allow_blend, actor=actor)
+        is_booking_volume=True, actor=actor)
 
 
 def empty_oak_containers():

@@ -25,12 +25,12 @@
            style="grid-template-columns:repeat({{ room.cols }},1fr);grid-template-rows:repeat({{ room.rows }},auto)">
         {% for c in room.cells %}
         {% if c.occupied %}
-        <a class="vessel v-{{ c.shape }} sz-{{ c.size }} st-{{ c.status_class }}"
+        <a class="vessel v-{{ c.shape }} sz-{{ c.size }} st-{{ c.status_class }}{% if c.co_occupied %} v-cooccupied{% endif %}"
            href="{% url 'lot-detail' c.lot_pk %}"
            style="grid-row:{{ c.row|add:1 }};grid-column:{{ c.col|add:1 }};text-decoration:none;cursor:pointer"
-           title="{{ c.code }} — {{ c.status_label }} ({{ c.lot_code }}) — click for full history">
+           title="{{ c.code }} — {{ c.status_label }} ({{ c.lot_code }}{% if c.co_occupied %} + {{ c.extra_lots|join:', ' }} — needs attention, more than one open assignment{% endif %}) — click for full history">
             <span class="v-id">{{ c.code }}</span>
-            <span class="v-lot">{{ c.lot_code }}</span>
+            <span class="v-lot">{{ c.lot_code }}{% if c.co_occupied %} +{{ c.extra_lots|length }}{% endif %}</span>
             <span class="v-status">{{ c.status_label }}</span>
         </a>
         {% else %}

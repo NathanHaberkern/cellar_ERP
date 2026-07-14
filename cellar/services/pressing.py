@@ -68,7 +68,7 @@ def presses_first(lot):
 def press(lot, *, pressed_at, total_gal, to_vessel=None, free_run_gal=None,
           press_gal=None, settling_days=DEFAULT_SETTLING_DAYS, recombined=True,
           disposition=PressingEvent.Disposition.GROSS_LEES,
-          is_booking_volume=None, allow_blend=False, actor=None):
+          is_booking_volume=None, actor=None):
     """Press a lot and gauge what came off.
 
     total_gal : what actually came off the press. Free run and press fractions are
@@ -100,7 +100,7 @@ def press(lot, *, pressed_at, total_gal, to_vessel=None, free_run_gal=None,
         raise ValueError("Enter the gallons that came off the press.")
 
     if to_vessel is not None:
-        ops.transfer_lot(lot, to_vessel, pressed_at, allow_blend=allow_blend)
+        ops.transfer_lot(lot, to_vessel, pressed_at)
 
     vm = VolumeMeasurement.objects.create(
         lot=lot, method=VolumeMeasurement.Method.PRESSURE_SENSOR,
@@ -123,6 +123,9 @@ def press(lot, *, pressed_at, total_gal, to_vessel=None, free_run_gal=None,
                  f"{settling_days} days. Rack off the gross lees, then inoculate.",
             due_date=due, lot=lot, actor=actor,
             dedupe_key=f"grosslees:{lot.pk}:{ev.pk}")
+        if to_vessel is not None:
+            from cellar.services import glycol as glycol_svc
+            glycol_svc.on_cold_settling_rack(lot, to_vessel, actor=actor)
     else:
         lot.status = Lot.Status.PRESSED
     lot.save(update_fields=["status"])
@@ -131,7 +134,7 @@ def press(lot, *, pressed_at, total_gal, to_vessel=None, free_run_gal=None,
 
 @transaction.atomic
 def rack_off_gross_lees(lot, *, racked_at, clear_gal, to_vessel=None,
-                        loss_reason="gross lees", allow_blend=False, actor=None):
+                        loss_reason="gross lees", actor=None):
     """Rack the settled juice off its gross lees. What didn't come off is a loss."""
     from cellar.models import VolumeLoss
     racked_at = racked_at or timezone.now()
@@ -141,7 +144,7 @@ def rack_off_gross_lees(lot, *, racked_at, clear_gal, to_vessel=None,
     settled_from = _d(prior.volume_gal) if prior else None
 
     if to_vessel is not None:
-        ops.transfer_lot(lot, to_vessel, racked_at, allow_blend=allow_blend)
+        ops.transfer_lot(lot, to_vessel, racked_at)
 
     loss = None
     if settled_from is not None and clear is not None and settled_from > clear:
@@ -162,6 +165,10 @@ def rack_off_gross_lees(lot, *, racked_at, clear_gal, to_vessel=None,
     for t in Task.objects.filter(lot=lot, status=Task.Status.OPEN,
                                  dedupe_key__startswith=f"grosslees:{lot.pk}:"):
         task_svc.complete_task(t, actor=actor, detail=f"racked to {clear} gal clear juice")
+
+    if to_vessel is not None:
+        from cellar.services import glycol as glycol_svc
+        glycol_svc.on_post_press_ferment_start(lot, to_vessel, actor=actor)
 
     return {"clear_gal": clear, "settled_from": settled_from, "loss": loss}
 

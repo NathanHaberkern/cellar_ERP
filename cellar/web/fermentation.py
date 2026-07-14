@@ -205,7 +205,6 @@ def ferment_press_first(request, pk):
             lot, pressed_at=_parse_dt(request.POST.get("pressed_at")),
             total_gal=request.POST.get("volume"), to_vessel=vessel,
             disposition=pressing.PressingEvent.Disposition.GROSS_LEES,
-            allow_blend=request.POST.get("allow_blend") == "on",
             actor=request.user)
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001
@@ -226,7 +225,6 @@ def ferment_rack_lees(request, pk):
         pressing.rack_off_gross_lees(
             lot, racked_at=_parse_dt(request.POST.get("racked_at")),
             clear_gal=request.POST.get("clear_gal"), to_vessel=vessel,
-            allow_blend=request.POST.get("allow_blend") == "on",
             actor=request.user)
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001
@@ -243,7 +241,6 @@ def ferment_press(request, pk):
         fz.press_to_vessel(lot, vessel=vessel,
                            volume_gal=request.POST.get("volume"),
                            at=_parse_dt(request.POST.get("pressed_at")),
-                           allow_blend=request.POST.get("allow_blend") == "on",
                            actor=request.user)
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001

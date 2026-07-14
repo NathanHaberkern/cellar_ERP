@@ -19,7 +19,7 @@
     <thead><tr><th>Due</th><th>Task</th><th>Target</th><th>Assignee</th><th></th></tr></thead>
     <tbody>
     {% for t in tasks %}
-      <tr {% if t.is_overdue %}class="voided-row"{% endif %}>
+      <tr {% if t.is_overdue %}class="overdue-row"{% endif %}>
         <td>{% if t.due_date %}{{ t.due_date|date:"M j" }}{% if t.is_overdue %} <span class="badge danger">late</span>{% endif %}{% else %}—{% endif %}</td>
         <td>{{ t.title }}{% if t.body %}<div class="muted" style="font-size:12px">{{ t.body|truncatechars:70 }}</div>{% endif %}</td>
         <td>{% if t.lot_id %}<a href="{% url 'lot-detail' t.lot_id %}">{{ t.target_label }}</a>{% else %}{{ t.target_label }}{% endif %}</td>

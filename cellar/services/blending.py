@@ -14,10 +14,13 @@ lineage model was written, and three different readers already depend on them:
   * lotpages.py     — the Movement timeline ("Blending" rows) and composition_of()
                       (the genealogy percentages on the Composition tab).
 
-Nothing ever wrote one. `transfer_lot(..., allow_blend=True)` lets two lots
-co-occupy a vessel, but that's a tank-map exception, not a compliance record —
-no lineage edge, no gallons, nothing for partx.py or composition to read. This
-closes that gap: it is the write path the readers were already built for.
+Nothing ever wrote one. `transfer_lot()` lets a lot move tanks, but an occupied
+destination always used to raise "occupied by ..." unless the caller passed
+allow_blend=True (the old bare co-occupancy flag) — no lineage edge, no gallons,
+nothing for partx.py or composition to read. This closes that gap: it is the
+write path the readers were already built for, and it is now the ONLY way to
+move a lot into an already-occupied tank (see `operations.assign_lot_to_vessel`,
+which rejects that everywhere else and points here instead).
 
 TWO SHAPES
 ----------
@@ -38,30 +41,80 @@ The destination lot is not necessarily new — it is usually an existing lot
 (the blend target) or the vessel the sources are being combined into. This
 module does not create lots or vessels; it debits/credits balances via the
 lineage edge and, when `to_vessel` is given, also books the physical move
-through `operations.transfer_lot(..., allow_blend=True)` so the tank map
-reflects reality. If the source is being fully emptied (WHOLE_BLEND or a
-PARTIAL_BLEND that happens to drain it), its own tank assignment is closed
-the same way rack_out() closes one — by stamping `emptied_at`, not by
-deleting anything.
+through `operations.force_assign_lot_to_vessel()` (the one path allowed to
+write into an already-occupied tank) so the tank map reflects reality. If the
+source is being fully emptied (WHOLE_BLEND or a PARTIAL_BLEND that happens to
+drain it), its own tank assignment is closed the same way rack_out() closes
+one — by stamping `emptied_at`, not by deleting anything.
 
-TAX CLASS
----------
+DISALLOWED COMBINATIONS
+-----------------------
+A blend that would put unfinished wine (uninoculated juice/must, or actively
+fermenting wine — no InoculationEvent, or one but not yet pressed/done) in
+the same tank as already-finished wine is a hard error, not a warning: this
+covers both "pressing finished wine into uninoculated wine" and "fermenting +
+finished" — the two are the same failure mode at different stages. See
+`_stage_of()` / `_check_matrix()` below.
+
+TAX CLASS / VARIETY / VINTAGE — WARN, NOT BLOCK
+------------------------------------------------
 Blending across tax classes is legal and exactly what footnote 5/ of the
-5120.17 exists to report — see partx.py. This module does not block it. The
-web layer checks classes first and asks for confirmation if they differ;
-by the time `blend()` is called, that's already been decided.
+5120.17 exists to report — see partx.py. This module does not block it. Nor
+does it block blending across variety or vintage (field blends, second-label
+combinations, etc. are all real winemaking decisions). The web layer's
+preview flags a cross-tax-class, cross-variety, or cross-vintage combination
+so it's a deliberate choice, not an accident — see `preview()`.
 """
 from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
 
-from cellar.models import Lot, LotLineage, TankAssignment
+from cellar.models import Lot, LotLineage, TankAssignment, InoculationEvent
 from cellar.services import operations as ops
 from cellar.services import volumes as vol_svc
 
 GAL = Decimal("0.1")
 ZERO = Decimal("0")
+
+# Statuses where the wine is done with its skins/primary fermentation.
+# NOTE: SETTLING is deliberately excluded — for whites/rosés that's PRE-
+# fermentation juice settling cold before inoculation (see pressing.py), not
+# a finished wine. PRESSED only ever applies to reds pressed off AFTER
+# fermentation in this workflow, so it's safely "finished" here.
+FINISHED_STATUSES = {Lot.Status.PRESSED, Lot.Status.DONE_PRIMARY, Lot.Status.BOTTLED}
+
+
+def _is_finished(lot):
+    return lot.status in FINISHED_STATUSES
+
+
+def _is_uninoculated(lot):
+    """No InoculationEvent recorded — still juice/must, not yet fermenting."""
+    return not InoculationEvent.objects.filter(lot=lot, voided_at__isnull=True).exists()
+
+
+def _check_matrix(source_lot, dest_lot):
+    """Hard-block a finished wine sharing a tank with a not-yet-finished one —
+    whether that's actively fermenting (has an Inoculation, not yet pressed)
+    or still uninoculated juice/must. Nate's matrix (Jul 2026):
+        same variety/vintage         -> allowed
+        different tax class          -> warn (see preview())
+        fermenting (or uninoculated) + finished -> DISALLOW
+    Raises ValueError if disallowed; otherwise returns None.
+    """
+    src_finished = _is_finished(source_lot)
+    dst_finished = _is_finished(dest_lot)
+    if src_finished == dst_finished:
+        return  # both finished, or both still active — fine
+    finished_lot = source_lot if src_finished else dest_lot
+    active_lot = dest_lot if src_finished else source_lot
+    stage = "uninoculated juice/must" if _is_uninoculated(active_lot) else "still fermenting"
+    raise ValueError(
+        f"Can't blend {finished_lot.code} (finished) with {active_lot.code} ({stage}). "
+        f"Finished wine can't share a tank with wine that hasn't finished primary "
+        f"fermentation — press/rack the active lot down first, or hold the finished "
+        f"lot in its own vessel.")
 
 
 def _d(v):
@@ -86,15 +139,29 @@ def source_balance(lot):
 def preview(source_lot, dest_lot, *, kind, volume_gal=None):
     """What a blend would do, before committing — the confirm-screen numbers.
 
-    Returns balances before/after and whether the two lots' tax classes match,
-    so the web layer can decide whether to show the cross-class warning.
+    Returns balances before/after and whether the two lots' tax classes,
+    varieties, or vintages match, so the web layer can decide whether to show
+    a warning. `blocked`/`block_reason` surface the hard-disallow case (a
+    finished lot sharing a tank with one that hasn't finished primary) so the
+    UI can refuse to offer "Commit" rather than let the commit itself throw.
     """
+    from cellar.services import lotmeta
+
     bal = source_balance(source_lot)
     vol = bal if kind == LotLineage.Relationship.WHOLE_BLEND else _d(volume_gal)
     if vol is None:
         vol = ZERO
     src_class = tax_class_of(source_lot)
     dst_class = tax_class_of(dest_lot)
+    src_variety = lotmeta.lot_variety(source_lot)
+    dst_variety = lotmeta.lot_variety(dest_lot)
+
+    blocked, block_reason = False, ""
+    try:
+        _check_matrix(source_lot, dest_lot)
+    except ValueError as e:
+        blocked, block_reason = True, str(e)
+
     return {
         "source_balance": bal,
         "volume": vol,
@@ -103,7 +170,11 @@ def preview(source_lot, dest_lot, *, kind, volume_gal=None):
         "source_tax_class": src_class,
         "dest_tax_class": dst_class,
         "class_mismatch": src_class != dst_class,
+        "variety_mismatch": src_variety != dst_variety,
+        "vintage_mismatch": source_lot.vintage_year != dest_lot.vintage_year,
         "sufficient": vol <= bal,
+        "blocked": blocked,
+        "block_reason": block_reason,
     }
 
 
@@ -117,7 +188,8 @@ def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOL
     volume_gal  : required for PARTIAL_BLEND; ignored (computed) for WHOLE_BLEND.
     to_vessel   : if given, also books the physical move — closes the source's
                   open tank assignment and opens/co-occupies `to_vessel` for the
-                  destination lot (allow_blend=True, so co-occupancy is allowed).
+                  destination lot via `force_assign_lot_to_vessel` (the only
+                  path allowed to write into an already-occupied tank).
                   Leave blank if the physical move already happened separately
                   (e.g. wine was racked first, this call is just the paperwork).
 
@@ -125,6 +197,8 @@ def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOL
     """
     if source_lot.pk == dest_lot.pk:
         raise ValueError("A lot can't be blended into itself.")
+
+    _check_matrix(source_lot, dest_lot)
 
     bal = source_balance(source_lot)
 
@@ -152,7 +226,7 @@ def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOL
         (TankAssignment.objects
          .filter(lot=source_lot, voided_at__isnull=True, emptied_at__isnull=True)
          .update(emptied_at=blended_at))
-        ops.assign_lot_to_vessel(dest_lot, to_vessel, blended_at, allow_blend=True)
+        ops.force_assign_lot_to_vessel(dest_lot, to_vessel, blended_at)
 
     return edge
 

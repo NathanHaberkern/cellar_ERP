@@ -39,6 +39,7 @@
 
     <p class="eyebrow" style="margin:18px 0 10px">2 · Weigh tag</p>
     <div class="row">
+      {% if has_open_weigh_tags %}
       <div style="flex:2 1 220px"><label for="i-wt">Existing weigh tag</label>
         <select name="weigh_tag" id="i-wt"
                 hx-get="{% url 'intake-tag-bins' %}" hx-target="#tag-bins"
@@ -46,6 +47,7 @@
           <option value="">— or create new below —</option>
           {% for wt in weigh_tags %}<option value="{{ wt.pk }}">{{ wt.weigh_tag_number }} · {{ wt.remaining_lbs }} lb left</option>{% endfor %}
         </select></div>
+      {% endif %}
       <div style="flex:0 1 170px"><label for="i-lbs">Net pounds <span style="color:var(--muted)">(net-only)</span></label>
         <input type="number" step="1" name="net_lbs" id="i-lbs" placeholder="15380"
                hx-get="{% url 'intake-estimate' %}" hx-target="#est-box"
@@ -54,7 +56,7 @@
     <div id="tag-bins"></div>
     <div id="est-box" style="margin-top:10px"></div>
 
-    <details style="margin-top:12px">
+    <details style="margin-top:12px" {% if not has_open_weigh_tags %}open{% endif %}>
       <summary style="cursor:pointer;color:var(--olive);font-weight:600">Create a new weigh tag</summary>
       <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-top:8px">
         <div class="row">
@@ -104,7 +106,7 @@
         <input type="number" step="0.1" name="initial_temp_f" id="i-temp" placeholder="60"></div>
       <div style="flex:0 1 170px"><label for="i-dt">Destem date/time</label>
         <input type="datetime-local" name="destem_at" id="i-dt" value="{{ now_local }}"></div>
-      <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="crusher_enabled" checked> Crusher on</label></div>
+      <div style="flex:0 0 auto;align-self:center"><label class="inline"><input type="checkbox" name="crusher_enabled"> Crusher on</label></div>
       <div style="flex:0 1 150px"><label for="i-ft">Foot tread %</label>
         <input type="number" min="0" max="100" step="1" name="foot_tread_pct" id="i-ft"
                placeholder="0" title="% of the lot foot-tread, by bin count (3 of 6 bins → 50)"></div>
@@ -195,5 +197,6 @@ function removeBin(btn, rid){
 }
 
 addRow();
+for (var _i = 0; _i < 6; _i++) { addBin(); }
 </script>
 {% endblock %}

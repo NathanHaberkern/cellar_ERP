@@ -18,7 +18,7 @@
     <button type="button" class="btn ghost sm" onclick="addBlendRow()" style="margin-top:4px">+ Add source lot</button>
 
     <div class="form-grid" style="margin-top:12px">
-      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="blend" label="To vessel (blank → paperwork only, wine already physically combined)" %}
+      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="blend" blend=True label="To vessel (blank → paperwork only, wine already physically combined)" %}
       <div><label>Blended on</label><input type="date" name="blended_at" value="{{ today }}"></div>
     </div>
 

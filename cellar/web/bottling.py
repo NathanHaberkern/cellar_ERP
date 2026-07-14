@@ -83,7 +83,6 @@ def bottling_prepare(request, pk):
             lot, volume_gal=request.POST.get("volume"),
             vessel=vessel,
             at=_parse_dt(request.POST.get("racked_at")),
-            allow_blend=request.POST.get("allow_blend") == "on",
             actor=request.user)
         lot.refresh_from_db()
     except Exception as e:  # noqa: BLE001

@@ -1,5 +1,5 @@
 {% if error %}
-  <tr><td colspan="5"><div class="msg err">{{ error }}</div></td></tr>
+  <tr><td colspan="6"><div class="msg err">{{ error }}</div></td></tr>
 {% elif additive %}
   <tr id="additive-{{ additive.pk }}">
     <td style="color:var(--muted)">{{ additive.pk }}</td>
@@ -7,5 +7,13 @@
     <td>{{ additive.get_category_display }}</td>
     <td>{{ additive.unit }}</td>
     <td>{% if additive.unit_cost != None %}{{ additive.unit_cost }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
+    <td>
+      <form hx-post="{% url 'additive-update' additive.pk %}" hx-target="#additive-{{ additive.pk }}" hx-swap="outerHTML">
+        <label class="inline" title="Show in the crush/intake additions picker">
+          <input type="checkbox" name="crush_addition" onchange="this.form.requestSubmit()"
+                 {% if additive.crush_addition %}checked{% endif %}>
+        </label>
+      </form>
+    </td>
   </tr>
 {% endif %}

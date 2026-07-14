@@ -99,6 +99,7 @@ urlpatterns = [
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),
     path("lots/<int:pk>/labs/add/", views.lot_lab_create, name="lot-lab-create"),
     path("lots/<int:pk>/movement/transfer/", views.lot_transfer_create, name="lot-transfer-create"),
+    path("lots/<int:pk>/movement/external-transfer/", views.lot_external_transfer_create, name="lot-external-transfer-create"),
 
     # lab CSV import (ETS)
     path("labs/import/", labs.labs_import_index, name="labs-import"),

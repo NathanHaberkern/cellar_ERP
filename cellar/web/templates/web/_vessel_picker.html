@@ -1,30 +1,34 @@
-{# Shared vessel picker (Movement + Press).
-   Occupied vessels are ALWAYS shown — the cellar needs to see the full tank farm —
-   but they're disabled until "Allow co-occupancy" is ticked, which also passes
-   allow_blend through so the transfer is booked as a blend instead of throwing.
-   Expects: options (from web.vessels.vessel_options), field (select name), picker_id #}
+{# Shared vessel picker (Movement / Press / Rack / Bottling / Blend).
+
+   Any move into a tank another lot occupies is now a blend, not a plain
+   transfer — combining two wines without writing the LotLineage edge used to
+   leave no compliance record and only show the last-moved lot on the tank
+   map. So a plain transfer/press/rack/bottling destination is never allowed
+   to be occupied: occupied options stay disabled here, full stop. The one
+   exception is the Blend form's own "to vessel" picker (`blend=True`), which
+   legitimately targets an already-occupied tank by design — those options
+   are always selectable there, no checkbox needed.
+
+   Expects: options (from web.vessels.vessel_options), field (select name),
+   picker_id, and optionally blend=True for the Blend card's own picker. #}
 <div><label>{{ label|default:"To vessel" }}</label>
   <select name="{{ field|default:'to_vessel' }}" id="{{ picker_id }}-sel">
     {% for o in options %}
-      {% if o.occupied_by %}
-        <option value="{{ o.vessel.pk }}" data-occupied="1" disabled>
-          {{ o.vessel.code }} — occupied by {{ o.occupied_by }}</option>
+      {% if o.occupied_by and not blend %}
+        <option value="{{ o.vessel.pk }}" disabled>
+          {{ o.vessel.code }} — occupied by {{ o.occupied_by }} (use Blend below)</option>
+      {% elif o.occupied_by %}
+        <option value="{{ o.vessel.pk }}">{{ o.vessel.code }} — occupied by {{ o.occupied_by }}</option>
       {% else %}
         <option value="{{ o.vessel.pk }}">{{ o.vessel.code }}</option>
       {% endif %}
     {% endfor %}
   </select>
 </div>
-<label class="inline" style="margin-top:6px">
-  <input type="checkbox" name="allow_blend" id="{{ picker_id }}-blend"
-         onchange="(function(cb){
-           var sel = document.getElementById('{{ picker_id }}-sel');
-           Array.prototype.forEach.call(sel.options, function(o){
-             if (o.dataset.occupied) o.disabled = !cb.checked;
-           });
-           if (!cb.checked && sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
-             sel.selectedIndex = 0;
-           }
-         })(this)">
-  Allow co-occupancy (blend into an occupied tank)
-</label>
+{% if not blend %}
+<p class="muted" style="margin:4px 0 0;font-size:12px">
+  Occupied tanks are shown but can't be picked here — combining two wines
+  into one tank is a blend; use the Blend card below to do that (and write
+  the lineage record it needs).
+</p>
+{% endif %}

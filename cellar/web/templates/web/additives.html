@@ -24,6 +24,8 @@
         <input type="text" name="unit" id="a-unit" placeholder="g, mL, kg"></div>
       <div style="flex:0 1 110px"><label for="a-cost">Unit cost</label>
         <input type="number" step="0.0001" name="unit_cost" id="a-cost" placeholder="0.0000"></div>
+      <div style="flex:0 0 auto;align-self:center"><label class="inline" title="Show this in the crush/intake additions picker">
+        <input type="checkbox" name="crush_addition" id="a-crush"> Crush add</label></div>
       <div style="flex:0 0 auto"><button class="btn" type="submit">Add</button></div>
     </div>
   </form>
@@ -31,10 +33,10 @@
 
 <div class="table-wrap">
   <table>
-    <thead><tr><th style="width:1%">ID</th><th>Name</th><th>Category</th><th>Unit</th><th style="width:16%">Unit cost</th></tr></thead>
+    <thead><tr><th style="width:1%">ID</th><th>Name</th><th>Category</th><th>Unit</th><th style="width:16%">Unit cost</th><th style="width:10%">Crush add</th></tr></thead>
     <tbody id="add-rows">
       {% for additive in additives %}{% include "web/_additive_row.html" %}{% endfor %}
-      {% if not additives %}<tr><td colspan="5"><div class="empty">No additives yet. Add one above.</div></td></tr>{% endif %}
+      {% if not additives %}<tr><td colspan="6"><div class="empty">No additives yet. Add one above.</div></td></tr>{% endif %}
     </tbody>
   </table>
 </div>

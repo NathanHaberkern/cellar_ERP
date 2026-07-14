@@ -65,7 +65,7 @@ def can_split(lot):
 
 
 @transaction.atomic
-def create_parcel(parent, *, volume_gal, vessel=None, at=None, allow_blend=False,
+def create_parcel(parent, *, volume_gal, vessel=None, at=None,
                   suffix=None, actor=None):
     """Rack `volume_gal` off `parent` into a new bottling parcel lot.
 
@@ -97,7 +97,7 @@ def create_parcel(parent, *, volume_gal, vessel=None, at=None, allow_blend=False
         ops._record_volume(parent, (available - vol).quantize(Decimal("0.1")), at)
 
     if vessel is not None:
-        ops.assign_lot_to_vessel(child, vessel, at, allow_blend=allow_blend)
+        ops.assign_lot_to_vessel(child, vessel, at)
 
     return child
 

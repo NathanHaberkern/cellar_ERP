@@ -20,6 +20,23 @@ class Phase(models.TextChoices):
     BOTTLED = "bottled", "Bottled (Section B)"
 
 
+class ExternalDestination(models.Model):
+    """A buyer or receiving bonded premises for wine/juice/grapes leaving the
+    winery — reference data (editable master), not a ledger row. The BW number
+    is what a B2B in-bond transfer's paperwork needs; leave it blank for a
+    plain taxpaid customer."""
+    name = models.CharField(max_length=120, unique=True)
+    bw_number = models.CharField(max_length=30, blank=True,
+        help_text="e.g. BW-CA-1234 — required for in-bond (not-yet-taxpaid) transfers")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return f"{self.name} ({self.bw_number})" if self.bw_number else self.name
+
+
 class BondTransfer(AppendOnly):
     """Wine moved in bond to/from another bonded wine premises."""
     class Direction(models.TextChoices):
@@ -32,6 +49,9 @@ class BondTransfer(AppendOnly):
     gallons = models.DecimalField(max_digits=10, decimal_places=1)
     transferred_at = models.DateField()
     counterparty = models.CharField(max_length=120, blank=True, help_text="other winery")
+    destination = models.ForeignKey(ExternalDestination, null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name="+",
+                                    help_text="reference-table pick; counterparty stays the free-text display")
     lot = models.ForeignKey("cellar.Lot", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
 
     def __str__(self):
@@ -113,6 +133,8 @@ class BulkTaxPaidRemoval(AppendOnly):
     wine_gallons = models.DecimalField(max_digits=10, decimal_places=1)
     removed_at = models.DateField()
     channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.WHOLESALE)
+    destination = models.ForeignKey(ExternalDestination, null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name="+")
 
     def __str__(self):
         return f"bulk taxpaid {self.wine_gallons} gal ({self.tax_class}) {self.removed_at}"

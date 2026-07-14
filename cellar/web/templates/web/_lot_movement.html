@@ -1,6 +1,7 @@
 <h3 style="margin:0 0 12px">Movement</h3>
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 {% if form_error %}<div class="msg err">{{ form_error }}</div>{% endif %}
+{% if ok %}<div class="msg" style="background:var(--cream);border:1px solid var(--line-strong)">{{ ok }}</div>{% endif %}
 {% if rows %}
 <div class="table-wrap"><table>
   <thead><tr><th>Type</th><th>Date</th><th>Start</th><th>End</th><th>Gallons</th><th>Note</th></tr></thead>
@@ -29,6 +30,50 @@
     </div>
     <label>Note</label><textarea name="note" rows="2"></textarea>
     <div class="note-actions"><button class="btn sm" type="submit">Book transfer</button></div>
+  </form>
+</details>
+
+<details class="add-form">
+  <summary>Book external transfer (sale / in-bond move out)</summary>
+  <p class="muted" style="margin:0 0 10px">
+    For wine or juice leaving the winery entirely — a taxpaid sale or an
+    in-bond move to another bonded premises. Juice/grapes that have never been
+    inoculated skip the 5120.17 entry; anything that's started fermenting gets
+    one written automatically.
+  </p>
+  <form hx-post="{% url 'lot-external-transfer-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>Destination</label>
+        <select name="destination">
+          <option value="">— choose —</option>
+          {% for d in external_destinations %}
+            <option value="{{ d.pk }}">{{ d.name }}{% if d.bw_number %} (BW-{{ d.bw_number }}){% endif %}</option>
+          {% endfor %}
+        </select>
+        <a class="muted" style="font-size:12px" href="{% url 'reference-table' 'external-destinations' %}">+ add a new destination</a>
+      </div>
+      <div><label>Kind</label>
+        <select name="kind">
+          <option value="taxpaid">Bulk taxpaid sale</option>
+          <option value="in_bond">In-bond transfer (to another bonded winery)</option>
+        </select></div>
+      <div><label>Channel <span class="muted">(taxpaid only)</span></label>
+        <select name="channel">
+          <option value="wholesale">Wholesale</option>
+          <option value="dtc">Direct-to-consumer</option>
+          <option value="other">Other</option>
+        </select></div>
+      <div><label>Gallons</label>
+        <input type="number" step="0.1" name="gallons"
+               value="{% if current_balance is not None %}{{ current_balance }}{% endif %}"></div>
+      <div><label>When</label><input type="datetime-local" name="transferred_at" value="{{ now_local }}"></div>
+    </div>
+    <label>Note</label><textarea name="note" rows="2"></textarea>
+    <div class="note-actions">
+      <button class="btn sm" type="submit"
+              hx-confirm="Book this as leaving the winery? This closes {{ lot.code }}'s current vessel and, for wine, writes the 5120.17 entry.">
+        Book external transfer</button>
+    </div>
   </form>
 </details>
 
