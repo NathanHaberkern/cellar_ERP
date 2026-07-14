@@ -22,6 +22,7 @@ from . import blend as blend_web
 from . import reference as ref
 from . import daily as daily_web
 from . import weightags
+from . import sweeten
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -103,7 +104,13 @@ urlpatterns = [
     path("lots/<int:pk>/additions/add/", views.lot_addition_create, name="lot-addition-create"),
     path("lots/<int:pk>/labs/add/", views.lot_lab_create, name="lot-lab-create"),
     path("lots/<int:pk>/movement/transfer/", views.lot_transfer_create, name="lot-transfer-create"),
+    path("lots/<int:pk>/movement/split/", views.lot_split_create, name="lot-split-create"),
     path("lots/<int:pk>/movement/external-transfer/", views.lot_external_transfer_create, name="lot-external-transfer-create"),
+
+    # back-sweetening (own tab)
+    path("lots/<int:pk>/sweeten/", sweeten.lot_sweeten, name="lot-sweeten"),
+    path("lots/<int:pk>/sweeten/preview/", sweeten.sweeten_preview, name="lot-sweeten-preview"),  # HTMX
+    path("lots/<int:pk>/sweeten/create/", sweeten.lot_sweeten_create, name="lot-sweeten-create"),
 
     # lab CSV import (ETS)
     path("labs/import/", labs.labs_import_index, name="labs-import"),

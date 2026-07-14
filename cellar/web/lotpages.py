@@ -79,11 +79,11 @@ def current_location(lot):
 
 
 def current_gallons(lot):
-    v = ops.current_volume(lot)
-    if v is not None:
-        return v
-    vm = VolumeMeasurement.booking_volume_for(lot)
-    return vm.volume_gal if vm else None
+    """What's in the lot now — the balance, not the last gauge. See
+    volumes.working_volume(): a must sale, a bulk taxpaid removal, or an in-bond
+    transfer out all reduce this; reading the latest VolumeMeasurement (as this
+    used to) showed the pre-sale gauge forever."""
+    return vol_svc.working_volume(lot)
 
 
 def latest_readings(lot):

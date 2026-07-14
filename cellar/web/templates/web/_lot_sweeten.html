@@ -1,0 +1,72 @@
+<h3 style="margin:0 0 12px">Back-sweetening</h3>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if ok %}<div class="msg" style="background:var(--cream);border:1px solid var(--line-strong)">{{ ok }}</div>{% endif %}
+{% if concentrate_missing %}<div class="msg err">{{ concentrate_missing }}</div>{% endif %}
+
+{% if events %}
+<div class="table-wrap"><table>
+  <thead><tr>
+    <th>Date</th><th>Concentrate</th><th>Wine used (gal)</th><th>Concentrate (gal)</th>
+    <th>Produced (gal)</th><th>Brix before</th><th>Brix after</th>
+  </tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td>{{ e.sweetened_at|date:"Y-m-d" }}</td>
+      <td>{{ e.concentrate.name|default:"—" }}</td>
+      <td>{{ e.volume_used }}</td>
+      <td>{{ e.concentrate_gallons }}</td>
+      <td>{{ e.volume_produced }}</td>
+      <td>{{ e.brix_before|default:"—" }}</td>
+      <td>{{ e.brix_after|default:"—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="verify">
+  Wine used books to 5120.17 line 18; sweetened wine produced books to line 3. The
+  concentrate is booked as a Part IV material use automatically.
+</p>
+{% else %}<div class="empty">No sweetening recorded on this lot.</div>{% endif %}
+
+<details class="add-form" {% if not events %}open{% endif %}>
+  <summary>Record a back-sweetening</summary>
+  <p class="muted" style="margin:0 0 10px">
+    Enter a target RS % (the usual way — "add .25% RS") and the gallons of
+    concentrate are computed for you, or enter the gallons directly to override.
+    Sweetening adds volume: the lot is grossed up to wine + concentrate.
+    {% if current_balance is not None %}
+      <br>{{ lot.code }} currently holds <strong>{{ current_balance }} gal</strong>.
+    {% endif %}
+  </p>
+  <form hx-post="{% url 'lot-sweeten-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      <div><label>Target RS %</label>
+        <input type="number" step="0.01" name="target_rs_pct" placeholder="0.25"
+               hx-get="{% url 'lot-sweeten-preview' lot.pk %}"
+               hx-trigger="keyup changed delay:400ms"
+               hx-target="#sweeten-preview" hx-include="closest form"></div>
+      <div><label>Concentrate Brix</label>
+        <input type="number" step="0.1" name="concentrate_brix" value="{{ default_brix }}"
+               hx-get="{% url 'lot-sweeten-preview' lot.pk %}"
+               hx-trigger="keyup changed delay:400ms"
+               hx-target="#sweeten-preview" hx-include="closest form"></div>
+      <div><label>Concentrate gal <span class="muted">(overrides RS target)</span></label>
+        <input type="number" step="0.1" name="concentrate_gal"
+               hx-get="{% url 'lot-sweeten-preview' lot.pk %}"
+               hx-trigger="keyup changed delay:400ms"
+               hx-target="#sweeten-preview" hx-include="closest form"></div>
+      <div><label>When</label><input type="datetime-local" name="sweetened_at" value="{{ now_local }}"></div>
+      <div><label>Brix before <span class="muted">(optional)</span></label>
+        <input type="number" step="0.1" name="brix_before"></div>
+      <div><label>Brix after <span class="muted">(optional)</span></label>
+        <input type="number" step="0.1" name="brix_after"></div>
+    </div>
+    <div id="sweeten-preview"></div>
+    <div class="note-actions" style="margin-top:10px">
+      <button class="btn sm" type="submit">Record sweetening</button>
+    </div>
+  </form>
+</details>
+
+{% include "web/_lot_note.html" with section="sweetening" note=note %}

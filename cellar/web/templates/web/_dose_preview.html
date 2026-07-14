@@ -1,8 +1,25 @@
+{# Dose preview. Always shows the additive's default rate the moment one is picked,
+   and the computed quantity as soon as there's a volume/tonnage basis to compute
+   against — previously the whole panel rendered nothing unless a dose already
+   computed, so choosing an additive looked like it did nothing at all. #}
+{% if additive %}
+  <div class="msg" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
+    <span style="color:var(--muted)">
+      Default rate:
+      {% if default_amt is not None %}<strong>{{ default_amt|floatformat:"-4" }} {{ unit_hint }}</strong>
+      {% else %}<em>bench trial — enter an explicit quantity</em>{% endif %}
+      {% if d %}&nbsp;·&nbsp;{{ d.target }}{% endif %}
+    </span>
+    {% if d %}
+      &nbsp;→&nbsp; <strong>{{ d.computed }}</strong>
+      {% if adds_volume %}
+        <div class="muted" style="margin-top:6px">
+          Adds volume: {{ lot_volume|default:"—" }} gal → <strong>{{ new_volume|default:"—" }} gal</strong> after this addition.
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endif %}
 {% if err %}
   <div class="msg err" style="margin-top:10px">{{ err }}</div>
-{% elif d %}
-  <div class="msg" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
-    <span style="color:var(--muted)">Default {{ default_amt }} {{ unit_hint }} · target {{ d.target }}</span>
-    &nbsp;→&nbsp; <strong>{{ d.computed }}</strong>
-  </div>
 {% endif %}

@@ -1,0 +1,13 @@
+{% if err %}
+  <div class="msg err" style="margin-top:10px">{{ err }}</div>
+{% elif conc_gal %}
+  <div class="msg" style="margin-top:10px;background:var(--cream);border:1px solid var(--line-strong)">
+    <strong>{{ conc_gal }} gal</strong> concentrate
+    {% if derived %}<span class="muted">(computed from the RS target)</span>
+    {% else %}<span class="muted">(entered directly)</span>{% endif %}
+    <div class="muted" style="margin-top:6px">
+      {{ wine_gal }} gal wine + {{ conc_gal }} gal concentrate →
+      <strong>{{ finished_gal }} gal</strong> finished.
+    </div>
+  </div>
+{% endif %}

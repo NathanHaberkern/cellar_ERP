@@ -63,6 +63,10 @@ ADDITIVES = [
     ("Celstab",              C.FINING,   "mL", M.PER_VOLUME, "75",   "mL/hL",      None, None),
     ("Fermobent",            C.FINING,   "g",  M.PER_VOLUME, "100",  "g/hL",       None, None),
     ("Copper Sulfate",       C.FINING,   "mL", M.BENCH,      None,   "",           None, None),
+    # Water: dosed as a PERCENT of the lot's current volume, and it grosses the lot
+    # up by the gallons that go in (see operations.adds_volume). 10% is the default
+    # off Nate's Verdelho log; override per addition.
+    ("Water",                C.OTHER,    "gal", M.PCT_VOLUME, "10",  "% of volume", None, None),
 ]
 
 

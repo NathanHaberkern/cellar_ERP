@@ -24,12 +24,26 @@
     <div class="form-grid">
       <div><label>Date / time</label><input type="datetime-local" name="added_at" value="{{ now_local }}"></div>
       <div><label>Addition</label>
-        <select name="additive">
+        {# The dose preview is driven off this select + the amount box. It was only
+           ever wired up on the intake form, which is why picking an additive here
+           showed no default rate and no computed quantity. #}
+        <select name="additive"
+                hx-get="{% url 'intake-dose' %}"
+                hx-trigger="change"
+                hx-target="#lot-dose-preview"
+                hx-include="closest form">
+          <option value="">— choose —</option>
           {% for a in additives %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}
         </select></div>
-      <div><label>Rate override <span class="muted">(optional)</span></label><input type="text" name="rate" placeholder="additive default"></div>
-      <div><label>Target ppm <span class="muted">(SO₂, optional)</span></label><input type="text" name="target_ppm"></div>
+      <div><label>Amount <span class="muted">(blank → additive default)</span></label>
+        <input type="text" name="amount" placeholder="default"
+               hx-get="{% url 'intake-dose' %}"
+               hx-trigger="keyup changed delay:400ms"
+               hx-target="#lot-dose-preview"
+               hx-include="closest form"></div>
     </div>
+    <input type="hidden" name="lot" value="{{ lot.pk }}">
+    <div id="lot-dose-preview"></div>
     <label>Note</label><textarea name="note" rows="2"></textarea>
     <div class="note-actions"><button class="btn sm" type="submit">Record</button></div>
   </form>

@@ -298,9 +298,24 @@ def dose_preview(request):
                    else additive.default_rate)
     hint = ("ppm" if additive.dose_mode == Additive.DoseMode.PPM_TARGET
             else (additive.rate_unit or additive.unit))
+
+    # Water (and anything else dosed as a percent of volume) grosses the lot up —
+    # show what the tank will read afterwards, since every later dose is computed
+    # against that new figure.
+    adds_vol = ops.adds_volume(additive)
+    lot_volume = new_volume = None
+    if adds_vol and d is not None:
+        basis_vol = (d.get("basis") or {}).get("basis_volume_gal")
+        if basis_vol is not None:
+            from decimal import Decimal as _D
+            lot_volume = _D(str(basis_vol)).quantize(_D("0.1"))
+            new_volume = (lot_volume + _D(str(d["quantity"]))).quantize(_D("0.1"))
+
     return render(request, "web/_dose_preview.html",
                   {"additive": additive, "d": d, "err": err,
-                   "default_amt": default_amt, "unit_hint": hint})
+                   "default_amt": default_amt, "unit_hint": hint,
+                   "adds_volume": adds_vol,
+                   "lot_volume": lot_volume, "new_volume": new_volume})
 
 
 # ------------------------------------------------------------ addition --

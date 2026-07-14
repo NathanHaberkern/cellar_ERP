@@ -33,12 +33,32 @@ def designation_for(lot):
 
 def lot_program(lot):
     vd = designation_for(lot)
-    return vd.program if vd else None
+    if vd is not None:
+        return vd.program
+
+    # No curated VarietalDesignation behind this code. That's normal for a
+    # PROVISIONAL code — one the generator autofired because the catalog had no
+    # row for (variety, program) yet. Returning None here used to mean is_port()
+    # said False for a lot literally called 25VERDPORT, which gated the
+    # Fortification tab shut on the one lot that needs it.
+    #
+    # The abbreviation itself is evidence. generator.resolve_abbreviation()'s own
+    # port rule is "<table code> + PORT", so a code ending in PORT means port —
+    # read it back the same way it was written.
+    for abbr in _abbrs(lot):
+        if abbr.upper().endswith("PORT"):
+            return Program.PORT
+    return None
 
 
 def lot_variety(lot):
     vd = designation_for(lot)
-    return vd.variety if vd else None
+    if vd is not None:
+        return vd.variety
+    # Same provisional-code case as lot_program: fall back to the fruit, which
+    # knows its own variety regardless of what the catalog has been told.
+    block = lot_block(lot)
+    return block.variety if block is not None else None
 
 
 def is_port(lot):

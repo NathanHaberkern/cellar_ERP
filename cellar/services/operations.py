@@ -442,6 +442,20 @@ def _compute_dose(additive, *, vol, tons, rate_override=None, target_ppm=None,
         target = f"{_fmt(rate)} {additive.rate_unit}"
         basis.update(rate=str(rate), rate_unit=additive.rate_unit)
 
+    elif additive.dose_mode == Additive.DoseMode.PCT_VOLUME:
+        # The "rate" is a percentage of the lot's current volume, and the answer is
+        # GALLONS of liquid. This is the branch that makes "add 10% water" produce
+        # a number instead of nothing — and record_addition() then grosses the lot
+        # up by it (see operations.adds_volume).
+        if vol is None:
+            raise ValueError(
+                f"{additive.name} is dosed as a percent of volume — the lot has no "
+                "volume recorded yet, so there's nothing to take a percentage of.")
+        pct = Decimal(str(rate_override if rate_override is not None else additive.default_rate))
+        quantity = (Decimal(str(vol)) * pct / Decimal("100"))
+        target = f"{_fmt(pct)}% of {_fmt(Decimal(str(vol)))} gal"
+        basis.update(pct=str(pct), basis_volume_gal=str(vol))
+
     else:  # BENCH
         if explicit_quantity is None:
             raise ValueError(f"{additive.name} is bench-dosed — enter an explicit quantity.")
@@ -474,8 +488,9 @@ def _addition_kwargs(additive, override):
 def preview_addition(lot, additive, *, volume_gal=None, tons=None,
                      rate_override=None, target_ppm=None, explicit_quantity=None):
     """Dry-run: compute the dose for the live UI preview without writing."""
+    from cellar.services import volumes as vol_svc
     additive = _resolve_additive(additive)
-    vol = Decimal(str(volume_gal)) if volume_gal is not None else current_volume(lot)
+    vol = Decimal(str(volume_gal)) if volume_gal is not None else vol_svc.working_volume(lot)
     t = Decimal(str(tons)) if tons is not None else _lot_tons(lot)
     return _compute_dose(additive, vol=vol, tons=t, rate_override=rate_override,
                          target_ppm=target_ppm, explicit_quantity=explicit_quantity)
@@ -497,9 +512,23 @@ def preview_dose(additive, *, volume_gal, tons, rate_override=None,
 def record_addition(lot, additive, *, added_at, volume_gal=None, tons=None,
                     rate_override=None, target_ppm=None, vessel=None,
                     explicit_quantity=None):
-    """Compute and record an addition. Reads current lot volume when not given."""
+    """Compute and record an addition. Reads the lot's current balance when no
+    volume is given (see volumes.working_volume — NOT the last raw gauge).
+
+    Volume-adding additives (water, and anything else dosed as a percent of
+    volume) gross the lot up: the gallons that went in are real liquid. That
+    gross-up happens in volumes.volume_added_gal(), which reads THIS Addition
+    row — deliberately, rather than writing a new VolumeMeasurement here. A
+    gauge is a reading, not liquid: booked_volume() takes the single
+    highest-confidence gauge rather than summing them, so a "the tank now reads
+    957" row would either be ignored outright or, if it won the confidence race,
+    become the booked volume and cause every prior removal to be subtracted
+    twice. Nate's Verdelho log ("Add 10% H2O" against 870 gal) therefore shows as
+    957 gal because the Addition itself is counted, once.
+    """
+    from cellar.services import volumes as vol_svc
     additive = _resolve_additive(additive)
-    vol = Decimal(str(volume_gal)) if volume_gal is not None else current_volume(lot)
+    vol = Decimal(str(volume_gal)) if volume_gal is not None else vol_svc.working_volume(lot)
     t = Decimal(str(tons)) if tons is not None else _lot_tons(lot)
     d = _compute_dose(additive, vol=vol, tons=t, rate_override=rate_override,
                       target_ppm=target_ppm, explicit_quantity=explicit_quantity)
@@ -507,6 +536,14 @@ def record_addition(lot, additive, *, added_at, volume_gal=None, tons=None,
         lot=lot, vessel=vessel, additive=additive,
         target=d["target"], computed_dose=d["computed"],
         quantity=d["quantity"], basis_snapshot=d["basis"], added_at=added_at)
+
+
+def adds_volume(additive) -> bool:
+    """Does this additive physically increase the lot's volume? True for water
+    and anything else dosed as a percentage of volume (its computed quantity IS
+    a gallon figure). Kept as a function, not a model flag, so the rule lives in
+    one place next to the dose math it depends on."""
+    return additive.dose_mode == Additive.DoseMode.PCT_VOLUME
 
 
 def _lot_tons(lot) -> Decimal:

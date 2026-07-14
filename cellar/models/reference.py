@@ -133,6 +133,11 @@ class Additive(models.Model):
         PER_VOLUME = "per_volume", "Rate per volume"     # rate_unit: lb/1000gal, g/hL, L/1000gal, mL/hL
         PER_TON = "per_ton", "Rate per ton of fruit"     # rate_unit: mL/ton, g/ton
         PPM_TARGET = "ppm_target", "SO₂ to target ppm"   # KMBS dosed to a target added ppm
+        # Dosed as a PERCENT of the lot's current volume; the computed quantity is
+        # therefore GALLONS of liquid, and the addition grosses the lot up by that
+        # much (see operations.adds_volume / record_addition). Water is the case
+        # this exists for — "add 10% H2O" against 870 gal is 87 gal in, 957 out.
+        PCT_VOLUME = "pct_volume", "Percent of volume (adds volume)"
         BENCH = "bench", "Bench trial (no default)"
 
     name = models.CharField(max_length=80, unique=True)

@@ -173,6 +173,8 @@
   <button hx-get="{% url 'lot-bottling' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Bottling</button>
   {% endif %}
+  <button hx-get="{% url 'lot-sweeten' lot.pk %}" hx-target="#lot-panel"
+          onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Sweetening</button>
   <button hx-get="{% url 'lot-cost' lot.pk %}" hx-target="#lot-panel"
           onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('on'));this.classList.add('on')">Cost</button>
   <button hx-get="{% url 'lot-tasks' lot.pk %}" hx-target="#lot-panel"

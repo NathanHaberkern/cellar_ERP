@@ -22,7 +22,7 @@
 <p class="verify">Derived from the ledger — topping loss/gain rows are the same records 5120.17 reads.</p>
 
 <details class="add-form">
-  <summary>Book a transfer (tank move)</summary>
+  <summary>Book a transfer (tank move — whole lot)</summary>
   <form hx-post="{% url 'lot-transfer-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
     <div class="form-grid">
       {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="mv" label="To vessel" %}
@@ -30,6 +30,41 @@
     </div>
     <label>Note</label><textarea name="note" rows="2"></textarea>
     <div class="note-actions"><button class="btn sm" type="submit">Book transfer</button></div>
+  </form>
+</details>
+
+<details class="add-form">
+  <summary>Partial transfer (move part of the lot — creates a new lot)</summary>
+  <p class="muted" style="margin:0 0 10px">
+    Moves a PORTION of {{ lot.code }} into another vessel as its own new lot, with
+    the remainder staying put. Choosing Port as the program is how
+    {{ lot.code }} → 25VERDPORT gets made: rack the parcel to a tote, then fortify
+    it on its own Fortification tab.
+    {% if current_balance is not None %}
+      <br>{{ lot.code }} currently holds <strong>{{ current_balance }} gal</strong>.
+    {% endif %}
+  </p>
+  <form hx-post="{% url 'lot-split-create' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="form-grid">
+      {% include "web/_vessel_picker.html" with options=vessel_options field="to_vessel" picker_id="sp" label="To vessel" %}
+      <div><label>Gallons to move</label>
+        <input type="number" step="0.1" name="volume_gal" required
+               {% if current_balance is not None %}max="{{ current_balance }}"{% endif %}></div>
+      <div><label>New lot's program</label>
+        <select name="program">
+          <option value="">Same as {{ lot.code }} (plain partial rack)</option>
+          <option value="port">Port — to be fortified</option>
+          <option value="table">Table</option>
+          <option value="rose">Rosé</option>
+        </select></div>
+      <div><label>When</label><input type="datetime-local" name="moved_at" value="{{ now_local }}"></div>
+    </div>
+    <label>Note</label><textarea name="note" rows="2"></textarea>
+    <div class="note-actions">
+      <button class="btn sm" type="submit"
+              hx-confirm="Split this volume off {{ lot.code }} into a new lot? The remainder stays in its current vessel.">
+        Split &amp; move</button>
+    </div>
   </form>
 </details>
 

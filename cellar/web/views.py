@@ -16,6 +16,8 @@ Service calls are bound to the real cellar/services signatures and wrapped so a
 data gap shows an inline message rather than 500-ing the page.
 """
 
+from decimal import Decimal
+
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
@@ -422,12 +424,19 @@ def lot_addition_create(request, pk):
     from cellar.models.ledger import Addition
     lot = get_object_or_404(Lot, pk=pk)
     try:
-        additive = get_object_or_404(Additive, pk=request.POST.get("additive"))
+        aid = (request.POST.get("additive") or "").strip()
+        if not aid:
+            raise ValueError("Choose an additive.")
+        additive = get_object_or_404(Additive, pk=aid)
         added_at = _parse_dt(request.POST.get("added_at"))
-        rate = (request.POST.get("rate") or "").strip() or None
-        target_ppm = (request.POST.get("target_ppm") or "").strip() or None
+        # One "amount" box, mapped to the right dose kwarg for this additive's mode
+        # (ppm target / bench quantity / rate / percent) — the same helper the intake
+        # form uses. The old two-box rate+target_ppm form couldn't express a percent
+        # dose at all, and neither box drove a preview.
+        raw = (request.POST.get("amount") or "").strip()
+        override = Decimal(raw) if raw else None
         a = ops.record_addition(lot, additive, added_at=added_at,
-                                rate_override=rate, target_ppm=target_ppm)
+                                **ops._addition_kwargs(additive, override))
         note = (request.POST.get("note") or "").strip()
         if note:
             # notes isn't editable through the append-only save guard; set it via
@@ -490,6 +499,42 @@ def lot_transfer_create(request, pk):
     except Exception as e:  # noqa: BLE001
         return lot_movement_with_error(request, pk, str(e))
     return lot_movement(request, pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def lot_split_create(request, pk):
+    """Partial transfer: move part of a lot into another vessel as a NEW lot.
+    See services/splitting.py — this is how 25VERD → 25VERDPORT gets made."""
+    lot = get_object_or_404(Lot, pk=pk)
+    try:
+        from cellar.services import splitting
+        vessel = get_object_or_404(Vessel, pk=request.POST.get("to_vessel"))
+        program = (request.POST.get("program") or "").strip() or None
+        child = splitting.split_lot(
+            lot, volume_gal=request.POST.get("volume_gal"), to_vessel=vessel,
+            at=_parse_dt(request.POST.get("moved_at")), program=program,
+            note=request.POST.get("note", ""), actor=request.user)
+        lot.refresh_from_db()
+        ok = (f"Split {request.POST.get('volume_gal')} gal off {lot.code} into "
+              f"{child.code} in {vessel.code}. {lot.code} keeps the remainder.")
+    except Exception as e:  # noqa: BLE001
+        return lot_movement_with_error(request, pk, str(e))
+
+    def extra(l):
+        rows, err = _safe(lotpages.movements, l)
+        from .vessels import vessel_options
+        from .blend import blend_source_lots
+        from cellar.models import ExternalDestination as ED
+        from cellar.services import volumes as vol_svc
+        return {"rows": rows or [], "error": err, "ok": ok,
+                "vessel_options": vessel_options(exclude_lot=l),
+                "blend_sources": blend_source_lots(exclude_lot=l),
+                "external_destinations": ED.objects.order_by("name"),
+                "current_balance": vol_svc.lot_balance(l),
+                "today": timezone.localdate().isoformat(),
+                "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
+    return _panel(request, pk, "movement", "web/_lot_movement.html", extra)
 
 
 @login_required

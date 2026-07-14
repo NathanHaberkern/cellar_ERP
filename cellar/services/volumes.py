@@ -120,6 +120,31 @@ def must_sold_gal(lot):
                 MustSale.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
 
 
+def volume_added_gal(lot):
+    """Liquid ADDED to the lot: water, and sweetening concentrate.
+
+    This has to be an explicit balance term, and getting that wrong is subtle.
+    The instinct is to record a water addition by writing a new, larger
+    VolumeMeasurement — but a gauge is not liquid. `booked_volume()` reads the
+    ONE highest-confidence gauge (or the flagged booking gauge); it does not sum
+    them. So a fresh "the tank now reads 957" row is simply ignored by the
+    balance, and the addition silently does nothing. Worse, if such a row ever
+    DID win the confidence race it would become `booked` — and then every
+    removal already netted out of the balance would be subtracted a second time.
+
+    So liquid in is counted here, once, from the events that actually put it
+    there — symmetrically with how bottling/losses/removals count liquid out.
+    """
+    from cellar.models import Addition, SweeteningEvent, Additive
+    water = sum((_d(a.quantity) for a in
+                 Addition.objects.filter(lot=lot, voided_at__isnull=True,
+                                         additive__dose_mode=Additive.DoseMode.PCT_VOLUME)
+                 .select_related("additive")), ZERO)
+    sweetening = sum((_d(s.concentrate_gallons) for s in
+                      SweeteningEvent.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+    return water + sweetening
+
+
 def lot_balance(lot):
     """Wine (or juice/must, pre-ferment) currently in the lot, in gallons. None
     if the lot has never booked a volume AND has no inbound liquid (i.e.
@@ -128,7 +153,7 @@ def lot_balance(lot):
     inbound = inbound_gal(lot)
     if booked is None and inbound == ZERO:
         return None
-    bal = ((booked or ZERO) + inbound
+    bal = ((booked or ZERO) + inbound + volume_added_gal(lot)
            - outbound_gal(lot) - losses_gal(lot)
            - bottled_gal(lot) - bulk_removed_gal(lot)
            - bond_transferred_out_gal(lot) - must_sold_gal(lot))
@@ -145,10 +170,33 @@ def lot_balance_detail(lot):
         "losses": losses_gal(lot).quantize(GAL),
         "bottled": bottled_gal(lot).quantize(GAL),
         "bulk_removed": bulk_removed_gal(lot).quantize(GAL),
+        "volume_added": volume_added_gal(lot).quantize(GAL),
         "bond_transferred_out": bond_transferred_out_gal(lot).quantize(GAL),
         "must_sold": must_sold_gal(lot).quantize(GAL),
         "balance": lot_balance(lot),
     }
+
+
+def working_volume(lot):
+    """"How much is actually in this lot right now" — the ONE number the UI shows
+    and the dose math bases on.
+
+    This is `lot_balance()` (booked + inbound − everything that left), falling
+    back to the latest raw gauge only when the lot has nothing to balance yet
+    (no booked volume and no inbound liquid — e.g. a lot that's been crushed but
+    not yet gauged).
+
+    It exists because `operations.current_volume()` returns the LATEST GAUGE,
+    which is a different question. A gauge is a snapshot of a measurement that
+    was taken; it doesn't move when wine is sold, transferred out in bond,
+    bottled, or lost. That's fine for "what did the last reading say" but wrong
+    for "what's in the tank" — and it's why a 100 gal must sale and a B2B
+    transfer both left the displayed volume untouched. Anything that means the
+    latter should call this, not current_volume().
+    """
+    from cellar.services.operations import current_volume
+    bal = lot_balance(lot)
+    return bal if bal is not None else current_volume(lot)
 
 
 # ======================================================================
