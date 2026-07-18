@@ -1,0 +1,52 @@
+{# Oak — column → rack → barrel display. Scoped to this lot; never the fleet. #}
+<div class="section-body">
+  <h3 style="margin:0 0 12px">Oak</h3>
+
+  {# tier percentages (SS drums excluded — not oak) #}
+  <div class="cards" style="grid-template-columns:repeat(4,1fr);gap:12px;display:grid">
+    {% for t in tiers %}
+      <div class="card"><div class="l">{{ t.label }}</div>
+        <div class="n">{{ t.pct }}%</div>
+        <div class="l">{{ t.count }} barrel{{ t.count|pluralize }}</div></div>
+    {% endfor %}
+  </div>
+
+  <p class="muted" style="margin:12px 0 4px">
+    {{ barrel_count }} barrel{{ barrel_count|pluralize }}
+    {% if total_gallons %}· {{ total_gallons }} gal{% endif %}
+    {% if oak_count != barrel_count %}· {{ oak_count }} oak{% endif %}</p>
+
+  {% if columns %}
+    {% for col in columns %}
+      <div class="oak-col">
+        <div class="oak-col-head">{{ col.column }}
+          <span class="muted">· {{ col.barrel_count }} barrel{{ col.barrel_count|pluralize }}</span></div>
+        <table class="oak-racks">
+          <tbody>
+            {% for r in col.racks %}
+              <tr>
+                <th>{{ r.rack_id }}</th>
+                <td>
+                  {% for b in r.barrels %}
+                    <span class="brl {% if not b.is_oak %}brl-ss{% endif %}">
+                      {{ b.barrel }} <span class="muted">{{ b.size|floatformat:0 }}g · {{ b.tier }}</span>
+                    </span>{% if not forloop.last %} <span class="brl-sep">/</span> {% endif %}
+                  {% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+    {% if unracked %}
+      <div class="oak-col"><div class="oak-col-head">Not on a rack
+        <span class="muted">· {{ unracked|length }}</span></div>
+        <p class="muted" style="margin:4px 0 0">
+          {% for b in unracked %}{{ b.barrel }} ({{ b.size|floatformat:0 }}g){% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="empty">No barrels down for this lot yet. Use <b>Rack down</b> to fill barrels.</div>
+  {% endif %}
+</div>

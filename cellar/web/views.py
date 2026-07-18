@@ -152,85 +152,13 @@ def _lot_filter_ctx(request):
 
 
 @login_required
-def lot_detail(request, pk):
-    lot = get_object_or_404(Lot, pk=pk)
-    summary, err = _safe(lotpages.summary, lot)
-    # tab gate (C1): during cold soak/fermenting/pressed/settling, Fermentation
-    # is the default-active tab — but Additions stays visible and reachable the
-    # whole time (ad hoc additions like acid adjustments or fining don't stop
-    # just because the lot is settling or mid-ferment). hide_additions only
-    # picks the default tab now; see lot_detail.html.
-    ferment_window = {Lot.Status.COLD_SOAK, Lot.Status.FERMENTING,
-                      Lot.Status.PRESSED, Lot.Status.SETTLING}
-    show_ferment = lot.status in (ferment_window | {Lot.Status.RECEIVING, Lot.Status.PROCESSING})
-    hide_additions = lot.status in ferment_window
-
-    # Bottling tab: wine that has been BOOKED TO BOND (not merely racked to oak),
-    # or a parcel itself. Keying this on `status == DONE_PRIMARY` was what hid the
-    # tab forever on any lot that never sees a barrel.
-    from cellar.services import bottling as bz
-    show_bottling = bz.can_split(lot) or bz.is_parcel(lot) or bool(bz.parcels_of(lot))
-
-    # Fortification / Port tab — only Port-designated lots ever see this.
-    from cellar.services import lotmeta
-    show_fortification = lotmeta.is_port(lot)
-
-    # Book-to-bond card on the summary — the act that ends primary.
-    from .bonding import bond_ctx
-    bond_card = bond_ctx(lot)
-
-    # Overview task summary — open count, overdue count, next 3 by due date.
-    from cellar.services import tasks as tsvc
-    open_qs = list(tsvc.open_tasks(lot=lot))
-    task_summary = {
-        "open_count": len(open_qs),
-        "overdue_count": sum(1 for t in open_qs if t.is_overdue),
-        "next": open_qs[:3],
-        "more": max(0, len(open_qs) - 3),
-    }
-
-    # Sugar-depletion sparkline + press/barrel-down estimate — only meaningful
-    # while the lot is still pre-bond; same window as show_ferment above.
-    progress, progress_err = (_safe(lotpages.ferment_progress, lot) if show_ferment
-                               else (None, None))
-
-    # Red skin-contact minimum: only surfaced as an editable control when the
-    # lot is actually on a skin-contact red path (see fermentation.RED_SKIN_CONTACT_PATHS).
-    from cellar.services import fermentation as ferm_svc
-    skin_floor_date, skin_floor_days = ferm_svc.skin_contact_floor_date(lot)
-    skin_contact_ctx = None
-    if skin_floor_days is not None:
-        skin_contact_ctx = {
-            "days": skin_floor_days,
-            "floor_date": skin_floor_date,
-            "override": getattr(lot, "fermentation_override", None),
-        }
-
-    # Merged timeline (additions + readings + movements) — the "what has
-    # actually happened here" glance for the summary card.
-    timeline_rows, timeline_err = _safe(lotpages.timeline, lot)
-
-    return render(request, "web/lot_detail.html", {
-        "nav": "lots", "lot": lot, "summary": summary or {}, "summary_error": err,
-        "overview_note": lotpages.section_note(lot, "overview"),
-        "show_ferment": show_ferment, "hide_additions": hide_additions,
-        "show_bottling": show_bottling, "show_fortification": show_fortification,
-        "task_summary": task_summary,
-        "bond_card": bond_card,
-        "progress": progress, "progress_error": progress_err,
-        "skin_contact": skin_contact_ctx,
-        "timeline": timeline_rows or [], "timeline_error": timeline_err,
-    })
-
-
-@login_required
 @require_http_methods(["POST"])
 def lot_skin_contact_override_save(request, pk):
     """Save (or clear, on blank) the per-lot minimum skin-contact override.
     Always editable from the lot page — see LotFermentationOverride's
     docstring for why this is separate from the append-only destemming record.
-    Plain form POST (not HTMX — lot_detail.html is a full page, not a
-    fragment), so this redirects back rather than re-rendering directly.
+    Plain form POST that redirects back to the lot (now the v2 Fermentation
+    tile), rather than re-rendering a fragment directly.
     """
     from django.shortcuts import redirect
     from cellar.models import LotFermentationOverride

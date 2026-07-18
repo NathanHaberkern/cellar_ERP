@@ -24,6 +24,7 @@ from . import daily as daily_web
 from . import weightags
 from . import sweeten
 from . import lotshell
+from . import oakflow
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -55,16 +56,22 @@ urlpatterns = [
 
     path("lots/", views.lots_list, name="lots"),
     path("lots/search/", views.lots_search, name="lots-search"),          # HTMX
-    path("lots/<int:pk>/", views.lot_detail, name="lot-detail"),
+    # lot-detail lands on the v2 dashboard, mode-aware (fermentation pre-bond,
+    # oak in-bond). The legacy single-page view has been retired.
+    path("lots/<int:pk>/", lotshell.lot_landing, name="lot-detail"),
 
     # ---- lot dashboard v2 (full-page-per-tile shell) ----------------------
-    # Additive + isolated; legacy lot-detail above is untouched for side-by-side
-    # evaluation. Read tiles render server-side; capture tiles lazy-load their
-    # existing fragment into the shell body (reused verbatim, redesign later).
+    # Read tiles render server-side; capture tiles fold their former satellite
+    # tabs (Sweeten/Re-fortification/Bottling/Book-to-bond) via an in-tile
+    # action switcher, reusing every existing fragment verbatim.
     path("lots/<int:pk>/d/fermentation/", lotshell.page_fermentation, name="lot2-fermentation"),
     path("lots/<int:pk>/d/additions/",    lotshell.page_additions,    name="lot2-additions"),
     path("lots/<int:pk>/d/movement/",     lotshell.page_movement,     name="lot2-movement"),
     path("lots/<int:pk>/d/oak/",          lotshell.page_oak,          name="lot2-oak"),
+    # oak v2 fragments (column→rack→barrel display + two-phase fill)
+    path("lots/<int:pk>/oak2/barrels/",      oakflow.oak_barrels,     name="lot-oak-barrels"),
+    path("lots/<int:pk>/oak2/fill/",         oakflow.oak_fill,        name="lot-oak-fill"),
+    path("lots/<int:pk>/oak2/fill/commit/",  oakflow.oak_fill_commit, name="lot-oak-fill-commit"),
     path("lots/<int:pk>/d/composition/",  lotshell.page_composition,  name="lot2-composition"),
     path("lots/<int:pk>/d/compliance/",   lotshell.page_compliance,   name="lot2-compliance"),
     path("lots/<int:pk>/d/cost/",         lotshell.page_cost,         name="lot2-cost"),

@@ -1,0 +1,95 @@
+{# Oak — two-phase rack-down. Empty racks in the lot's pool, grouped by their
+   current column (the pull location). Check the barrels, set the end column,
+   record. Per-barrel volume defaults to capacity − headspace. #}
+<div class="section-body">
+  <h3 style="margin:0 0 4px">Rack down</h3>
+  {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+  <p class="muted" style="margin:0 0 12px">
+    {{ pool_label }} pool · {{ total_empty }} empty barrel{{ total_empty|pluralize }} available.
+    Check the barrels you filled, set where they end up, and record.</p>
+
+  {% if total_empty %}
+  <form hx-post="{% url 'lot-oak-fill-commit' lot.pk %}" hx-target="#lot-panel" hx-swap="innerHTML">
+    <div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      <div><label>Filled at</label>
+        <input type="date" name="filled_at" value="{{ today|default:'' }}"></div>
+      <div><label>End column</label>
+        <select name="end_column">
+          <option value="__keep__">— leave where pulled —</option>
+          {% for loc in end_locations %}<option value="{{ loc.code }}">{{ loc.code }} ({{ loc.room.name }})</option>{% endfor %}
+        </select></div>
+    </div>
+
+    {% for col in columns %}
+      <div class="oak-col">
+        <div class="oak-col-head">
+          <label class="chk-all"><input type="checkbox" class="col-all"> {{ col.column }}</label>
+          <span class="muted">· {{ col.empty_barrels }} empty</span>
+        </div>
+        <table class="oak-racks">
+          <tbody>
+            {% for r in col.racks %}
+              <tr>
+                <th>{{ r.rack_id }}</th>
+                <td>
+                  {% for b in r.barrels %}
+                    <label class="brl-pick">
+                      <input type="checkbox" name="containers" value="{{ b.pk }}" class="brl-chk">
+                      {{ b.barrel }} <span class="muted">{{ b.size|floatformat:0 }}g</span>
+                      <input type="number" step="0.1" name="fill_{{ b.pk }}" value="{{ b.default }}"
+                             class="brl-vol" title="gallons filled">
+                    </label>
+                  {% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+    {% if loose %}
+      <div class="oak-col"><div class="oak-col-head">Not on a rack (work area)</div>
+        <table class="oak-racks"><tbody><tr><td>
+          {% for b in loose %}
+            <label class="brl-pick"><input type="checkbox" name="containers" value="{{ b.pk }}" class="brl-chk">
+              {{ b.barrel }} <span class="muted">{{ b.size|floatformat:0 }}g</span>
+              <input type="number" step="0.1" name="fill_{{ b.pk }}" value="{{ b.default }}" class="brl-vol"></label>
+          {% endfor %}
+        </td></tr></tbody></table>
+      </div>
+    {% endif %}
+
+    <div class="row" style="margin-top:14px;gap:10px;align-items:center">
+      <button type="submit" class="btn">Record barrel-down</button>
+      <span class="muted" id="pick-count"></span>
+    </div>
+  </form>
+
+  <script>
+  (function(){
+    var root = document.currentScript.closest('.section-body');
+    function refresh(){
+      var n = root.querySelectorAll('.brl-chk:checked').length;
+      var g = 0;
+      root.querySelectorAll('.brl-chk:checked').forEach(function(chk){
+        var v = chk.parentElement.querySelector('.brl-vol');
+        g += parseFloat(v && v.value || 0) || 0;
+      });
+      var out = root.querySelector('#pick-count');
+      if(out) out.textContent = n ? (n + ' barrel' + (n>1?'s':'') + ' · ' + (Math.round(g*10)/10) + ' gal') : '';
+    }
+    root.addEventListener('change', function(e){
+      if(e.target.classList.contains('col-all')){
+        var col = e.target.closest('.oak-col');
+        col.querySelectorAll('.brl-chk').forEach(function(c){ c.checked = e.target.checked; });
+      }
+      refresh();
+    });
+    root.addEventListener('input', function(e){ if(e.target.classList.contains('brl-vol')) refresh(); });
+    refresh();
+  })();
+  </script>
+  {% else %}
+    <div class="empty">No empty barrels in the {{ pool_label }} pool right now.</div>
+  {% endif %}
+</div>

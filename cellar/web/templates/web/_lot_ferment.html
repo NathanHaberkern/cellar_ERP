@@ -142,4 +142,28 @@
   </div>
 {% endif %}
 
+{% if skin_contact %}
+  <div class="card" style="margin-top:12px">
+    <form method="post" action="{% url 'lot-skin-contact-override' lot.pk %}">
+      {% csrf_token %}
+      <label for="skin-days">Minimum skin contact (days)
+        <span class="muted">— floors the press estimate; doesn't block an early press</span></label>
+      <div class="row" style="align-items:center">
+        <input type="number" min="0" step="1" id="skin-days" name="min_skin_contact_days"
+               value="{{ skin_contact.override.min_skin_contact_days|default_if_none:'' }}"
+               placeholder="{{ skin_contact.days }} (winery default)" style="max-width:120px">
+        <button class="btn ghost sm" type="submit">Save</button>
+      </div>
+      {% if skin_contact.override.min_skin_contact_days is not None %}
+        <p class="muted" style="margin:4px 0 0;font-size:12px">
+          Overridden to {{ skin_contact.override.min_skin_contact_days }} days · floor date {{ skin_contact.floor_date|date:"M j" }}.
+          Clear the field and save to return to the {{ skin_contact.days }}-day default.</p>
+      {% else %}
+        <p class="muted" style="margin:4px 0 0;font-size:12px">
+          Using the winery default ({{ skin_contact.days }} days) · floor date {{ skin_contact.floor_date|date:"M j" }}.</p>
+      {% endif %}
+    </form>
+  </div>
+{% endif %}
+
 {% include "web/_lot_note.html" with section="fermentation" note=note %}

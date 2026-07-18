@@ -2,7 +2,7 @@
 Fortification / Port — front end (HTMX).
 
 Shows only on lots designated to the Port program (`lotmeta.is_port`); the tab
-itself is conditionally rendered in lot_detail.html the same way the
+itself is conditionally rendered in the Additions tile the same way the
 Fermentation and Bottling tabs already are (`show_fortification`).
 
 Two forms live here, matching the two entry points in services/fortification.py:

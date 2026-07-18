@@ -6,7 +6,7 @@ Renders the right step(s) from the lot's status:
   * fermenting          → the plan/tasks, Step 2 daily entry, Step 3 press
   * pressed / settling  → Step 4 rack-to-barrel (flips status → done_primary)
 
-The tab itself is shown/hidden by lot_detail.html per the status window; this
+The fermentation flow shows/hides steps per the status window; this
 module assumes it's only reached inside that window.
 """
 from django.contrib.auth.decorators import login_required
@@ -25,7 +25,7 @@ from . import lotpages
 def _section_note(lot, section):
     return lotpages.section_note(lot, section)
 
-# status windows (kept in step with lot_detail.html)
+# status windows (drive progressive disclosure in the Fermentation tile)
 FERMENT_WINDOW = {Lot.Status.COLD_SOAK, Lot.Status.FERMENTING,
                   Lot.Status.PRESSED, Lot.Status.SETTLING}
 
@@ -112,6 +112,15 @@ def ferment_ctx(lot):
 
     if show_rack:
         ctx["barrels"] = fz.empty_oak_containers()
+
+    # Red skin-contact minimum override — moved here from the legacy summary card.
+    # Only surfaced on an actual skin-contact red path.
+    floor_date, floor_days = fz.skin_contact_floor_date(lot)
+    if floor_days is not None:
+        ctx["skin_contact"] = {
+            "days": floor_days, "floor_date": floor_date,
+            "override": getattr(lot, "fermentation_override", None),
+        }
 
     return ctx
 

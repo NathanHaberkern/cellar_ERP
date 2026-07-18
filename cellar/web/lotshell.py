@@ -8,10 +8,8 @@ per-lot lifecycle Gantt filtered per tile, an outstanding-tasks widget, and an
 (Composition, Compliance, Cost, Labs).
 
 This module is ADDITIVE and isolated: it defines its own page views and mounts
-at /lots/<pk>/d/... . The legacy single-page lot_detail (/lots/<pk>/) is left
-untouched so the two can run side by side during evaluation. Once approved, the
-legacy route flips to `page_fermentation` (or a mode-aware landing) and the old
-tab bar retires.
+at /lots/<pk>/d/... . /lots/<pk>/ lands here via lot_landing (mode-aware); the
+legacy single-page lot_detail and its tab bar have been retired.
 
 Read tiles render their body server-side (full page). Capture tiles are full
 pages too, but lazy-load their existing HTMX fragment into the body — that reuses
@@ -22,7 +20,6 @@ Additions; folding Bottling into Movement; the barrel/rack representation for
 Oak, which waits on the seed import).
 """
 
-from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render
@@ -33,7 +30,6 @@ from cellar.models.spine import Lot
 from cellar.models.reference import Additive, LabAnalyte
 from cellar.models.fermentation import LabResult
 from cellar.services import bonding as bond_svc
-from cellar.services import volumes as vol_svc
 from cellar.services import lotmeta
 from cellar.web import lotpages
 
@@ -118,12 +114,74 @@ def _in_domain(kind, domain):
     return any(w in k for w in kw)
 
 
+def _phase_anchors(lot):
+    """Dates we can anchor lifecycle phases to, from real recorded events.
+    Missing anchors just drop their phase — we never invent a timeline."""
+    from cellar.models import (HarvestEvent, InoculationEvent, PressingEvent,
+                               BottlingRun, FortificationEvent)
+
+    def _min(qs, field):
+        v = qs.filter(voided_at__isnull=True).order_by(field).values_list(field, flat=True).first()
+        return _dtdate(v)
+
+    harvest = _min(HarvestEvent.objects.filter(lot=lot), "harvest_date") \
+        if hasattr(HarvestEvent, "lot") else None
+    # harvest may attach via weigh tags rather than a direct lot FK
+    if harvest is None:
+        from cellar.models import WeighTagAllocation
+        wta = (WeighTagAllocation.objects.filter(lot=lot, voided_at__isnull=True)
+               .select_related("weigh_tag").order_by("created_at").first())
+        harvest = _dtdate(getattr(getattr(wta, "weigh_tag", None), "harvest_date", None)) if wta else None
+
+    inoc = _min(InoculationEvent.objects.filter(lot=lot), "inoculated_at")
+    press = _min(PressingEvent.objects.filter(lot=lot), "pressed_at")
+    bond = _bond_date(lot)
+    fort = _min(FortificationEvent.objects.filter(lot=lot).exclude(booked_at__isnull=True), "booked_at")
+    barrel_down = _min(lot.placements.all(), "filled_at")
+    bottled = _min(BottlingRun.objects.filter(source_lot=lot), "bottled_at")
+    return {"harvest": harvest, "inoc": inoc, "press": press,
+            "bond": bond or fort, "barrel_down": barrel_down, "bottled": bottled}
+
+
+def _dtdate(x):
+    if x is None:
+        return None
+    return x.date() if hasattr(x, "hour") else x
+
+
+def _phases(lot, today):
+    """Sequential lifecycle bands from the anchors. Only phases whose endpoints
+    both resolve are emitted; MLF / extended maceration have no reliable event
+    yet, so they're intentionally absent rather than guessed."""
+    a = _phase_anchors(lot)
+    out = []
+
+    def seg(label, start, end, cls):
+        if not start:
+            return
+        end = end or today
+        if end < start:
+            end = start
+        out.append({"label": label, "start": start, "end": end, "cls": cls})
+
+    seg("Fruit prep", a["harvest"], a["inoc"] or a["press"] or a["bond"], "fruit")
+    seg("Primary ferment", a["inoc"], a["press"] or a["bond"] or a["barrel_down"], "primary")
+    seg("Élevage", a["barrel_down"] or a["bond"], a["bottled"] or today, "elevage")
+    if a["bottled"]:
+        seg("Finishing", a["bottled"], today, "finishing")
+    return out
+
+
 def _gantt(lot, domain):
     rows, _ = _safe(lotpages.timeline, lot, 200)
     rows = [r for r in (rows or []) if r.get("date")]
     markers = [r for r in rows if _in_domain(r.get("kind"), domain)]
-    dates = [r["date"] for r in rows]
     today = timezone.localdate()
+    phases = _phases(lot, today)
+
+    dates = [r["date"] for r in rows]
+    for ph in phases:
+        dates += [ph["start"], ph["end"]]
     bond_dt = _bond_date(lot)
     if bond_dt:
         dates.append(bond_dt)
@@ -136,21 +194,18 @@ def _gantt(lot, domain):
     def frac(d):
         return round((d - lo).days / span * 100, 2)
 
-    out_markers = []
-    for r in markers:
-        out_markers.append({
-            "x": frac(r["date"]), "kind": r["kind"],
-            "label": r["label"], "detail": r.get("detail") or "",
-            "date": r["date"],
-        })
-    # de-dup near-identical x positions is unnecessary for a glance; keep all.
+    for ph in phases:
+        ph["x"] = frac(ph["start"])
+        ph["w"] = max(round(frac(ph["end"]) - frac(ph["start"]), 2), 1.2)
+
+    out_markers = [{"x": frac(r["date"]), "kind": r["kind"], "label": r["label"],
+                    "detail": r.get("detail") or "", "date": r["date"]} for r in markers]
     return {
-        "empty": False,
-        "start": lo, "end": hi,
+        "empty": False, "start": lo, "end": hi,
+        "phases": phases,
         "bond_x": frac(bond_dt) if bond_dt else None,
         "today_x": frac(today),
-        "markers": out_markers,
-        "domain": domain,
+        "markers": out_markers, "domain": domain,
     }
 
 
@@ -229,6 +284,17 @@ def active_url(active):
     }[active]
 
 
+@login_required
+def lot_landing(request, pk):
+    """Default lot landing (v2). Every tile carries the summary card, so landing
+    just picks the mode-appropriate work surface: the fermentation flow pre-bond,
+    the aging/oak surface once in bond. This is what /lots/<pk>/ now serves."""
+    from django.shortcuts import redirect
+    lot = get_object_or_404(Lot, pk=pk)
+    target = "lot2-oak" if bond_svc.is_in_bond(lot) else "lot2-fermentation"
+    return redirect(target, pk=lot.pk)
+
+
 # ===========================================================================
 # Capture tiles — full pages with an in-tile action switcher that folds the
 # former satellite tabs into their parent (Sweeten + Re-fortification →
@@ -276,9 +342,17 @@ def page_movement(request, pk):
 @login_required
 def page_oak(request, pk):
     lot = get_object_or_404(Lot, pk=pk)
-    # Oak stays single-fragment for now; barrel/rack representation lands with
-    # the seed import. Topping / rack-out already live inside this fragment.
-    return _render(request, lot, "oak", body_htmx="lot-oak", gantt_domain="oak")
+    # Any action into or out of barrels lives here (per the v2 model): the
+    # column→rack→barrel view, the two-phase rack-down, plus topping / rack-out.
+    from cellar.services import bonding as bond
+    can_fill = bond.is_in_bond(lot) or bond.can_book_to_bond(lot)
+    specs = [
+        ("barrels", "Barrels", "lot-oak-barrels", True),
+        ("fill", "Rack down", "lot-oak-fill", can_fill),
+        ("top", "Topping", "lot-top-barrels", True),
+        ("rackout", "Rack-out", "lot-rack-out", True),
+    ]
+    return _capture(request, lot, "oak", specs, "oak")
 
 
 # ===========================================================================
@@ -338,51 +412,17 @@ def page_labs(request, pk):
 
 @login_required
 def page_compliance(request, pk):
-    """New read tile. Per-lot in-bond balance built entirely on the existing
-    volumes.lot_balance_detail decomposition — no new model, no new math.
-    v1 shows the signed decomposition as a running-balance ledger + bond status;
-    the chronological per-event enrichment is a fast-follow."""
+    """Read tile: per-lot in-bond ledger. Dated per-event rows with a running
+    balance, sourced from compliance_ledger and reconciled to volumes.lot_balance."""
+    from cellar.services import compliance_ledger as cl
     lot = get_object_or_404(Lot, pk=pk)
-    detail, err = _safe(vol_svc.lot_balance_detail, lot)
-    detail = detail or {}
+    data, err = _safe(cl.rows, lot)
+    data = data or {"rows": [], "balance": None, "reconciles": True}
     in_bond = bond_svc.is_in_bond(lot)
-
-    # Build a signed ledger from the decomposition, in production order, with a
-    # running balance. Increases first (booked, inbound, added, gains), then the
-    # decreases (losses, outbound, bulk/tax-paid removals, bond transfers, must
-    # sales, bottling). Each row: label, increase, decrease, balance.
-    def g(key):
-        v = detail.get(key)
-        return Decimal(v) if v is not None else Decimal("0")
-
-    rows = []
-    running = Decimal("0")
-
-    def add(label, amount, *, increase):
-        nonlocal running
-        if amount == 0:
-            return
-        running += amount if increase else -amount
-        rows.append({
-            "label": label,
-            "increase": amount if increase else None,
-            "decrease": amount if not increase else None,
-            "balance": running,
-        })
-
-    add("Booked to bond", g("booked"), increase=True)
-    add("Inbound (blend/transfer in)", g("inbound"), increase=True)
-    add("Volume added (water / sweetening)", g("volume_added"), increase=True)
-    add("Losses (evaporation / spillage)", g("losses"), increase=False)
-    add("Outbound (blend / transfer out)", g("outbound"), increase=False)
-    add("Bulk tax-paid removals", g("bulk_removed"), increase=False)
-    add("Bond transfers out (B2B)", g("bond_transferred_out"), increase=False)
-    add("Must sales", g("must_sold"), increase=False)
-    add("Bottled", g("bottled"), increase=False)
-
     body = {
-        "detail": detail, "ledger_rows": rows,
-        "balance": detail.get("balance"),
+        "ledger_rows": data["rows"],
+        "balance": data["balance"],
+        "reconciles": data["reconciles"],
         "in_bond": in_bond,
         "bond_status": "In bond" if in_bond else "Tax paid / not yet bonded",
         "error": err,

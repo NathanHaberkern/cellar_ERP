@@ -329,22 +329,30 @@ h4.sub{margin:18px 0 8px;font-size:14px}
 .tile-body{margin-top:6px}
 .d-tasks{margin-top:16px}
 
-/* gantt */
+/* gantt (HTML-positioned lifecycle bands) */
 .gantt{margin-top:16px}
-.gantt-wrap{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel)}
-.gantt-svg{display:block;overflow:visible}
-.band{rx:3}
-.band-ferment{fill:#f0e7d6}
-.band-bond{fill:#dfeae0}
-.gantt-bond-line{stroke:var(--red);stroke-width:1.5;stroke-dasharray:3 2}
-.gantt-today-line{stroke:var(--ink);stroke-width:1;opacity:.45}
-.gantt-dot{fill:var(--red);stroke:#fff;stroke-width:1}
-.gantt-legend{display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;flex-wrap:wrap}
+.gantt-wrap{border:1px solid var(--line);border-radius:8px;padding:14px;background:var(--panel)}
+.gantt-track{position:relative;height:34px;background:#faf6ee;border-radius:5px;overflow:hidden}
+.gphase{position:absolute;top:6px;height:22px;border-radius:4px;display:flex;align-items:center;
+  padding:0 7px;overflow:hidden;white-space:nowrap;box-sizing:border-box}
+.gphase-lbl{font-size:11px;font-weight:600;color:#5c5348;letter-spacing:.02em}
+.gphase-fruit{background:#f0e0c4}
+.gphase-primary{background:#f4c9bf}
+.gphase-elevage{background:#cfe3d2}
+.gphase-finishing{background:#cfd8e6}
+.grule{position:absolute;top:0;bottom:0;width:0;border-left:1.5px solid}
+.grule-bond{border-color:var(--red);border-left-style:dashed}
+.grule-today{border-color:var(--ink);opacity:.5}
+.gdot{position:absolute;top:13px;width:8px;height:8px;margin-left:-4px;border-radius:50%;
+  background:var(--red);border:1.5px solid #fff;box-shadow:0 0 0 .5px rgba(0,0,0,.15)}
+.gantt-legend{display:flex;gap:14px;align-items:center;margin-top:9px;font-size:12px;flex-wrap:wrap}
 .gantt-legend .lg{display:inline-flex;align-items:center;gap:5px;color:var(--muted)}
 .gantt-legend .lg::before{content:"";width:10px;height:10px;border-radius:2px;display:inline-block}
-.lg-ferment::before{background:#f0e7d6}
-.lg-bond::before{background:#dfeae0}
-.lg-today::before{background:var(--ink);opacity:.45}
+.lg-fruit::before{background:#f0e0c4}
+.lg-primary::before{background:#f4c9bf}
+.lg-elevage::before{background:#cfe3d2}
+.lg-finishing::before{background:#cfd8e6}
+.lg-today::before{background:var(--ink);opacity:.5}
 
 /* compliance ledger */
 table.ledger{width:100%;border-collapse:collapse;margin-top:8px}
@@ -371,3 +379,18 @@ table.ledger tfoot td{border-top:2px solid var(--line-strong);border-bottom:none
 .section-switch .seg:hover{color:var(--ink)}
 .section-switch .seg.on{background:var(--panel);color:var(--ink);
   box-shadow:0 1px 2px rgba(0,0,0,.08);font-weight:700}
+
+/* Oak: column → rack → barrel */
+.oak-col{border:1px solid var(--line);border-radius:8px;margin:10px 0;overflow:hidden}
+.oak-col-head{background:#f6f1e7;padding:8px 12px;font-weight:700;font-size:13px;
+  display:flex;align-items:center;gap:8px}
+.oak-racks{width:100%;border-collapse:collapse}
+.oak-racks th{width:70px;text-align:left;padding:7px 12px;font-size:12px;color:var(--muted);
+  border-top:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums}
+.oak-racks td{padding:7px 12px;border-top:1px solid var(--line)}
+.brl{display:inline-block}
+.brl-ss{opacity:.7;font-style:italic}
+.brl-sep{color:var(--line-strong)}
+.brl-pick{display:inline-flex;align-items:center;gap:6px;margin:2px 14px 2px 0}
+.brl-vol{max-width:74px;padding:3px 6px}
+.chk-all{display:inline-flex;align-items:center;gap:6px;cursor:pointer}

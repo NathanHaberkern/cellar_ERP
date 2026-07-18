@@ -1,40 +1,38 @@
-{# Shared lifecycle Gantt, one data source, filtered to the active tile's domain.
-   v1 = a time axis from first event to today, split into pre-bond / in-bond
-   bands at book-to-bond, with event markers. Phase bands (primary/MLF/élevage)
-   arrive with the capture-tile slice. #}
+{# Shared lifecycle Gantt. Phase bands derived from real recorded events
+   (fruit prep → primary ferment → élevage → finishing — only those that
+   resolve), plus domain-filtered event markers. HTML-positioned so labels
+   don't distort. MLF / extended maceration appear once we have events for them. #}
 <section class="gantt">
   <div class="tasks-head">
-    <h3>Timeline{% if gantt.domain %} <span class="muted">· {{ gantt.domain }}</span>{% endif %}</h3>
-    {% if not gantt.empty %}<span class="muted">{{ gantt.start|date:"M j, Y" }} — {{ gantt.end|date:"M j, Y" }}</span>{% endif %}
+    <h3>Timeline{% if gantt.domain %} <span class="muted">&middot; {{ gantt.domain }}</span>{% endif %}</h3>
+    {% if not gantt.empty %}<span class="muted">{{ gantt.start|date:"M j, Y" }} &mdash; {{ gantt.end|date:"M j, Y" }}</span>{% endif %}
   </div>
 
   {% if gantt.empty %}
     <div class="empty">Nothing recorded yet.</div>
   {% else %}
     <div class="gantt-wrap">
-      <svg viewBox="0 0 1000 96" width="100%" height="96" preserveAspectRatio="none" class="gantt-svg">
-        {# bands #}
-        {% if gantt.bond_x is not None %}
-          <rect x="0" y="30" width="{{ gantt.bond_x }}%" height="18" class="band band-ferment"></rect>
-          <rect x="{{ gantt.bond_x }}%" y="30" width="100" height="18" class="band band-bond"
-                style="width:calc(100% - {{ gantt.bond_x }}%)"></rect>
-          <line x1="{{ gantt.bond_x }}%" y1="20" x2="{{ gantt.bond_x }}%" y2="72" class="gantt-bond-line"></line>
-        {% else %}
-          <rect x="0" y="30" width="100%" height="18" class="band band-ferment"></rect>
-        {% endif %}
-        {# today marker #}
-        <line x1="{{ gantt.today_x }}%" y1="20" x2="{{ gantt.today_x }}%" y2="72" class="gantt-today-line"></line>
+      <div class="gantt-track">
+        {# phase bands #}
+        {% for ph in gantt.phases %}
+          <div class="gphase gphase-{{ ph.cls }}" style="left:{{ ph.x }}%;width:{{ ph.w }}%"
+               title="{{ ph.label }}: {{ ph.start|date:'M j' }} &ndash; {{ ph.end|date:'M j' }}">
+            <span class="gphase-lbl">{{ ph.label }}</span>
+          </div>
+        {% endfor %}
+        {# book-to-bond divider + today #}
+        {% if gantt.bond_x is not None %}<div class="grule grule-bond" style="left:{{ gantt.bond_x }}%" title="Booked to bond"></div>{% endif %}
+        <div class="grule grule-today" style="left:{{ gantt.today_x }}%" title="Today"></div>
         {# event markers #}
         {% for m in gantt.markers %}
-          <circle cx="{{ m.x }}%" cy="39" r="4" class="gantt-dot">
-            <title>{{ m.date|date:"M j" }} · {{ m.kind }} — {{ m.label }}{% if m.detail %} ({{ m.detail }}){% endif %}</title>
-          </circle>
+          <div class="gdot" style="left:{{ m.x }}%"
+               title="{{ m.date|date:'M j' }} &middot; {{ m.kind }} &mdash; {{ m.label }}{% if m.detail %} ({{ m.detail }}){% endif %}"></div>
         {% endfor %}
-      </svg>
+      </div>
       <div class="gantt-legend">
-        {% if gantt.bond_x is not None %}<span class="lg lg-ferment">pre-bond</span><span class="lg lg-bond">in bond</span>{% endif %}
+        {% for ph in gantt.phases %}<span class="lg lg-{{ ph.cls }}">{{ ph.label }}</span>{% endfor %}
         <span class="lg lg-today">today</span>
-        <span class="muted">{{ gantt.markers|length }} event{{ gantt.markers|length|pluralize }} · hover a dot for detail</span>
+        <span class="muted">{{ gantt.markers|length }} event{{ gantt.markers|length|pluralize }} &middot; hover for detail</span>
       </div>
     </div>
   {% endif %}

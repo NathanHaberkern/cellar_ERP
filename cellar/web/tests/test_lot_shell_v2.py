@@ -89,13 +89,37 @@ class LotDashboardV2Tests(TestCase):
     def test_gantt_present_with_markers(self):
         r = self.c.get(f"/lots/{self.lot.pk}/d/fermentation/")
         html = r.content.decode()
-        self.assertIn("gantt-svg", html)
-        self.assertIn("gantt-dot", html)  # the two readings
+        self.assertIn("gantt-track", html)
+        self.assertIn("gdot", html)  # the two readings
+
+    def test_gantt_phase_bands_derive_from_events(self):
+        from datetime import timedelta
+        from cellar.models import InoculationEvent, PressingEvent, BookToBond, AgingPlacement, Container
+        now = timezone.now()
+        today = timezone.localdate()
+        InoculationEvent.objects.create(lot=self.lot, inoculated_at=now - timedelta(days=60),
+                                        yeast_strain="D254", notes="")
+        PressingEvent.objects.create(lot=self.lot, pressed_at=now - timedelta(days=45),
+                                     disposition="press_fraction", notes="")
+        BookToBond.objects.create(lot=self.lot, booked_at=today - timedelta(days=40),
+                                  notes="", gallons_produced=1000)
+        cont = Container.objects.create(container_id="9100", type=Container.Type.BARREL,
+                                        capacity_gal=60, pool="table")
+        AgingPlacement.objects.create(lot=self.lot, container=cont,
+                                      filled_at=today - timedelta(days=38), volume_gal=57,
+                                      fill_number=1)
+        r = self.c.get(f"/lots/{self.lot.pk}/d/oak/")
+        html = r.content.decode()
+        self.assertIn("gphase-primary", html)   # inoc → press
+        self.assertIn("gphase-elevage", html)   # barrel-down → now
+        self.assertIn("Primary ferment", html)
+        # Fruit prep (no harvest) and Finishing (no bottling) stay absent
+        self.assertNotIn("gphase-finishing", html)
 
     def test_cost_and_labs_hide_lifecycle_gantt(self):
         for t in ("cost", "labs"):
             r = self.c.get(f"/lots/{self.lot.pk}/d/{t}/")
-            self.assertNotIn("gantt-svg", r.content.decode(),
+            self.assertNotIn("gantt-track", r.content.decode(),
                              f"{t} should not show the lifecycle gantt")
 
     # ---- aging variant (in bond) ------------------------------------------
@@ -111,12 +135,57 @@ class LotDashboardV2Tests(TestCase):
         r2 = self.c.get(f"/lots/{self.lot.pk}/d/oak/")
         self.assertIn("Last topped", r2.content.decode())
 
-    # ---- isolation: legacy page untouched ---------------------------------
-    def test_legacy_lot_detail_still_renders(self):
+    # ---- v2 flip: lot-detail lands on the mode-appropriate tile -----------
+    def test_lot_detail_redirects_to_fermentation_pre_bond(self):
         r = self.c.get(f"/lots/{self.lot.pk}/")
-        self.assertEqual(r.status_code, 200)
-        # legacy tab bar still there
-        self.assertIn("lot-panel", r.content.decode())
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(f"/lots/{self.lot.pk}/d/fermentation/", r.headers["Location"])
+
+    def test_lot_detail_redirects_to_oak_in_bond(self):
+        BookToBond.objects.create(lot=self.lot, booked_at=timezone.localdate(),
+                                  notes="", gallons_produced=1000)
+        r = self.c.get(f"/lots/{self.lot.pk}/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(f"/lots/{self.lot.pk}/d/oak/", r.headers["Location"])
+
+    def test_legacy_lot_detail_retired(self):
+        # the legacy single-page view + route are gone
+        r = self.c.get(f"/lots/{self.lot.pk}/legacy/")
+        self.assertEqual(r.status_code, 404)
+
+    # ---- dated compliance ledger ------------------------------------------
+    def test_compliance_ledger_has_dated_booked_row_and_reconciles(self):
+        from cellar.services import compliance_ledger as cl
+        BookToBond.objects.create(lot=self.lot, booked_at=timezone.localdate(),
+                                  notes="", gallons_produced=1000)
+        data = cl.rows(self.lot)
+        self.assertTrue(data["reconciles"])
+        self.assertTrue(any(r["label"] == "Booked to bond" and r["date"] is not None
+                            for r in data["rows"]))
+        # rendered page shows the Date column + the booked row
+        r = self.c.get(f"/lots/{self.lot.pk}/d/compliance/")
+        self.assertContains(r, "Booked to bond")
+        self.assertContains(r, "<th>Date</th>", html=False)
+
+    def test_compliance_ledger_reconciles_with_mixed_events(self):
+        from datetime import timedelta
+        from cellar.services import compliance_ledger as cl
+        from cellar.services import volumes
+        from cellar.models import VolumeLoss, BulkTaxPaidRemoval
+        today = timezone.localdate()
+        BookToBond.objects.create(lot=self.lot, booked_at=today - timedelta(days=30),
+                                  notes="", gallons_produced=1000)
+        VolumeLoss.objects.create(lot=self.lot, volume_gal=12.5,
+                                  occurred_at=today - timedelta(days=10),
+                                  reason="angel's share", notes="")
+        BulkTaxPaidRemoval.objects.create(lot=self.lot, wine_gallons=200,
+                                          removed_at=today - timedelta(days=5), notes="")
+        data = cl.rows(self.lot)
+        self.assertTrue(data["reconciles"])
+        self.assertEqual(data["rows"][-1]["balance"], volumes.lot_balance(self.lot))
+        # chronological
+        dates = [r["date"] for r in data["rows"]]
+        self.assertEqual(dates, sorted(dates))
 
     # ---- capture-tile action switcher (folded satellite tabs) -------------
     def test_additions_folds_sweeten_and_hides_fortify_for_table_lot(self):

@@ -1,4 +1,5 @@
-{# Compliance — read-only. Built on volumes.lot_balance_detail; no new model. #}
+{# Compliance — read-only. Dated per-event ledger from compliance_ledger,
+   reconciled to volumes.lot_balance. #}
 <div class="section-body">
   {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 
@@ -17,27 +18,33 @@
   {% if ledger_rows %}
     <table class="ledger">
       <thead>
-        <tr><th>Event</th><th class="num">Increase</th><th class="num">Decrease</th><th class="num">Balance</th></tr>
+        <tr><th>Date</th><th>Event</th><th class="num">Increase</th><th class="num">Decrease</th><th class="num">Balance</th></tr>
       </thead>
       <tbody>
         {% for r in ledger_rows %}
           <tr>
-            <td>{{ r.label }}</td>
+            <td style="white-space:nowrap">{% if r.date %}{{ r.date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+            <td>{{ r.label }}{% if r.detail %} <span class="muted">&middot; {{ r.detail }}</span>{% endif %}</td>
             <td class="num pos">{% if r.increase %}+{{ r.increase }}{% endif %}</td>
-            <td class="num neg">{% if r.decrease %}−{{ r.decrease }}{% endif %}</td>
+            <td class="num neg">{% if r.decrease %}&minus;{{ r.decrease }}{% endif %}</td>
             <td class="num"><b>{{ r.balance }}</b></td>
           </tr>
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr><td>Current balance</td><td></td><td></td><td class="num"><b>{{ balance }} gal</b></td></tr>
+        <tr><td></td><td>Current balance</td><td></td><td></td>
+          <td class="num"><b>{% if balance is not None %}{{ balance }} gal{% else %}&mdash;{% endif %}</b></td></tr>
       </tfoot>
     </table>
+    {% if not reconciles %}
+      <div class="msg err" style="margin-top:8px">
+        Ledger rows don't reconcile to the computed balance &mdash; a data flag, not a display bug.
+        Check for a voided event or an un-dated row.</div>
+    {% endif %}
     <p class="muted" style="margin:8px 0 0">
-      Read-only. Figures come from the recorded events on the Fermentation, Movement and Oak
-      tabs — every increase and decrease is tied to an action there. Per-event dated rows are
-      a fast-follow; this v1 shows the signed decomposition and running balance.</p>
+      Read-only. Every row is a recorded event on the Fermentation, Movement or Oak tabs &mdash;
+      each increase and decrease is tied to an action there.</p>
   {% else %}
-    <div class="empty">Nothing booked to bond yet — no compliance movements to show.</div>
+    <div class="empty">Nothing booked to bond yet &mdash; no compliance movements to show.</div>
   {% endif %}
 </div>
