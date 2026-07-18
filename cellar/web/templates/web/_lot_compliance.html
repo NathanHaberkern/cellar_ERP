@@ -1,0 +1,43 @@
+{# Compliance — read-only. Built on volumes.lot_balance_detail; no new model. #}
+<div class="section-body">
+  {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+  <div class="cards summary-cards" style="margin-bottom:14px">
+    <div class="card">
+      <div class="l">Bond status</div>
+      <div class="n" style="font-size:22px">{{ bond_status }}</div>
+    </div>
+    <div class="card">
+      <div class="l">In-bond balance</div>
+      <div class="n">{% if balance is not None %}{{ balance }} <span class="unit">gal</span>{% else %}—{% endif %}</div>
+    </div>
+  </div>
+
+  <h3>Compliance ledger</h3>
+  {% if ledger_rows %}
+    <table class="ledger">
+      <thead>
+        <tr><th>Event</th><th class="num">Increase</th><th class="num">Decrease</th><th class="num">Balance</th></tr>
+      </thead>
+      <tbody>
+        {% for r in ledger_rows %}
+          <tr>
+            <td>{{ r.label }}</td>
+            <td class="num pos">{% if r.increase %}+{{ r.increase }}{% endif %}</td>
+            <td class="num neg">{% if r.decrease %}−{{ r.decrease }}{% endif %}</td>
+            <td class="num"><b>{{ r.balance }}</b></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td>Current balance</td><td></td><td></td><td class="num"><b>{{ balance }} gal</b></td></tr>
+      </tfoot>
+    </table>
+    <p class="muted" style="margin:8px 0 0">
+      Read-only. Figures come from the recorded events on the Fermentation, Movement and Oak
+      tabs — every increase and decrease is tied to an action there. Per-event dated rows are
+      a fast-follow; this v1 shows the signed decomposition and running balance.</p>
+  {% else %}
+    <div class="empty">Nothing booked to bond yet — no compliance movements to show.</div>
+  {% endif %}
+</div>

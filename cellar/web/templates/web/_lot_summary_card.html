@@ -1,0 +1,71 @@
+{# Read-only summary card. Fermentation variant pre-bond, aging variant in-bond.
+   Switched on `in_bond` (is_in_bond). All writes moved into the tiles. #}
+<section class="lot-summary">
+  <div class="cards summary-cards">
+
+    {% if in_bond %}
+      {# ----------------------- AGING variant ----------------------------- #}
+      <div class="card">
+        <div class="l">Last topped</div>
+        <div class="n">{% if aging.last_topped_days is not None %}{{ aging.last_topped_days }}
+          <span class="unit">day{{ aging.last_topped_days|pluralize }}</span>{% else %}—{% endif %}</div>
+      </div>
+      <div class="card">
+        <div class="l">Location</div>
+        <div class="n loc">{% if aging.barrel_count %}{{ aging.barrel_count }}
+          <span class="unit">barrel{{ aging.barrel_count|pluralize }}</span>{% else %}{{ summary.location|default:"—" }}{% endif %}</div>
+        {% if aging.barrel_count %}<div class="l">{{ summary.location|default:"—" }}</div>{% endif %}
+      </div>
+      <div class="card">
+        <div class="l">Volume</div>
+        <div class="n">{% if summary.gallons is not None %}{{ summary.gallons }}
+          <span class="unit">gal</span>{% else %}—{% endif %}</div>
+        <div class="l disp bond">{{ summary.disposition }}</div>
+      </div>
+
+    {% else %}
+      {# -------------------- FERMENTATION variant ------------------------- #}
+      <div class="card">
+        <div class="l">Status</div>
+        {% if summary.readings %}
+          {% for label, r in summary.readings.items %}
+            <div class="rd"><span>{{ label }}</span><b>{{ r.value }}</b></div>
+          {% endfor %}
+        {% else %}
+          <div class="n" style="font-size:18px">{{ lot.get_status_display }}</div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <div class="l">Location</div>
+        <div class="n loc">{{ summary.location|default:"—" }}</div>
+      </div>
+      <div class="card">
+        <div class="l">Volume</div>
+        <div class="n">{% if summary.gallons is not None %}{{ summary.gallons }}
+          <span class="unit">gal</span>{% else %}—{% endif %}</div>
+        <div class="l disp ferment">{{ summary.disposition }}</div>
+      </div>
+    {% endif %}
+  </div>
+
+  {# fermentation progress: sparkline + press / barrel-down estimate (pre-bond) #}
+  {% if not in_bond and progress %}
+  <div class="card" style="margin-top:14px">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <div class="l">Sugar depletion{% if progress.latest_brix is not None %}
+        <span class="muted">· latest {{ progress.latest_brix }} °Brix</span>{% endif %}</div>
+    </div>
+    {% if progress.spark_points %}
+      <svg viewBox="0 0 {{ progress.spark_w }} {{ progress.spark_h }}" width="100%" height="{{ progress.spark_h }}"
+           style="margin:6px 0" preserveAspectRatio="none">
+        <polyline points="{{ progress.spark_points }}" fill="none" stroke="var(--red)" stroke-width="2"/>
+      </svg>
+    {% endif %}
+    <table class="kv"><tbody>
+      <tr><th>Est. press</th><td>{% if progress.estimate.press_date %}{{ progress.estimate.press_date|date:"M j" }}{% else %}—{% endif %}</td></tr>
+      <tr><th>Est. barrel-down</th><td>{% if progress.estimate.barrel_down_date %}{{ progress.estimate.barrel_down_date|date:"M j" }}{% else %}—{% endif %}</td></tr>
+    </tbody></table>
+    {% if progress.estimate.basis %}<p class="verify">{{ progress.estimate.basis }} — an estimate to plan around.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>

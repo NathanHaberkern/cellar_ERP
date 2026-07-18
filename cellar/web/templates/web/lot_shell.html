@@ -1,0 +1,71 @@
+{% extends "web/base.html" %}
+{% block title %}{{ lot.code }} · {{ active|title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow"><a href="{% url 'lots' %}">Lots</a> / #{{ lot.pk }} / {{ active|title }}</p>
+    <h1><span class="lot-code" style="font-size:20px">{{ lot.code }}</span></h1>
+  </div>
+  <div class="lot-status {% if in_bond %}bond{% else %}ferment{% endif %}">
+    {{ lot.get_status_display }}{% if in_bond %} · in bond{% endif %}
+  </div>
+</div>
+
+{# ---- summary card (two variants: ferment vs aging) ---------------------- #}
+{% include "web/_lot_summary_card.html" %}
+
+{# ---- shared lifecycle gantt (filtered to this tile's domain) ------------ #}
+{% if show_gantt %}
+  {% include "web/_lot_gantt.html" %}
+{% endif %}
+
+{# ---- outstanding tasks -------------------------------------------------- #}
+<section class="d-tasks">
+  <div class="tasks-head">
+    <h3>Outstanding tasks</h3>
+    {% if tasks.open_count %}
+      <span class="muted">{{ tasks.open_count }} open{% if tasks.overdue_count %}
+        · <span class="badge danger">{{ tasks.overdue_count }} overdue</span>{% endif %}</span>
+    {% else %}<span class="muted">none open</span>{% endif %}
+  </div>
+  {% if tasks.next %}
+    <table class="kv"><tbody>
+      {% for t in tasks.next %}
+        <tr>
+          <th style="white-space:nowrap">{% if t.due_date %}{{ t.due_date|date:"M j" }}{% else %}—{% endif %}
+            {% if t.is_overdue %}<span class="badge danger">late</span>{% endif %}</th>
+          <td>{{ t.title }}{% if t.assignee %} <span class="muted">· {{ t.assignee.username }}</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody></table>
+    {% if tasks.more %}<p class="muted" style="margin:6px 0 0">+{{ tasks.more }} more</p>{% endif %}
+  {% endif %}
+</section>
+
+{# ---- 8-tile menu -------------------------------------------------------- #}
+<nav class="tile-grid" aria-label="Lot sections">
+  {% for t in tiles %}
+    <a href="{{ t.url }}" class="tile tile-{{ t.group }} {% if t.on %}on{% endif %}">{{ t.label }}</a>
+  {% endfor %}
+</nav>
+
+{# ---- in-tile action switcher (folds former satellite tabs) -------------- #}
+{% if sections %}
+<nav class="section-switch" aria-label="Section">
+  {% for s in sections %}
+    <a href="{{ s.url }}" class="seg {% if s.on %}on{% endif %}">{{ s.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{# ---- tile body --------------------------------------------------------- #}
+<section class="tile-body">
+  {% if body_include %}
+    {% include body_include %}
+  {% elif body_htmx_url %}
+    <div id="lot-panel" class="panel" hx-get="{{ body_htmx_url }}" hx-trigger="load">
+      <div class="empty">Loading…</div>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

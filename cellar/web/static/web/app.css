@@ -307,3 +307,67 @@ h4.sub{margin:18px 0 8px;font-size:14px}
 .lab-pinned-grid th{width:60%}
 .msg.ok{background:#f4f6e6;border-color:#cdd0a2;color:var(--olive)}
 .err-inline{color:var(--red-ink);font-size:13px;margin-top:6px}
+
+/* ============================================================
+   Lot dashboard v2 (full-page-per-tile shell)
+   ============================================================ */
+.summary-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.summary-cards .card .n .unit{font-size:14px;color:var(--muted);font-weight:400}
+
+/* 8-tile menu: 4 capture (filled accent) + 4 read (outline) */
+.tile-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.tile{display:flex;align-items:center;justify-content:center;text-align:center;
+  min-height:64px;padding:14px 10px;border:2px solid var(--red);border-radius:8px;
+  font-family:"Roboto Condensed",sans-serif;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;font-size:14px;color:var(--red-ink);background:var(--panel);
+  transition:background .12s,color .12s}
+.tile:hover{background:#fdeee9}
+.tile.tile-capture{border-color:var(--red)}
+.tile.tile-read{border-style:dashed}
+.tile.on{background:var(--red);color:#fff;border-color:var(--red)}
+
+.tile-body{margin-top:6px}
+.d-tasks{margin-top:16px}
+
+/* gantt */
+.gantt{margin-top:16px}
+.gantt-wrap{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel)}
+.gantt-svg{display:block;overflow:visible}
+.band{rx:3}
+.band-ferment{fill:#f0e7d6}
+.band-bond{fill:#dfeae0}
+.gantt-bond-line{stroke:var(--red);stroke-width:1.5;stroke-dasharray:3 2}
+.gantt-today-line{stroke:var(--ink);stroke-width:1;opacity:.45}
+.gantt-dot{fill:var(--red);stroke:#fff;stroke-width:1}
+.gantt-legend{display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;flex-wrap:wrap}
+.gantt-legend .lg{display:inline-flex;align-items:center;gap:5px;color:var(--muted)}
+.gantt-legend .lg::before{content:"";width:10px;height:10px;border-radius:2px;display:inline-block}
+.lg-ferment::before{background:#f0e7d6}
+.lg-bond::before{background:#dfeae0}
+.lg-today::before{background:var(--ink);opacity:.45}
+
+/* compliance ledger */
+table.ledger{width:100%;border-collapse:collapse;margin-top:8px}
+table.ledger th,table.ledger td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+table.ledger thead th{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+table.ledger .num{text-align:right;font-variant-numeric:tabular-nums}
+table.ledger .pos{color:#2f7d4f}
+table.ledger .neg{color:var(--red-ink)}
+table.ledger tfoot td{border-top:2px solid var(--line-strong);border-bottom:none}
+
+.lot-status.bond{background:#dfeae0;color:#2f6b45}
+.lot-status.ferment{background:#f4e9d6}
+
+@media (max-width:820px){
+  .summary-cards{grid-template-columns:1fr}
+  .tile-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* in-tile action switcher (segmented control) */
+.section-switch{display:inline-flex;flex-wrap:wrap;gap:2px;margin:0 0 14px;
+  background:#f1ece0;border:1px solid var(--line);border-radius:8px;padding:3px}
+.section-switch .seg{padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;
+  color:var(--muted);white-space:nowrap}
+.section-switch .seg:hover{color:var(--ink)}
+.section-switch .seg.on{background:var(--panel);color:var(--ink);
+  box-shadow:0 1px 2px rgba(0,0,0,.08);font-weight:700}

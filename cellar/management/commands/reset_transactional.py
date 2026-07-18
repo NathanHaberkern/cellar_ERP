@@ -42,6 +42,7 @@ from django.db import transaction
 KEEP = {
     "Variety", "Grower", "Vineyard", "Block", "VarietalDesignation",
     "Vessel", "Container", "Rack", "Room", "Location", "BarrelOrder",
+    "RackAssignment",
     "Additive", "LabAnalyte", "LabAnalyteSynonym",
     "BottleFormat", "DryGood", "Material", "ConfigConstant", "TaskRule",
     "FruitPrice",

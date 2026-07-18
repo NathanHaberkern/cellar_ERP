@@ -9,3 +9,4 @@ django-cors-headers>=4.6
 reportlab>=4.2
 pypdf>=5.1
 cryptography>=3.1
+openpyxl>=3.1

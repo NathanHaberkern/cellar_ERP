@@ -65,9 +65,16 @@ class Container(models.Model):
         BARREL = "barrel", "Barrel"
         FOUDRE = "foudre", "Foudre"
 
+    class Pool(models.TextChoices):
+        TABLE = "table", "Table wine"
+        PORT = "port", "Port"
+
     container_id = models.CharField(max_length=30, unique=True, help_text="permanent ID, e.g. 2501")
     type = models.CharField(max_length=10, choices=Type.choices)
     capacity_gal = models.DecimalField(max_digits=7, decimal_places=1)
+    # Dedicated barrel pool — a port barrel stays a port barrel even when empty.
+    # Blank for tanks. Gates the empty-barrel picker; a rack is pool-homogeneous.
+    pool = models.CharField(max_length=8, choices=Pool.choices, blank=True)
     barcode = models.CharField(max_length=60, blank=True)
     active = models.BooleanField(default=True)
     # oak attributes (blank for tank / drum)
@@ -100,6 +107,14 @@ class Container(models.Model):
         p = self.current_placement()
         return p.lot if p else None
 
+    def current_occupant_label(self):
+        """What's in the barrel now, for display: the lot code, else an imported
+        legacy label ("00PORT"), else None (empty)."""
+        p = self.current_placement()
+        if not p:
+            return None
+        return p.lot.code if p.lot_id else (p.legacy_lot_code or None)
+
     def effective_location(self):
         """A barrel is wherever its rack is — location is never on the barrel."""
         a = self.current_rack_assignment()
@@ -126,6 +141,10 @@ class Rack(models.Model):
     location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.PROTECT,
                                  related_name="racks", help_text="row/column this rack sits in")
     positions = models.PositiveSmallIntegerField(default=2)
+    size_class = models.CharField(
+        max_length=10, default="standard",
+        choices=[("standard", "Standard (55/60/70)"), ("large", "Large (130)")],
+        help_text="which barrel size this rack holds")
     barcode = models.CharField(max_length=60, blank=True)
 
     def occupants(self):
@@ -167,13 +186,18 @@ class RackAssignment(AppendOnly):
 class AgingPlacement(AppendOnly):
     """Time a lot spends in a container. A mid-aging move = empty one, open the next."""
     CLOSE_FIELDS = ("emptied_at",)
-    lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="placements")
+    lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="placements",
+                            null=True, blank=True)
     container = models.ForeignKey(Container, on_delete=models.PROTECT, related_name="placements")
     filled_at = models.DateField()
     emptied_at = models.DateField(null=True, blank=True)
     volume_gal = models.DecimalField(max_digits=8, decimal_places=1)
     fill_number = models.PositiveSmallIntegerField(null=True, blank=True, help_text="snapshot at fill")
     oak_tier = models.CharField(max_length=12, choices=OakTier.choices, blank=True, help_text="snapshot")
+    # Imported/legacy occupancy: a historical wine label ("00PORT") for a barrel
+    # whose lot predates the system. Displayed in the Oak view; not a Lot FK.
+    # Real placements (racked via the app) leave this blank and use `lot`.
+    legacy_lot_code = models.CharField(max_length=40, blank=True)
 
     def save(self, *args, **kwargs):
         creating = self._state.adding and not self.pk

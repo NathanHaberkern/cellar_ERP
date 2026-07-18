@@ -23,6 +23,7 @@ from . import reference as ref
 from . import daily as daily_web
 from . import weightags
 from . import sweeten
+from . import lotshell
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -55,6 +56,19 @@ urlpatterns = [
     path("lots/", views.lots_list, name="lots"),
     path("lots/search/", views.lots_search, name="lots-search"),          # HTMX
     path("lots/<int:pk>/", views.lot_detail, name="lot-detail"),
+
+    # ---- lot dashboard v2 (full-page-per-tile shell) ----------------------
+    # Additive + isolated; legacy lot-detail above is untouched for side-by-side
+    # evaluation. Read tiles render server-side; capture tiles lazy-load their
+    # existing fragment into the shell body (reused verbatim, redesign later).
+    path("lots/<int:pk>/d/fermentation/", lotshell.page_fermentation, name="lot2-fermentation"),
+    path("lots/<int:pk>/d/additions/",    lotshell.page_additions,    name="lot2-additions"),
+    path("lots/<int:pk>/d/movement/",     lotshell.page_movement,     name="lot2-movement"),
+    path("lots/<int:pk>/d/oak/",          lotshell.page_oak,          name="lot2-oak"),
+    path("lots/<int:pk>/d/composition/",  lotshell.page_composition,  name="lot2-composition"),
+    path("lots/<int:pk>/d/compliance/",   lotshell.page_compliance,   name="lot2-compliance"),
+    path("lots/<int:pk>/d/cost/",         lotshell.page_cost,         name="lot2-cost"),
+    path("lots/<int:pk>/d/labs/",         lotshell.page_labs,         name="lot2-labs"),
     # lot detail sub-panels (HTMX fragments swapped into #lot-panel)
     path("lots/<int:pk>/additions/", views.lot_additions, name="lot-additions"),
     path("lots/<int:pk>/labs/", views.lot_labs, name="lot-labs"),
