@@ -1,0 +1,88 @@
+{% extends "web/base.html" %}
+{% block title %}Cost periods{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Reports</p><h1>Cost ledger</h1></div>
+</div>
+
+<div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:18px">
+  <div class="card" style="flex:1 1 200px">
+    <p class="eyebrow" style="margin:0 0 4px">WIP inventory (posted)</p>
+    <h2 style="margin:0">${{ wip }}</h2>
+    <p class="hint" style="margin:6px 0 0">Must tie to the QBO WIP account balance.</p>
+  </div>
+  <div class="card" style="flex:1 1 200px{% if bad %};border-color:#a33{% endif %}">
+    <p class="eyebrow" style="margin:0 0 4px">Reconciliation</p>
+    <h2 style="margin:0">{% if bad %}{{ bad|length }} out{% else %}Clean{% endif %}</h2>
+    <p class="hint" style="margin:6px 0 0">{{ recon|length }} lot{{ recon|pluralize }} posted.</p>
+  </div>
+</div>
+
+{% if bad %}
+<div class="card" style="border-color:#a33;margin-bottom:18px">
+  <p class="eyebrow" style="margin:0 0 8px">Lots that don't reconcile</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Lot</th><th class="num">Posted</th><th class="num">Computed</th><th class="num">Diff</th></tr></thead>
+      <tbody>
+        {% for r in bad %}
+        <tr>
+          <td><a href="{% url 'lot-detail' r.lot.pk %}">{{ r.lot.code }}</a></td>
+          <td class="num">${{ r.posted }}</td>
+          <td class="num">${{ r.computed }}</td>
+          <td class="num">${{ r.diff }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin:10px 0 0">
+    Posted rows are the record; the computed figure is only a drift check. Investigate
+    before closing a period, or close with <code>--force</code> if the difference is understood.
+  </p>
+</div>
+{% endif %}
+
+<h2 style="margin:0 0 10px">Periods</h2>
+<div class="table-wrap" style="margin-bottom:22px">
+  <table>
+    <thead><tr><th>Period</th><th>Status</th><th>Closed</th><th>QBO JE</th><th></th></tr></thead>
+    <tbody>
+      {% for p in periods %}
+      <tr>
+        <td>{{ p.label }}</td>
+        <td>{{ p.get_status_display }}</td>
+        <td>{{ p.closed_at|date:"Y-m-d"|default:"—" }}</td>
+        <td>{{ p.qbo_journal_entry_id|default:"—" }}</td>
+        <td><a class="btn ghost sm" href="{% url 'cost-period' p.pk %}">Detail</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5"><div class="empty">Nothing posted yet. Run <code>manage.py post_costs</code>.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if deferred %}
+<h2 style="margin:0 0 10px">Deferred postings</h2>
+<p class="hint" style="margin:0 0 10px">
+  Costs whose own month was already closed, posted forward instead. Never silent by design.
+</p>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>Lot</th><th>Category</th><th class="num">Amount</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for e in deferred %}
+      <tr>
+        <td>{{ e.occurred_at }}</td>
+        <td>{% if e.lot %}{{ e.lot.code }}{% else %}—{% endif %}</td>
+        <td>{{ e.get_category_display }}</td>
+        <td class="num">${{ e.amount }}</td>
+        <td>{{ e.deferred_note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

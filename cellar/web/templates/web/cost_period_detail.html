@@ -1,0 +1,49 @@
+{% extends "web/base.html" %}
+{% block title %}{{ period.label }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Reports · cost period</p><h1>{{ period.label }}</h1></div>
+  <a class="btn ghost sm" href="{% url 'cost-periods' %}">All periods</a>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <p class="eyebrow" style="margin:0 0 8px">{{ period.get_status_display }}</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th class="num">Total</th><th>Treatment</th></tr></thead>
+      <tbody>
+        {% for l in summary.lines %}
+        <tr>
+          <td>{{ l.label }}</td>
+          <td class="num">${{ l.total }}</td>
+          <td>{% if l.is_expense %}period expense{% else %}capitalized{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3"><div class="empty">Nothing posted into this period.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="margin:12px 0 0">
+    Capitalized to inventory <strong>${{ summary.capitalized }}</strong> ·
+    period expense <strong>${{ summary.expense }}</strong>
+  </p>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>Lot</th><th>Category</th><th class="num">Amount</th><th>Source</th></tr></thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>{{ e.occurred_at }}</td>
+        <td>{% if e.lot %}<a href="{% url 'lot-detail' e.lot.pk %}">{{ e.lot.code }}</a>{% else %}—{% endif %}</td>
+        <td>{{ e.get_category_display }}</td>
+        <td class="num">${{ e.amount }}</td>
+        <td class="hint">{{ e.source_kind }}{% if e.source_id %} #{{ e.source_id }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

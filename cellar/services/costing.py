@@ -231,6 +231,26 @@ def parent_cost_per_gal(lot):
 
 
 def lot_cost(lot, _depth=0):
+    """A lot's total cost.
+
+    Reads the POSTED cost ledger when this lot has postings, and falls back to the
+    live computation when it doesn't. The fallback is what keeps day one working:
+    before `manage.py post_costs` has ever run, nothing is posted and every Cost
+    tile would otherwise read $0.
+
+    Once posted, the ledger wins — that is the entire point. A closed period cannot
+    be restated by repricing fruit or voiding an addition.
+
+    Use `lot_cost_computed()` for the live figure regardless of postings; that is
+    what cost_ledger.reconcile() diffs against.
+    """
+    from cellar.services import cost_ledger
+    if _depth == 0 and cost_ledger.has_postings(lot):
+        return round(cost_ledger.lot_cost_posted(lot), 2)
+    return lot_cost_computed(lot, _depth)
+
+
+def lot_cost_computed(lot, _depth=0):
     """Total accumulated cost of a lot: its own direct costs plus cost inherited
     from every contributing parent lot (blends, splits, topping).
 
