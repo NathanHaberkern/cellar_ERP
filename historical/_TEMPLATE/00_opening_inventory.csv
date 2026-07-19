@@ -1,0 +1,7 @@
+lot_code,vintage_year,variety,program,as_of_date,gallons,tax_class,cost_basis_total,notes
+# Wine already in bond on the opening date, made BEFORE the first vintage you are importing.
+# One row per bulk lot. These become real lots so 2023 bottlings/removals have something to point at.
+# tax_class: a = not over 16%, b = over 16-21%, c = over 21-24%. Port sitting in barrel is 'b'.
+# cost_basis_total: total dollars already sunk in that wine, if you have it. Blank is fine.
+22TN1,2022,Touriga Nacional,port,2023-01-01,1240.0,b,18600.00,in barrel
+21ZIN1,2021,Zinfandel,table,2023-01-01,860.5,a,9400.00,

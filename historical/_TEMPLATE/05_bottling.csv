@@ -1,0 +1,4 @@
+lot_code,sku,bottle_format,bottled_at,bulk_gallons_in,cases_produced,line_labor_cost,drygood1_name,drygood1_qty,drygood2_name,drygood2_qty,drygood3_name,drygood3_qty,notes
+# bulk_gallons_in blank = the lot's booking volume. Dry goods must already exist in the DryGood table.
+# sku blank = lot_code-format. Match your Commerce7 / QBO SKU so the numbers line up later.
+23VERD1,VERD23-750,750ml,2024-04-11,1500.0,630,2850.00,750ml Bordeaux Punt,7560,#9 Cork,7560,Verdelho Front Label,7560,

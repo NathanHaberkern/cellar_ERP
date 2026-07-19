@@ -1,0 +1,6 @@
+lot_code,vintage_year,variety,program,vineyard,block,harvest_date,weigh_tag_number,source_type,net_lbs,net_tons,brix_at_receipt,purchase_price_per_ton,fruit_cost_per_ton,notes
+# One row per weigh tag -> lot. Multiple rows may feed the same lot_code (co-ferment / multiple deliveries).
+# Give net_lbs OR net_tons, not both. source_type: estate | purchased | contract.
+# fruit_cost_per_ton is the COGS basis; leave blank to fall back to the FruitPrice table.
+23TR1,2023,Tinta Roriz,port,Mohr-Fry Ranches,23 Rows,2023-09-28,,purchased,18400,,26.4,1450.00,1450.00,
+23VERD1,2023,Verdelho,table,Spencer Ranch,422,2023-09-14,,estate,22150,,23.1,,1180.00,

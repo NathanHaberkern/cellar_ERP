@@ -1,0 +1,5 @@
+child_lot_code,vintage_year,variety,program,blended_at,relationship,child_gallons,tax_class,parent1_code,parent1_gallons,parent2_code,parent2_gallons,parent3_code,parent3_gallons,parent4_code,parent4_gallons,notes
+# The child may be a NEW lot (give variety + program so its code can be built) or one that already exists.
+# relationship: whole_blend | partial_blend_contribution | split_saignee | split_drainoff | bottling_split
+# child_gallons blank = sum of the parents. Parent gallons drive both composition % and inherited cost.
+23HERITAGE1,2023,Tinta Roriz,port,2023-12-06,whole_blend,,b,23TR1,1180.0,22TN1,600.0,,,,,house Port blend

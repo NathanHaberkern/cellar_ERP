@@ -146,9 +146,21 @@ def spirit_cost(lot):
     return float(sum((f.spirit_cost or 0 for f in lot.fortifications.filter(voided_at__isnull=True)), 0))
 
 
+def adjustment_cost(lot):
+    """Manually-assigned costs (LotCostAdjustment) — oak and overhead on imported
+    vintages, plus any hand-booked cost on a live lot.
+
+    Kept as its own term rather than folded into oak depreciation: a barrel-year
+    slice computed from custody intervals and a number somebody typed are different
+    kinds of fact, and the COGS breakdown should be able to say which is which.
+    """
+    return float(sum((a.amount for a in lot.cost_adjustments.filter(voided_at__isnull=True)), 0))
+
+
 def lot_direct_cost(lot):
     """Costs incurred directly on this lot (not inherited from parents)."""
-    return fruit_cost(lot) + addition_cost(lot) + spirit_cost(lot) + lot_oak_depreciation(lot)
+    return (fruit_cost(lot) + addition_cost(lot) + spirit_cost(lot)
+            + lot_oak_depreciation(lot) + adjustment_cost(lot))
 
 
 def _lot_volume_for_cost(lot):

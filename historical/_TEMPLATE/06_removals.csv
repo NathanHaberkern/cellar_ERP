@@ -1,0 +1,9 @@
+kind,occurred_at,lot_code,sku,run_bottled_at,cases,gallons,tax_class,channel,destination,adjustment_kind,price_per_gallon,notes
+# kind: taxpaid_bottled | taxpaid_bulk | bond_transfer_out | bond_transfer_in | must_sale | adjustment
+# taxpaid_bottled  -> needs sku + run_bottled_at (to find the run) + cases
+# taxpaid_bulk / bond_transfer_* / must_sale -> needs gallons (and lot_code except for transfers)
+# adjustment -> needs adjustment_kind + gallons. Valid: tasting, family_use, taxpaid_return,
+#               inventory_loss, inventory_gain, breakage, dump_to_bulk, export, testing
+taxpaid_bottled,2024-05-02,,VERD23-750,2024-04-11,180,,a,dtc,,,,tasting room + club
+taxpaid_bottled,2024-06-14,,VERD23-750,2024-04-11,240,,a,wholesale,Young's Market,,,
+adjustment,2024-05-31,,,,,4.5,a,,,tasting,,tasting room pours

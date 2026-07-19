@@ -30,6 +30,7 @@ from .reporting import (
     ExternalDestination, MustSale,
 )
 from .tasks import Task, TaskEvent, TaskRule, DailyPlan
+from .costing import LotCostAdjustment
 
 __all__ = [
     "Program", "LotKind", "SourceType", "AppendOnly",
@@ -49,4 +50,5 @@ __all__ = [
     "ExternalDestination", "MustSale",
     "Task", "TaskEvent", "TaskRule", "DailyPlan",
     "LabSampleAlias", "LotFermentationOverride",
+    "LotCostAdjustment",
 ]

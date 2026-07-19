@@ -1,0 +1,4 @@
+event_date,wine_gallons,proof,proof_gallons,supplier,shipment_ref,total_cost,notes
+# High-proof spirit RECEIVED. Must cover every PG drawn in 03_production.csv or the
+# fortification will be refused. proof_gallons blank = computed as WG x proof / 100.
+2023-09-12,404.0,190.0,,Hood Spirits,INV-4471,9284.00,

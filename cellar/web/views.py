@@ -315,6 +315,7 @@ def lot_cost(request, pk):
             "additions": costing_svc.addition_cost(l),
             "spirit": costing_svc.spirit_cost(l),
             "oak_depreciation": costing_svc.lot_oak_depreciation(l),
+            "adjustments": costing_svc.adjustment_cost(l),
             "total": costing_svc.lot_cost(l),
             "per_gal": costing_svc.lot_cost_per_gal(l),
         }, lot)

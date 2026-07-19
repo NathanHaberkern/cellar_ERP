@@ -1,0 +1,7 @@
+lot_code,method,booked_at,on_skins_date,gallons_produced,tax_class,pg_drawn,spirit_proof,base_wg,oak_cost,other_cost,notes
+# method: book_to_bond (normal wine) | fortify_initial (Port on skins) | fortify_adjustment (spring racking)
+# gallons_produced is ALWAYS the finished gauge. For a fortification that is T, after spirit.
+# base_wg is required ONLY for fortify_adjustment - the gauge going in, so the racking loss is reported.
+# oak_cost / other_cost: your per-lot dollars. These become LotCostAdjustment rows.
+23VERD1,book_to_bond,2023-10-02,,1512.0,a,,,,0,,
+23TR1,fortify_initial,2023-10-18,2023-10-04,1180.0,b,392.10,190.0,,4200.00,,
