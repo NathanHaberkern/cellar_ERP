@@ -29,6 +29,7 @@ from .reporting import (
     Phase, BondTransfer, Material, MaterialTransaction, SweeteningEvent, BondAdjustment, BulkTaxPaidRemoval,
     ExternalDestination, MustSale,
 )
+from .stock import PhysicalCount, StockTransaction
 from .tasks import Task, TaskEvent, TaskRule, DailyPlan
 from .costing import LotCostAdjustment
 
@@ -49,6 +50,7 @@ __all__ = [
     "Phase", "BondTransfer", "Material", "MaterialTransaction", "SweeteningEvent", "BondAdjustment", "BulkTaxPaidRemoval",
     "ExternalDestination", "MustSale",
     "Task", "TaskEvent", "TaskRule", "DailyPlan",
+    "PhysicalCount", "StockTransaction",
     "LabSampleAlias", "LotFermentationOverride",
     "LotCostAdjustment",
 ]

@@ -86,10 +86,14 @@ def create_parcel(parent, *, volume_gal, vessel=None, at=None,
                                production_intent=parent.production_intent)
     generator.assign_parcel_designation(child, parent, suffix=suffix)
 
+    from cellar.services import costing as costing_svc
+    _cpg = costing_svc.parent_cost_per_gal(parent)   # before the gauges below move volume
+
     LotLineage.objects.create(
         parent_lot=parent, child_lot=child,
         relationship_type=LotLineage.Relationship.BOTTLING_SPLIT,
-        volume_gal=vol)
+        volume_gal=vol,
+        occurred_at=costing_svc.to_business_date(at), cost_per_gal_snapshot=_cpg)
 
     # volume moves: credit the parcel, debit the parent (append-only, both)
     ops._record_volume(child, vol, at)

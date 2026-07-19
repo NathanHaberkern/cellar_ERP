@@ -281,10 +281,17 @@ class ToppingTarget(AppendOnly):
                         lot=target_lot, volume_gal=self.evaporative_loss,
                         reason="topping evaporation", occurred_at=ev.topped_at)
                 if ev.source_lot_id != target_lot.id:
+                    # Imported inside save() on purpose: cellar.services.costing
+                    # imports back into cellar.models, so a module-level import
+                    # here is circular.
+                    from cellar.services import costing as costing_svc
+                    cpg = costing_svc.parent_cost_per_gal(ev.source_lot)
                     self.contribution = LotLineage.objects.create(
                         parent_lot=ev.source_lot, child_lot=target_lot,
                         relationship_type=LotLineage.Relationship.TOPPING,
-                        volume_gal=self.volume_added)
+                        volume_gal=self.volume_added,
+                        occurred_at=costing_svc.to_business_date(ev.topped_at),
+                        cost_per_gal_snapshot=cpg)
                 super().save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)

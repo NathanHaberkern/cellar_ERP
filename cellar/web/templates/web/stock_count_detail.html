@@ -1,0 +1,72 @@
+{% extends "web/base.html" %}
+{% block title %}Count {{ count.counted_on }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Inventory · count</p>
+    <h1>{{ count.label|default:"Count" }} — {{ count.counted_on }}</h1>
+  </div>
+  <a class="btn ghost sm" href="{% url 'stock-counts' %}">All counts</a>
+</div>
+
+{% if errors %}<div class="card" style="border-color:#a33;margin-bottom:14px"><p style="margin:0">{{ errors }}</p></div>{% endif %}
+
+{% if count.is_committed %}
+  <div class="card" style="margin-bottom:16px">
+    <p class="eyebrow" style="margin:0 0 6px">Committed {{ count.committed_at|date:"Y-m-d H:i" }}</p>
+    <p style="margin:0">
+      Net variance <strong>${{ variance|floatformat:2 }}</strong> — booked as shrinkage expense,
+      not charged to any lot. Historical additions keep the cost they were issued at.
+    </p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Item</th><th class="num">Adjustment</th><th>Unit</th><th class="num">$/unit</th><th class="num">Value</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for a in adjustments %}
+        <tr>
+          <td>{{ a.item.name }}</td>
+          <td class="num">{{ a.quantity|floatformat:"-4" }}</td>
+          <td>{{ a.item.unit }}</td>
+          <td class="num">${{ a.unit_cost|floatformat:4 }}</td>
+          <td class="num">${{ a.extended_cost|floatformat:2 }}</td>
+          <td>{{ a.notes }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty">No variances — every item counted at book.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="hint" style="margin:0 0 14px">
+    Enter what you actually counted. Blank lines are skipped, so you can count a subset.
+    Nothing hits the ledger until you commit.
+  </p>
+  <form method="post">
+    {% csrf_token %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Type</th><th class="num">Book</th><th>Unit</th><th class="num">$/unit</th><th style="width:140px">Counted</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.item.name }}</td>
+            <td>{{ r.kind_label }}</td>
+            <td class="num">{{ r.book|floatformat:"-4" }}</td>
+            <td>{{ r.unit }}</td>
+            <td class="num">{% if r.wac %}${{ r.wac|floatformat:4 }}{% else %}—{% endif %}</td>
+            <td><input type="number" step="any" min="0" name="qty:{{ r.key }}" placeholder="—"></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6"><div class="empty">No catalog items to count.</div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn" type="submit">Commit count</button>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

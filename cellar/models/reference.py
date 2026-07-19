@@ -144,7 +144,12 @@ class Additive(models.Model):
     category = models.CharField(max_length=12, choices=Category.choices)
     unit = models.CharField(max_length=20, help_text="costing/inventory unit, e.g. g, kg, lb, mL, L")
     unit_cost = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True,
-                                    help_text="cost per unit, for COGS")
+                                    help_text="seed/fallback cost per unit; the live figure is the "
+                                              "stock ledger's weighted average once receipts exist")
+    # Water (and bench trials) are dosed but not purchased as stock, so they must not
+    # draw an ISSUE. Everything else defaults to tracked.
+    track_stock = models.BooleanField(default=True,
+                                      help_text="draw this from consumable inventory when added")
     # --- dosing metadata: drives the autopopulated default on an addition ---
     dose_mode = models.CharField(max_length=12, choices=DoseMode.choices,
                                  default=DoseMode.PER_VOLUME)

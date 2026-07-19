@@ -163,28 +163,106 @@ def lot_direct_cost(lot):
             + lot_oak_depreciation(lot) + adjustment_cost(lot))
 
 
-def _lot_volume_for_cost(lot):
+def to_business_date(value):
+    """Coerce a date / datetime / None to a plain date for LotLineage.occurred_at.
+
+    NOTE the isinstance order: datetime is a SUBCLASS of date, so datetime must be
+    tested first or every datetime falls through the date branch untouched and a
+    DateField silently stores a datetime. Same trap as lotpages._d().
+    """
+    import datetime as _dt
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        from django.utils import timezone
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    return None
+
+
+def cost_basis_volume(lot):
+    """The gallons a lot's accumulated cost is spread over.
+
+    This is the lot's CURRENT BALANCE (volumes.lot_balance), not its booking
+    volume, and that distinction is the normal-loss policy in one line:
+
+        1,000 gal costing $20,000 loses 35 gal to a racking.
+        965 gal still cost $20,000. Cost per gallon goes UP.
+
+    Normal losses (lees, racking, evaporation, filtration, sampling, topping)
+    are capitalized into the wine that survives — nothing is written off. Only
+    an abnormal loss is expensed, and that is a separate, flagged transaction.
+
+    Falls back to the booking volume when a lot has no balance yet (a fortified
+    lot with no VolumeMeasurement of its own — see aging._lot_volume), and to
+    None when there is nothing to divide by at all.
+    """
+    from cellar.services import volumes as vol_svc
     from cellar.services.aging import _lot_volume
+    bal = vol_svc.lot_balance(lot)
+    if bal is not None and bal > 0:
+        return float(bal)
     return _lot_volume(lot)
+
+
+# Back-compat alias — several call sites and tests still import this name.
+def _lot_volume_for_cost(lot):
+    return cost_basis_volume(lot)
+
+
+def parent_cost_per_gal(lot):
+    """The $/gal to freeze onto a LotLineage edge at the moment of transfer.
+
+    MUST be called BEFORE the edge row is created. Every liquid edge type moves
+    volume by virtue of existing (volumes._LIQUID_EDGES), so computing this
+    afterwards divides by the post-transfer remainder — which on a whole blend
+    is zero.
+
+    Returns a Decimal (or None when the parent has no volume basis).
+    """
+    from decimal import Decimal
+    v = cost_basis_volume(lot)
+    if not v:
+        return None
+    return Decimal(str(round(lot_cost(lot) / v, 4)))
 
 
 def lot_cost(lot, _depth=0):
     """Total accumulated cost of a lot: its own direct costs plus cost inherited
-    from every contributing parent lot (blends, splits, topping), at the parent's
-    cost-per-gallon times the gallons contributed."""
+    from every contributing parent lot (blends, splits, topping).
+
+    Inherited cost comes from the edge's frozen `cost_per_gal_snapshot` × the
+    gallons that moved. When the snapshot is null (an edge written before
+    migration 0027 and not yet backfilled) it falls back to the old live
+    recursion, so nothing breaks mid-backfill — but the fallback CANNOT price a
+    whole blend, because the parent's balance is zero by then. Run
+    `manage.py backfill_lineage_cost` to retire the fallback.
+    """
     from cellar.models import LotLineage
     direct = lot_direct_cost(lot)
     inherited = 0.0
     if _depth <= 25:
-        for edge in LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True).select_related("parent_lot"):
-            pv = _lot_volume_for_cost(edge.parent_lot)
-            if pv:
-                inherited += (lot_cost(edge.parent_lot, _depth + 1) / pv) * float(edge.volume_gal or 0)
+        edges = (LotLineage.objects
+                 .filter(child_lot=lot, voided_at__isnull=True)
+                 .select_related("parent_lot"))
+        for edge in edges:
+            vol = float(edge.volume_gal or 0)
+            if not vol:
+                continue
+            if edge.cost_per_gal_snapshot is not None:
+                inherited += float(edge.cost_per_gal_snapshot) * vol
+            else:
+                pv = cost_basis_volume(edge.parent_lot)
+                if pv:
+                    inherited += (lot_cost(edge.parent_lot, _depth + 1) / pv) * vol
     return round(direct + inherited, 2)
 
 
 def lot_cost_per_gal(lot):
-    v = _lot_volume_for_cost(lot)
+    v = cost_basis_volume(lot)
     return round(lot_cost(lot) / v, 4) if v else None
 
 

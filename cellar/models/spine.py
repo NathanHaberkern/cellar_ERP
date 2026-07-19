@@ -250,5 +250,36 @@ class LotLineage(AppendOnly):
     relationship_type = models.CharField(max_length=32, choices=Relationship.choices)
     volume_gal = models.DecimalField(max_digits=9, decimal_places=1, null=True, blank=True)
 
+    # --- costing (migration 0027) ------------------------------------------
+    # The business date the wine moved, as distinct from created_at (when the row
+    # was keyed). blend()/split()/create_parcel()/ToppingTarget already receive this
+    # date and, before 0027, dropped it. The cost ledger posts against occurred_at,
+    # so a July move keyed in August must still land in July's period.
+    occurred_at = models.DateField(null=True, blank=True,
+                                   help_text="business date the wine moved (not the keying date)")
+
+    # The parent's cost per gallon at the instant of transfer, frozen here.
+    #
+    # WHY THIS IS STORED AND NOT COMPUTED: cost inheritance used to be
+    # `lot_cost(parent) / current_volume(parent) * volume_gal`, read live at
+    # display time. On a WHOLE_BLEND the parent's balance goes to ~0, so the
+    # divisor was zero, the edge was skipped, and the child inherited $0 — a
+    # blended wine showed no fruit cost at all. Live reads also silently
+    # restated closed vintages whenever a FruitPrice or an upstream cost moved.
+    #
+    # Set once at creation and never edited (AppendOnly). The backfill command
+    # writes it via queryset.update() to bypass that guard — correct for a
+    # one-time historical repair, NOT a pattern to copy.
+    cost_per_gal_snapshot = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text="parent's $/gal at the moment of transfer; null = fall back to live computation")
+
+    @property
+    def inherited_cost(self):
+        """Dollars this edge carries from parent to child. None if not yet snapshotted."""
+        if self.cost_per_gal_snapshot is None or self.volume_gal is None:
+            return None
+        return self.cost_per_gal_snapshot * self.volume_gal
+
     def __str__(self):
         return f"{self.parent_lot} → {self.child_lot} [{self.relationship_type}]"

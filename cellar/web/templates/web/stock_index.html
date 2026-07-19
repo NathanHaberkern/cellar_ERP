@@ -1,0 +1,68 @@
+{% extends "web/base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Inventory</p><h1>On hand</h1></div>
+  <div class="row" style="gap:8px">
+    <a class="btn sm" href="{% url 'stock-receive' %}">Receive</a>
+    <a class="btn ghost sm" href="{% url 'stock-counts' %}">Counts</a>
+    <a class="btn ghost sm" href="{% url 'stock-write-down' %}">Write-down</a>
+  </div>
+</div>
+
+{% if negatives %}
+<div class="card" style="border-color:#a33;margin-bottom:14px">
+  <p class="eyebrow" style="margin:0 0 6px">Negative on hand</p>
+  <p style="margin:0">
+    {{ negatives|length }} item{{ negatives|pluralize }} {{ negatives|pluralize:"is,are" }} below zero —
+    more was issued than the book holds. That's allowed; it means a receipt was missed
+    or a dose was over-recorded. Settle it on the next count.
+  </p>
+</div>
+{% endif %}
+
+<form method="get" class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:16px">
+  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name" style="flex:1 1 200px">
+  <select name="kind" style="flex:0 0 auto">
+    <option value="">All types</option>
+    {% for k, label in kind_labels %}
+      <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label style="flex:0 0 auto;align-self:center">
+    <input type="checkbox" name="all" value="1" {% if show_all %}checked{% endif %}> show never-received
+  </label>
+  <button class="btn sm" type="submit">Filter</button>
+</form>
+
+<div class="card" style="margin-bottom:16px">
+  <p class="eyebrow" style="margin:0 0 4px">Total stock value</p>
+  <h2 style="margin:0">${{ total_value|floatformat:2 }}</h2>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Item</th><th>Type</th><th class="num">On hand</th><th>Unit</th>
+      <th class="num">Avg cost</th><th class="num">Value</th>
+      <th>Last movement</th><th>Last counted</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr {% if r.negative %}style="background:#3a1f1f"{% endif %}>
+        <td><a href="{% url 'stock-item' r.kind r.item.pk %}">{{ r.item.name }}</a></td>
+        <td>{{ r.kind_label }}</td>
+        <td class="num">{{ r.on_hand|floatformat:"-4" }}</td>
+        <td>{{ r.unit }}</td>
+        <td class="num">{% if r.wac %}${{ r.wac|floatformat:4 }}{% else %}—{% endif %}</td>
+        <td class="num">${{ r.value|floatformat:2 }}</td>
+        <td>{{ r.last_movement|default:"—" }}</td>
+        <td>{{ r.last_counted|default:"never" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8"><div class="empty">Nothing received yet. Start with <a href="{% url 'stock-receive' %}">Receive</a>, or tick "show never-received".</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

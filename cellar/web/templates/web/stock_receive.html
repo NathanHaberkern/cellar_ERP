@@ -1,0 +1,75 @@
+{% extends "web/base.html" %}
+{% block title %}Receive inventory{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Inventory</p><h1>Receive</h1></div>
+  <a class="btn ghost sm" href="{% url 'stock-index' %}">On hand</a>
+</div>
+
+{% if error %}<div class="card" style="border-color:#a33;margin-bottom:14px"><p style="margin:0">{{ error }}</p></div>{% endif %}
+
+{% if received %}
+<div class="card" style="border-color:#3a7;margin-bottom:14px">
+  <p class="eyebrow" style="margin:0 0 6px">Received</p>
+  <p style="margin:0">
+    {{ received.quantity|floatformat:"-4" }} {{ received.item.unit }} of <strong>{{ received.item.name }}</strong>
+    at ${{ received.landed_cost|floatformat:2 }} landed
+    (goods ${{ received.goods_cost|floatformat:2 }} + freight ${{ received.freight_cost|floatformat:2 }}
+    + tax ${{ received.tax_cost|floatformat:2 }}).<br>
+    New average cost <strong>${{ new_wac|floatformat:4 }}</strong> / {{ received.item.unit }},
+    on hand {{ new_on_hand|floatformat:"-4" }} {{ received.item.unit }}.
+  </p>
+</div>
+{% endif %}
+
+<form method="post" class="card" style="max-width:760px">
+  {% csrf_token %}
+  <div class="row" style="flex-wrap:wrap">
+    <div style="flex:1 1 260px">
+      <label for="item">Item</label>
+      <select name="item" id="item" required>
+        <option value="">— pick —</option>
+        {% for i in items %}<option value="{{ i.value }}">{{ i.group }} · {{ i.label }} ({{ i.unit }})</option>{% endfor %}
+      </select>
+    </div>
+    <div style="flex:0 1 160px">
+      <label for="occurred_at">Received</label>
+      <input type="date" name="occurred_at" id="occurred_at" value="{{ today }}">
+    </div>
+  </div>
+
+  <p class="eyebrow" style="margin:16px 0 6px">Quantity as purchased</p>
+  <div class="row" style="flex-wrap:wrap">
+    <div style="flex:0 1 110px"><label for="pack_count">Packs</label>
+      <input type="number" step="any" min="0" name="pack_count" id="pack_count" required></div>
+    <div style="flex:0 1 130px"><label for="pack_size">Size each</label>
+      <input type="number" step="any" min="0" name="pack_size" id="pack_size" required></div>
+    <div style="flex:0 1 120px"><label for="pack_unit">Unit</label>
+      <input type="text" name="pack_unit" id="pack_unit" placeholder="kg"></div>
+  </div>
+  <p class="hint" style="margin:6px 0 0">
+    4 bags × 1 kg of an item stocked in grams books 4,000 g. Leave the unit blank to key
+    directly in the item's own stock unit.
+  </p>
+
+  <p class="eyebrow" style="margin:16px 0 6px">Invoice</p>
+  <div class="row" style="flex-wrap:wrap">
+    <div style="flex:0 1 140px"><label for="goods_cost">Goods $</label>
+      <input type="number" step="0.01" min="0" name="goods_cost" id="goods_cost" required></div>
+    <div style="flex:0 1 130px"><label for="freight_cost">Freight $</label>
+      <input type="number" step="0.01" min="0" name="freight_cost" id="freight_cost" value="0"></div>
+    <div style="flex:0 1 130px"><label for="tax_cost">Tax $</label>
+      <input type="number" step="0.01" min="0" name="tax_cost" id="tax_cost" value="0"></div>
+  </div>
+  <p class="hint" style="margin:6px 0 0">Freight and tax are landed cost — they roll into the average.</p>
+
+  <div class="row" style="flex-wrap:wrap;margin-top:12px">
+    <div style="flex:1 1 200px"><label for="supplier">Supplier</label>
+      <input type="text" name="supplier" id="supplier"></div>
+    <div style="flex:1 1 160px"><label for="reference">PO / invoice no.</label>
+      <input type="text" name="reference" id="reference"></div>
+  </div>
+
+  <div style="margin-top:16px"><button class="btn" type="submit">Receive</button></div>
+</form>
+{% endblock %}

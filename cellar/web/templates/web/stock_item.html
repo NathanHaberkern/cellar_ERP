@@ -1,0 +1,43 @@
+{% extends "web/base.html" %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Inventory</p><h1>{{ item.name }}</h1></div>
+  <a class="btn ghost sm" href="{% url 'stock-index' %}">On hand</a>
+</div>
+
+<div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:18px">
+  <div class="card" style="flex:1 1 160px"><p class="eyebrow" style="margin:0 0 4px">On hand</p>
+    <h2 style="margin:0">{{ on_hand|floatformat:"-4" }} <span class="hint">{{ item.unit }}</span></h2></div>
+  <div class="card" style="flex:1 1 160px"><p class="eyebrow" style="margin:0 0 4px">Average cost</p>
+    <h2 style="margin:0">{% if wac %}${{ wac|floatformat:4 }}{% else %}—{% endif %}</h2></div>
+  <div class="card" style="flex:1 1 160px"><p class="eyebrow" style="margin:0 0 4px">Value</p>
+    <h2 style="margin:0">${{ value|floatformat:2 }}</h2></div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th class="num">$/unit</th><th class="num">Value</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for t in txns %}
+      <tr>
+        <td>{{ t.occurred_at }}</td>
+        <td>{{ t.get_kind_display }}</td>
+        <td class="num">{{ t.quantity|floatformat:"-4" }}</td>
+        <td class="num">{% if t.unit_cost %}${{ t.unit_cost|floatformat:4 }}{% else %}—{% endif %}</td>
+        <td class="num">${{ t.extended_cost|floatformat:2 }}</td>
+        <td>
+          {% if t.kind == "receipt" %}{{ t.supplier }}{% if t.reference %} · {{ t.reference }}{% endif %}
+            {% if t.freight_cost %} · freight ${{ t.freight_cost|floatformat:2 }}{% endif %}
+          {% elif t.kind == "issue" %}{% if t.addition %}{{ t.addition.lot.code }}{% elif t.dry_good_use %}{{ t.dry_good_use.run.sku }}{% endif %}
+          {% elif t.kind == "write_down" %}{{ t.reason }}
+          {% else %}{{ t.notes }}{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6"><div class="empty">No movements yet.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

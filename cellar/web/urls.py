@@ -7,7 +7,7 @@ SessionAuthentication reads, so a signed-in browser is authenticated for both.
 from django.urls import path
 from django.contrib.auth import views as auth_views
 
-from . import views
+from . import views, stock
 from . import ledger
 from . import scan
 from . import intake
@@ -162,6 +162,14 @@ urlpatterns = [
     path("ledger/<slug:slug>/<int:pk>/void/", ledger.ledger_void, name="ledger-void"),  # HTMX
     path("ledger/<slug:slug>/<int:pk>/close/", ledger.ledger_close, name="ledger-close"),# HTMX
 
+    # ---- inventory (consumable stock ledger) ------------------------------
+    path("inventory/", stock.stock_index, name="stock-index"),
+    path("inventory/receive/", stock.stock_receive, name="stock-receive"),
+    path("inventory/write-down/", stock.stock_write_down, name="stock-write-down"),
+    path("inventory/counts/", stock.count_list, name="stock-counts"),
+    path("inventory/counts/create/", stock.count_create, name="stock-count-create"),
+    path("inventory/counts/<int:pk>/", stock.count_detail, name="stock-count"),
+    path("inventory/<str:kind>/<int:pk>/", stock.stock_item, name="stock-item"),
     path("reference/additives/", views.additives, name="additives"),
     path("reference/additives/create/", views.additive_create, name="additive-create"),  # HTMX
     path("reference/additives/<int:pk>/update/", views.additive_update, name="additive-update"),  # HTMX

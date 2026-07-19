@@ -124,10 +124,14 @@ def split_lot(parent, *, volume_gal, to_vessel, at=None, program=None,
     else:
         _designate_from_parent_abbr(child, parent, child_program)
 
+    from cellar.services import costing as costing_svc
+    _cpg = costing_svc.parent_cost_per_gal(parent)   # before the edge moves volume
+
     LotLineage.objects.create(
         parent_lot=parent, child_lot=child,
         relationship_type=LotLineage.Relationship.SPLIT_DRAINOFF,
-        volume_gal=vol)
+        volume_gal=vol,
+        occurred_at=costing_svc.to_business_date(at), cost_per_gal_snapshot=_cpg)
 
     # NOTE: no VolumeMeasurement is written for either lot. SPLIT_DRAINOFF is a
     # LIQUID edge (volumes._LIQUID_EDGES), so lot_balance() already reads this one

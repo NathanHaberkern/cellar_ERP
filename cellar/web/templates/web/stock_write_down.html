@@ -1,0 +1,42 @@
+{% extends "web/base.html" %}
+{% block title %}Write down inventory{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Inventory</p><h1>Write-down</h1></div>
+  <a class="btn ghost sm" href="{% url 'stock-index' %}">On hand</a>
+</div>
+
+{% if error %}<div class="card" style="border-color:#a33;margin-bottom:14px"><p style="margin:0">{{ error }}</p></div>{% endif %}
+{% if written %}
+<div class="card" style="border-color:#3a7;margin-bottom:14px">
+  <p style="margin:0">Wrote off {{ written.quantity|floatformat:"-4"|cut:"-" }} {{ written.item.unit }}
+  of <strong>{{ written.item.name }}</strong> (${{ written.extended_cost|floatformat:2 }}).
+  On hand now {{ new_on_hand|floatformat:"-4" }}.</p>
+</div>
+{% endif %}
+
+<form method="post" class="card" style="max-width:620px">
+  {% csrf_token %}
+  <div class="row" style="flex-wrap:wrap">
+    <div style="flex:1 1 240px">
+      <label for="item">Item</label>
+      <select name="item" id="item" required>
+        <option value="">— pick —</option>
+        {% for i in items %}<option value="{{ i.value }}">{{ i.group }} · {{ i.label }} ({{ i.unit }})</option>{% endfor %}
+      </select>
+    </div>
+    <div style="flex:0 1 130px"><label for="quantity">Quantity</label>
+      <input type="number" step="any" min="0" name="quantity" id="quantity" required></div>
+    <div style="flex:0 1 150px"><label for="occurred_at">Date</label>
+      <input type="date" name="occurred_at" id="occurred_at" value="{{ today }}"></div>
+  </div>
+  <div style="margin-top:12px">
+    <label for="reason">Reason</label>
+    <input type="text" name="reason" id="reason" required placeholder="expired / spilled / damaged in storage">
+  </div>
+  <p class="hint" style="margin:8px 0 0">
+    Written-off stock is period expense. It is never charged back to a wine lot.
+  </p>
+  <div style="margin-top:16px"><button class="btn" type="submit">Write down</button></div>
+</form>
+{% endblock %}

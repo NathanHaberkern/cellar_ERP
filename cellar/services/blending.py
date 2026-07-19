@@ -216,9 +216,15 @@ def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOL
             f"{source_lot.code} holds {bal} gal; you're blending {vol} gal. "
             f"Check the source balance, or gauge the lot before blending.")
 
+    # Freeze the source's $/gal BEFORE the edge exists — a WHOLE_BLEND drops the
+    # source's balance to zero, so computing this afterwards divides by nothing.
+    from cellar.services import costing as costing_svc
+    cpg = costing_svc.parent_cost_per_gal(source_lot)
+
     edge = LotLineage.objects.create(
         parent_lot=source_lot, child_lot=dest_lot,
-        relationship_type=kind, volume_gal=vol)
+        relationship_type=kind, volume_gal=vol,
+        occurred_at=blended_at, cost_per_gal_snapshot=cpg)
 
     if to_vessel is not None:
         # Close the source's own tank assignment — its wine (all or in part) has

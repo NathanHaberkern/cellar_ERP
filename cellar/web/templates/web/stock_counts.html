@@ -1,0 +1,39 @@
+{% extends "web/base.html" %}
+{% block title %}Physical counts{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Inventory</p><h1>Physical counts</h1></div>
+  <a class="btn ghost sm" href="{% url 'stock-index' %}">On hand</a>
+</div>
+
+<form method="post" action="{% url 'stock-count-create' %}" class="card" style="max-width:620px;margin-bottom:18px">
+  {% csrf_token %}
+  <p class="eyebrow" style="margin:0 0 10px">Start a count</p>
+  <div class="row" style="flex-wrap:wrap">
+    <div style="flex:0 1 160px"><label for="counted_on">Date</label>
+      <input type="date" name="counted_on" id="counted_on" value="{{ today }}"></div>
+    <div style="flex:1 1 220px"><label for="label">Label</label>
+      <input type="text" name="label" id="label" placeholder="FY25 year-end"></div>
+    <div style="flex:0 0 auto;align-self:flex-end"><button class="btn" type="submit">Start</button></div>
+  </div>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>Label</th><th>Status</th><th class="num">Variance</th><th></th></tr></thead>
+    <tbody>
+      {% for c in counts %}
+      <tr>
+        <td>{{ c.counted_on }}</td>
+        <td>{{ c.label|default:"—" }}</td>
+        <td>{% if c.is_committed %}committed {{ c.committed_at|date:"Y-m-d" }}{% else %}draft{% endif %}</td>
+        <td class="num">{% if c.is_committed %}${{ c.variance_value|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td><a class="btn ghost sm" href="{% url 'stock-count' c.pk %}">{% if c.is_committed %}View{% else %}Continue{% endif %}</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5"><div class="empty">No counts yet.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

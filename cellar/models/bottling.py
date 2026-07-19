@@ -106,10 +106,29 @@ class BottlingDryGoodUse(AppendOnly):
     run = models.ForeignKey(BottlingRun, on_delete=models.PROTECT, related_name="dry_goods")
     dry_good = models.ForeignKey(DryGood, on_delete=models.PROTECT, related_name="+")
     quantity = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_cost_snapshot = models.DecimalField(max_digits=12, decimal_places=6,
+                                             null=True, blank=True,
+                                             help_text="WAC at the bottling run, frozen")
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding and not self.pk
+        if creating and self.unit_cost_snapshot is None:
+            from cellar.services import stock as stock_svc
+            self.unit_cost_snapshot = stock_svc.wac(self.dry_good)
+        super().save(*args, **kwargs)
+        if creating and self.quantity:
+            from cellar.services import stock as stock_svc
+            if not self.stock_txns.filter(voided_at__isnull=True).exists():
+                stock_svc.issue(self.dry_good, self.quantity,
+                                occurred_at=self.run.bottled_at,
+                                dry_good_use=self, operator=self.operator)
 
     @property
     def cost(self):
-        return self.quantity * self.dry_good.unit_cost
+        rate = self.unit_cost_snapshot
+        if rate is None:
+            rate = self.dry_good.unit_cost
+        return self.quantity * (rate or 0)
 
     def __str__(self):
         return f"{self.run.sku}: {self.quantity} × {self.dry_good}"

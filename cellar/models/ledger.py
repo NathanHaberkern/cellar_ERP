@@ -43,12 +43,38 @@ class Addition(AppendOnly):
     basis_snapshot = models.JSONField(default=dict, blank=True,
                                       help_text="inputs used: YAN, brix, yeast, volume")
     added_at = models.DateTimeField()
+    # Weighted average at the instant of the addition, frozen. Before this field,
+    # `cost` read additive.unit_cost LIVE, so repricing a bag of tartaric restated
+    # every lot that ever used it. Same defect, same fix, as LotLineage (0027).
+    unit_cost_snapshot = models.DecimalField(max_digits=12, decimal_places=6,
+                                             null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding and not self.pk
+        if creating and self.unit_cost_snapshot is None:
+            from cellar.services import stock as stock_svc
+            self.unit_cost_snapshot = stock_svc.wac(self.additive)
+        super().save(*args, **kwargs)
+        # Draw stock AFTER the row exists so the ISSUE can point back at it.
+        # Idempotency matters here (cf. FortificationEvent's HPGS draw): guarded on
+        # `creating` and on there being no existing ISSUE for this addition.
+        if creating and self.quantity and getattr(self.additive, "track_stock", True):
+            from cellar.services import stock as stock_svc
+            if not self.stock_txns.filter(voided_at__isnull=True).exists():
+                stock_svc.issue(self.additive, self.quantity,
+                                occurred_at=self.added_at.date() if self.added_at else None,
+                                addition=self, operator=self.operator)
 
     @property
     def cost(self):
-        if self.quantity is None or self.additive.unit_cost is None:
+        if self.quantity is None:
             return 0
-        return self.quantity * self.additive.unit_cost
+        rate = self.unit_cost_snapshot
+        if rate is None:
+            rate = self.additive.unit_cost
+        if rate is None:
+            return 0
+        return self.quantity * rate
 
     def __str__(self):
         return f"{self.lot} + {self.additive} ({self.target})"

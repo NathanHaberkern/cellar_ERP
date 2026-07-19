@@ -869,10 +869,17 @@ class Importer:
                                              relationship_type=r["relationship"],
                                              voided_at__isnull=True).exists():
                     continue
+                # Rows are processed in blended_at order, so by the time an edge is
+                # written the parent already carries every cost booked before that
+                # blend — the snapshot is right without a second pass.
+                from cellar.services import costing as costing_svc
+                cpg = costing_svc.parent_cost_per_gal(parent)
                 LotLineage.objects.create(
                     parent_lot=parent, child_lot=child,
                     relationship_type=r["relationship"],
                     volume_gal=p["gallons"],
+                    occurred_at=costing_svc.to_business_date(r["blended_at"]),
+                    cost_per_gal_snapshot=cpg,
                     notes=f"{r['blended_at']} historical import. {r['notes']}".strip())
                 self.stats["lineage_edges"] += 1
 
