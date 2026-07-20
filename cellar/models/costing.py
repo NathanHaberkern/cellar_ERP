@@ -186,3 +186,74 @@ class CostEntry(AppendOnly):
     def __str__(self):
         where = self.lot.code if self.lot_id else "period expense"
         return f"{where} {self.get_category_display()} ${self.amount} ({self.occurred_at})"
+
+
+# =============================================================================
+# Overhead pools
+# =============================================================================
+#
+# Six pools rather than one bucket, so a cost/gal that moves can be traced to the
+# thing that moved it. Each pool gets a dollar amount per month, entered by hand,
+# and the allocation engine spreads it over bulk gallons.
+#
+# WHAT ABSORBS, AND WHAT DOESN'T
+# ------------------------------
+#   * Bulk wine only. Case goods have left WIP; bottling costs go direct to the run.
+#   * Lots older than `overhead_absorption_max_years` (default 3) drop OUT of the
+#     denominator. A 2014 Port would otherwise absorb a slice of every monthly pool
+#     for 144 months and end up carried above what it can be sold for, which forces
+#     an NRV write-down nobody wants. Capping is simpler and more conservative.
+#   * When actual gallons fall below `normal_capacity_gal`, the unabsorbed share is
+#     EXPENSED as idle capacity rather than loaded onto whatever wine happens to
+#     exist. A light vintage should not make its own wine look expensive. This is
+#     the ASC 330 treatment, and `barrel_depreciation_by_lot()` already does the
+#     same thing with its `overhead` bucket for empty barrel-years.
+
+
+class OverheadPool(models.Model):
+    """Master data: the named buckets overhead is entered into."""
+
+    key = models.SlugField(max_length=40, unique=True)
+    name = models.CharField(max_length=80)
+    category = models.CharField(
+        max_length=16, default="overhead",
+        help_text="CostEntry category this pool posts as — 'labor' or 'overhead'")
+    active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=100)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("sort_order", "name")
+
+    def __str__(self):
+        return self.name
+
+
+class OverheadPoolPeriod(AppendOnly):
+    """One pool's dollars for one month, plus what happened when it was allocated."""
+
+    pool = models.ForeignKey(OverheadPool, on_delete=models.PROTECT, related_name="periods")
+    period = models.ForeignKey(CostPeriod, on_delete=models.PROTECT, related_name="pool_amounts")
+    amount = models.DecimalField(max_digits=12, decimal_places=2,
+                                 help_text="total dollars in this pool for this month")
+    allocated_at = models.DateTimeField(null=True, blank=True)
+    absorbed_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    idle_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    absorbing_gallons = models.DecimalField(max_digits=12, decimal_places=1, null=True, blank=True)
+
+    CLOSE_FIELDS = ("allocated_at", "absorbed_amount", "idle_amount", "absorbing_gallons")
+
+    class Meta:
+        ordering = ("period", "pool")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pool", "period"], condition=models.Q(voided_at__isnull=True),
+                name="overheadpoolperiod_one_live_per_pool_month"),
+        ]
+
+    @property
+    def is_allocated(self):
+        return self.allocated_at is not None
+
+    def __str__(self):
+        return f"{self.pool} {self.period.label} ${self.amount}"

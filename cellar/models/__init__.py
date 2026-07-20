@@ -31,7 +31,8 @@ from .reporting import (
 )
 from .stock import PhysicalCount, StockTransaction
 from .tasks import Task, TaskEvent, TaskRule, DailyPlan
-from .costing import CostEntry, CostPeriod, LotCostAdjustment
+from .costing import (CostEntry, CostPeriod, LotCostAdjustment,
+                      OverheadPool, OverheadPoolPeriod)
 
 __all__ = [
     "Program", "LotKind", "SourceType", "AppendOnly",
@@ -53,4 +54,5 @@ __all__ = [
     "PhysicalCount", "StockTransaction",
     "LabSampleAlias", "LotFermentationOverride",
     "LotCostAdjustment", "CostEntry", "CostPeriod",
+    "OverheadPool", "OverheadPoolPeriod",
 ]

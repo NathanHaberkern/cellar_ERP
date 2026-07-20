@@ -64,32 +64,93 @@ def _d(v):
     return Decimal(str(v)) if v is not None else ZERO
 
 
-def booked_volume(lot):
-    """The compliance production figure, or None if the lot hasn't booked yet."""
+# --- as-of filtering ---------------------------------------------------------
+# Every balance component gained an optional `as_of` so overhead allocation can ask
+# "how many gallons were in this lot on 31 October" and get a reproducible answer
+# months later. Threading it through here rather than reimplementing lot_balance in
+# the overhead service is deliberate: a second copy of this arithmetic would drift
+# from this one, and the drift would be invisible.
+#
+# Filtering happens in Python, not the DB, for two reasons: LotLineage.occurred_at
+# is nullable (pre-0027 edges fall back to created_at, which no DB filter can
+# express cleanly), and these per-lot querysets are tiny. Uniformity beats a
+# micro-optimisation nobody will ever measure.
+def _on_or_before(obj, as_of, *attrs):
+    """True if the first non-null date attr on `obj` is on or before `as_of`."""
+    if as_of is None:
+        return True
+    from cellar.services.costing import to_business_date
+    for a in attrs:
+        d = to_business_date(getattr(obj, a, None))
+        if d is not None:
+            return d <= as_of
+    return True          # undated rows are treated as always-present
+
+
+def _keep(rows, as_of, *attrs):
+    return [o for o in rows if _on_or_before(o, as_of, *attrs)]
+
+
+def booked_volume(lot, as_of=None):
+    """The compliance production figure, or None if the lot hasn't booked yet.
+
+    With `as_of`, returns None when the lot had not booked by that date — wine that
+    did not yet exist cannot absorb overhead.
+    """
     v = _lot_volume(lot)
-    return None if v is None else _d(v)
+    if v is None:
+        return None
+    if as_of is not None:
+        booked_on = _booked_on(lot)
+        if booked_on is not None and booked_on > as_of:
+            return None
+    return _d(v)
 
 
-def inbound_gal(lot):
+def _booked_on(lot):
+    """The date a lot's production volume came into existence.
+
+    compliance_ledger._booking_date() covers BookToBond and FortificationEvent, but
+    a Verdelho that goes tank-gauge -> bottle has neither — it books off a
+    VolumeMeasurement alone. Without the gauge fallback such a lot has no booking
+    date, is treated as always-present, and absorbs overhead for months before the
+    fruit was picked.
+    """
+    from cellar.models import VolumeMeasurement
+    from cellar.services.compliance_ledger import _booking_date
+    from cellar.services.costing import to_business_date
+
+    d = to_business_date(_booking_date(lot))
+    if d is not None:
+        return d
+    m = (VolumeMeasurement.objects.filter(lot=lot, voided_at__isnull=True)
+         .order_by("measured_at").values_list("measured_at", flat=True).first())
+    return to_business_date(m)
+
+
+def inbound_gal(lot, as_of=None):
+    rows = LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True,
+                                     relationship_type__in=_LIQUID_EDGES)
     return sum((_d(e.volume_gal) for e in
-                LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True,
-                                          relationship_type__in=_LIQUID_EDGES)), ZERO)
+                _keep(rows, as_of, "occurred_at", "created_at")), ZERO)
 
 
-def outbound_gal(lot):
+def outbound_gal(lot, as_of=None):
+    rows = LotLineage.objects.filter(parent_lot=lot, voided_at__isnull=True,
+                                     relationship_type__in=_LIQUID_EDGES)
     return sum((_d(e.volume_gal) for e in
-                LotLineage.objects.filter(parent_lot=lot, voided_at__isnull=True,
-                                          relationship_type__in=_LIQUID_EDGES)), ZERO)
+                _keep(rows, as_of, "occurred_at", "created_at")), ZERO)
 
 
-def losses_gal(lot):
-    return sum((_d(l.volume_gal) for l in
-                VolumeLoss.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+def losses_gal(lot, as_of=None):
+    rows = VolumeLoss.objects.filter(lot=lot, voided_at__isnull=True)
+    return sum((_d(l.volume_gal) for l in _keep(rows, as_of, "occurred_at")), ZERO)
 
 
-def bottled_gal(lot):
+def bottled_gal(lot, as_of=None):
     total = ZERO
-    for run in BottlingRun.objects.filter(source_lot=lot, voided_at__isnull=True):
+    rows = BottlingRun.objects.filter(source_lot=lot, voided_at__isnull=True)
+    for run in _keep(rows, as_of, "bottled_at"):
         total += _d(run.volume_bottled_gal)
         loss = run.bottling_loss_gal
         if loss and loss > 0:
@@ -97,30 +158,29 @@ def bottled_gal(lot):
     return total
 
 
-def bulk_removed_gal(lot):
-    return sum((_d(r.wine_gallons) for r in
-                BulkTaxPaidRemoval.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+def bulk_removed_gal(lot, as_of=None):
+    rows = BulkTaxPaidRemoval.objects.filter(lot=lot, voided_at__isnull=True)
+    return sum((_d(r.wine_gallons) for r in _keep(rows, as_of, "removed_at")), ZERO)
 
 
-def bond_transferred_out_gal(lot):
+def bond_transferred_out_gal(lot, as_of=None):
     """BondTransfer OUT rows tied to this lot. The docstring formula at the top
     of this file already listed 'bulk taxpaid removals' as a balance deduction
     but not in-bond transfers out — an oversight, since both are wine actually
     leaving the lot. Fixed here."""
-    return sum((_d(t.gallons) for t in
-                BondTransfer.objects.filter(
-                    lot=lot, direction=BondTransfer.Direction.OUT,
-                    voided_at__isnull=True)), ZERO)
+    rows = BondTransfer.objects.filter(lot=lot, direction=BondTransfer.Direction.OUT,
+                                       voided_at__isnull=True)
+    return sum((_d(t.gallons) for t in _keep(rows, as_of, "transferred_at")), ZERO)
 
 
-def must_sold_gal(lot):
+def must_sold_gal(lot, as_of=None):
     """Bulk juice/must sold before the lot was ever inoculated — see
     services/external_transfer.py and models.MustSale."""
-    return sum((_d(s.gallons) for s in
-                MustSale.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+    rows = MustSale.objects.filter(lot=lot, voided_at__isnull=True)
+    return sum((_d(s.gallons) for s in _keep(rows, as_of, "sold_at")), ZERO)
 
 
-def volume_added_gal(lot):
+def volume_added_gal(lot, as_of=None):
     """Liquid ADDED to the lot: water, and sweetening concentrate.
 
     This has to be an explicit balance term, and getting that wrong is subtle.
@@ -136,27 +196,28 @@ def volume_added_gal(lot):
     there — symmetrically with how bottling/losses/removals count liquid out.
     """
     from cellar.models import Addition, SweeteningEvent, Additive
-    water = sum((_d(a.quantity) for a in
-                 Addition.objects.filter(lot=lot, voided_at__isnull=True,
-                                         additive__dose_mode=Additive.DoseMode.PCT_VOLUME)
-                 .select_related("additive")), ZERO)
+    w_rows = (Addition.objects.filter(lot=lot, voided_at__isnull=True,
+                                      additive__dose_mode=Additive.DoseMode.PCT_VOLUME)
+              .select_related("additive"))
+    water = sum((_d(a.quantity) for a in _keep(w_rows, as_of, "added_at")), ZERO)
+    s_rows = SweeteningEvent.objects.filter(lot=lot, voided_at__isnull=True)
     sweetening = sum((_d(s.concentrate_gallons) for s in
-                      SweeteningEvent.objects.filter(lot=lot, voided_at__isnull=True)), ZERO)
+                      _keep(s_rows, as_of, "sweetened_at")), ZERO)
     return water + sweetening
 
 
-def lot_balance(lot):
+def lot_balance(lot, as_of=None):
     """Wine (or juice/must, pre-ferment) currently in the lot, in gallons. None
     if the lot has never booked a volume AND has no inbound liquid (i.e.
     nothing to balance yet)."""
-    booked = booked_volume(lot)
-    inbound = inbound_gal(lot)
+    booked = booked_volume(lot, as_of)
+    inbound = inbound_gal(lot, as_of)
     if booked is None and inbound == ZERO:
         return None
-    bal = ((booked or ZERO) + inbound + volume_added_gal(lot)
-           - outbound_gal(lot) - losses_gal(lot)
-           - bottled_gal(lot) - bulk_removed_gal(lot)
-           - bond_transferred_out_gal(lot) - must_sold_gal(lot))
+    bal = ((booked or ZERO) + inbound + volume_added_gal(lot, as_of)
+           - outbound_gal(lot, as_of) - losses_gal(lot, as_of)
+           - bottled_gal(lot, as_of) - bulk_removed_gal(lot, as_of)
+           - bond_transferred_out_gal(lot, as_of) - must_sold_gal(lot, as_of))
     return bal.quantize(GAL)
 
 

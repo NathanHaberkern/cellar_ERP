@@ -163,6 +163,7 @@ urlpatterns = [
     path("ledger/<slug:slug>/<int:pk>/close/", ledger.ledger_close, name="ledger-close"),# HTMX
 
     # ---- inventory (consumable stock ledger) ------------------------------
+    path("costs/overhead/", costs.overhead_pools, name="overhead-pools"),
     path("costs/periods/", costs.cost_periods, name="cost-periods"),
     path("costs/periods/<int:pk>/", costs.cost_period_detail, name="cost-period"),
     path("inventory/", stock.stock_index, name="stock-index"),

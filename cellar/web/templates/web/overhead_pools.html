@@ -1,0 +1,91 @@
+{% extends "web/base.html" %}
+{% block title %}Overhead pools{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Reports · cost ledger</p><h1>Overhead pools</h1></div>
+  <a class="btn ghost sm" href="{% url 'cost-periods' %}">Cost periods</a>
+</div>
+
+{% if error %}<div class="card" style="border-color:#a33;margin-bottom:14px"><p style="margin:0">{{ error }}</p></div>{% endif %}
+
+<form method="get" class="row" style="gap:8px;margin-bottom:16px">
+  <select name="period" onchange="this.form.submit()">
+    {% for p in periods %}
+      <option value="{{ p.pk }}" {% if period and p.pk == period.pk %}selected{% endif %}>{{ p.label }} — {{ p.get_status_display }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="btn sm" type="submit">Go</button></noscript>
+</form>
+
+{% if not period %}
+  <div class="empty">No cost periods yet. Run <code>manage.py post_costs</code> first.</div>
+{% else %}
+
+<div class="card" style="margin-bottom:18px">
+  <p class="eyebrow" style="margin:0 0 8px">Absorption basis — {{ plan.as_of }}</p>
+  <p style="margin:0">
+    <strong>{{ plan.absorbing_gallons }}</strong> bulk gallons across
+    <strong>{{ plan.lot_count }}</strong> lot{{ plan.lot_count|pluralize }},
+    against normal capacity of <strong>{{ normal_capacity }}</strong> gal
+    → absorbing <strong>{{ plan.absorption_ratio|floatformat:3 }}</strong> of each pool.
+  </p>
+  <p class="hint" style="margin:8px 0 0">
+    Bulk wine only; bottling parcels and lots older than {{ max_years }} vintages are
+    excluded. Below normal capacity the unabsorbed share is expensed as idle capacity
+    rather than loaded onto the wine that happens to exist.
+  </p>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="period" value="{{ period.pk }}">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pool</th><th>Posts as</th><th style="width:150px">Amount $</th>
+        <th class="num">Absorbed</th><th class="num">Idle</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for pool in pools %}
+        {% with pp=entered|default_if_none:"" %}
+        <tr>
+          <td>{{ pool.name }}</td>
+          <td class="hint">{{ pool.category }}</td>
+          <td>
+            {% for p in plan.pools %}{% if p.pool.pk == pool.pk %}
+              <input type="number" step="0.01" name="amount:{{ pool.pk }}" value="{{ p.amount }}"
+                     {% if p.already or not period.is_open %}readonly{% endif %}>
+            {% endif %}{% endfor %}
+            {% if pool.pk not in entered %}
+              <input type="number" step="0.01" name="amount:{{ pool.pk }}" placeholder="—"
+                     {% if not period.is_open %}readonly{% endif %}>
+            {% endif %}
+          </td>
+          {% for p in plan.pools %}{% if p.pool.pk == pool.pk %}
+            <td class="num">${{ p.absorbed }}</td>
+            <td class="num">${{ p.idle }}</td>
+            <td>{% if p.already %}allocated{% else %}pending{% endif %}</td>
+          {% endif %}{% endfor %}
+          {% if pool.pk not in entered %}<td class="num">—</td><td class="num">—</td><td>not entered</td>{% endif %}
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <th colspan="3">Total</th>
+        <th class="num">${{ plan.total_absorbed }}</th>
+        <th class="num">${{ plan.total_idle }}</th><th></th>
+      </tr></tfoot>
+    </table>
+  </div>
+  {% if period.is_open %}
+    <div style="margin-top:16px"><button class="btn" type="submit">Save amounts</button></div>
+    <p class="hint" style="margin:10px 0 0">
+      Saving records the dollars. Allocation is a separate step:
+      <code>manage.py allocate_overhead {{ period.year }} {{ period.month }}</code>
+      (add <code>--dry-run</code> first).
+    </p>
+  {% else %}
+    <p class="hint" style="margin:12px 0 0">{{ period.label }} is {{ period.get_status_display|lower }} — amounts are frozen.</p>
+  {% endif %}
+</form>
+{% endif %}
+{% endblock %}

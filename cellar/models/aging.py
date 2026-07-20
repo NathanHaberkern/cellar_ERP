@@ -240,6 +240,23 @@ class VolumeLoss(AppendOnly):
     volume_gal = models.DecimalField(max_digits=8, decimal_places=1)
     reason = models.CharField(max_length=60)
     occurred_at = models.DateField()
+    # NORMAL vs ABNORMAL (migration 0030)
+    #
+    # Normal loss — lees, racking, evaporation, filtration, sampling, topping — is
+    # CAPITALIZED into the wine that survives. No code needed: costing.cost_basis_volume()
+    # divides an unchanged dollar total by a smaller balance, so cost/gal simply rises.
+    #
+    # Abnormal loss — a tank leak, a barrel failure, a contamination requiring
+    # destruction — is EXPENSED. Flagging it here posts a credit against the lot and a
+    # matching ABNORMAL_LOSS expense row, so the surviving wine does NOT absorb it.
+    #
+    # A flag rather than a gallons or percentage threshold, on purpose: whether a loss
+    # was abnormal is a judgement about what happened, not about how big it was. A
+    # 3-gallon loss to a cracked barrel head is abnormal; a 30-gallon evaporation over
+    # a summer is not.
+    is_abnormal = models.BooleanField(
+        default=False,
+        help_text="expense this loss instead of capitalizing it into the remaining wine")
 
     def __str__(self):
         return f"{self.lot} −{self.volume_gal} ({self.reason})"

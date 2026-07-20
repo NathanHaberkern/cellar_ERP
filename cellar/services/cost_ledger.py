@@ -223,8 +223,12 @@ def post_all(*, lots=None, operator=None):
 def lot_cost_posted(lot):
     """A lot's cost from the ledger. Float, to match costing.lot_cost()."""
     from django.db.models import Sum
+    # No category exclusion here, deliberately. Period-expense rows (shrinkage, idle
+    # capacity, and the expense half of an abnormal loss) all carry lot=None, so the
+    # FK filter already excludes them. Excluding by CATEGORY as well would swallow the
+    # abnormal-loss CREDIT — the negative row that is supposed to take the destroyed
+    # wine's cost back OUT of the lot.
     v = (lot.cost_entries.filter(voided_at__isnull=True)
-         .exclude(category__in=("shrinkage", "abnormal_loss", "idle_capacity"))
          .aggregate(v=Sum("amount"))["v"])
     return float(v or 0)
 
