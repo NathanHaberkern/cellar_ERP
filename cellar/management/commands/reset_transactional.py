@@ -42,8 +42,8 @@ KEPT ALWAYS (master data you curated):
     Variety, Grower, Vineyard, Block, VarietalDesignation,
     Vessel (tanks only — see below), Container, Rack, Room, Location, BarrelOrder,
     Additive, LabAnalyte, LabAnalyteSynonym,
-    BottleFormat, DryGood, Material, ConfigConstant, TaskRule, FruitPrice,
-    ExternalDestination, users
+    BottleFormat, DryGood, Material, ConfigConstant, TaskRule,
+    FruitPrice, FruitPriceRevision, ExternalDestination, users
 
 DELETED (everything the cellar recorded, minus any kept vintages):
     every other model in the app — lots, designations, lineage, weigh tags,
@@ -78,7 +78,7 @@ KEEP = {
     "RackAssignment",
     "Additive", "LabAnalyte", "LabAnalyteSynonym",
     "BottleFormat", "DryGood", "Material", "ConfigConstant", "TaskRule",
-    "FruitPrice", "ExternalDestination",
+    "FruitPrice", "FruitPriceRevision", "ExternalDestination",
 }
 
 # Vessel is in KEEP (real tanks are master data), but bin-type vessels are

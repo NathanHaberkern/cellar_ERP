@@ -378,6 +378,7 @@ def page_cost(request, pk):
     lot = get_object_or_404(Lot, pk=pk)
     breakdown, err = _safe(lambda l: {
         "fruit": costing_svc.fruit_cost(l),
+            "fruit_trueup": costing_svc.fruit_trueup_cost(l),
         "additions": costing_svc.addition_cost(l),
         "spirit": costing_svc.spirit_cost(l),
         "oak_depreciation": costing_svc.lot_oak_depreciation(l),

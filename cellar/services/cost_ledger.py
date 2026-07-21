@@ -155,6 +155,26 @@ def post_lot(lot, *, operator=None):
                           or costing.to_business_date(lot.created_at),
                           "weightagallocation", alloc.pk, operator))
 
+    # --- fruit true-up: the delta between provisional and final price ------
+    # Posted as its own row against the SAME allocation under a different
+    # source_kind, so the unique constraint treats it as a distinct posting and the
+    # original fruit row is never touched. Dated to the revision's effective_on —
+    # the day the final figure published — not the delivery date. The harvest month
+    # is always closed by then, so posting_period() moves it forward to the open
+    # month and stamps a deferred_note. That is correct and it is the point: the
+    # true-up is a new fact learned in March, not a restatement of September.
+    #
+    # CORRECTING A TRUE-UP: because idempotency keys on (source_kind, source_id,
+    # category), voiding a revision and entering a corrected one will NOT repost —
+    # the first true-up row is still live and blocks it. Void the CostEntry rows too.
+    # reconcile() catches this on its own (posted delta vs. recomputed delta) and
+    # close_period() refuses, so it fails loudly rather than silently.
+    for alloc, delta, rev in costing.trueup_allocations(lot):
+        tons = Decimal(str(alloc.allocated_net_lbs or 0)) / Decimal("2000")
+        made.append(_post(lot, C.FRUIT, tons * Decimal(str(delta)),
+                          rev.effective_on,
+                          "weightagallocation_trueup", alloc.pk, operator))
+
     # --- additives ---------------------------------------------------------
     for a in lot.additions.filter(voided_at__isnull=True):
         made.append(_post(lot, C.ADDITIVE, a.cost,

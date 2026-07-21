@@ -101,12 +101,16 @@ def _estate_cost_per_ton():
         return 0.0
 
 
-def _contract_price(lot, tag):
-    """The vintage's contract price for this fruit, block-specific if there is one.
+def _contract_price_row(lot, tag):
+    """The FruitPrice ROW governing this tag, block-specific if there is one.
 
     Prices change every year, so they live in FruitPrice rows keyed on vintage —
     not in a single field that gets overwritten each harvest and silently restates
     the COGS of every prior vintage.
+
+    Returns the row rather than the dollars because the true-up needs to reach the
+    row's revisions. `_contract_price()` below is the dollars-only wrapper the
+    original resolution chain calls.
     """
     from cellar.models import FruitPrice
     block = getattr(getattr(tag, "harvest_event", None), "block", None)
@@ -116,7 +120,13 @@ def _contract_price(lot, tag):
         variety = lotmeta.lot_variety(lot)
     if variety is None:
         return None
-    return FruitPrice.for_lot(lot.vintage_year, variety, block)
+    return FruitPrice.row_for_lot(lot.vintage_year, variety, block)
+
+
+def _contract_price(lot, tag):
+    """The vintage's contract price/ton for this fruit, or None."""
+    row = _contract_price_row(lot, tag)
+    return row.price_per_ton if row else None
 
 
 def fruit_cost(lot):
@@ -135,6 +145,54 @@ def fruit_cost(lot):
             cpt = tag.purchase_price_per_ton if tag.source_type == "purchased" else _estate_cost_per_ton()
         tons = float(a.allocated_net_lbs) / 2000.0
         total += tons * float(cpt or 0)
+    return total
+
+
+def trueup_allocations(lot):
+    """[(allocation, delta_per_ton, revision)] for allocations owed a fruit true-up.
+
+    THE RESOLUTION ORDER IS THE WHOLE POINT
+    ---------------------------------------
+    `fruit_cost()` resolves a price in four steps: the cost recorded on the tag →
+    the FruitPrice contract row → the purchase price on the tag → the estate
+    constant. A true-up may only touch allocations that actually landed on step 2,
+    because those are the only ones whose dollars came from the provisional price.
+
+    A tag carrying its own `fruit_cost_per_ton` short-circuits before FruitPrice is
+    ever consulted — that fruit was priced off an actual invoice and revising the
+    varietal price must not move it. Getting this wrong would double-book the
+    true-up onto fruit that was never provisionally priced, which is exactly the
+    kind of error reconciliation would flag but nobody would understand.
+    """
+    out = []
+    for a in lot.allocations.filter(voided_at__isnull=True):
+        tag = a.weigh_tag
+        if tag.fruit_cost_per_ton is not None:
+            continue                       # priced off the tag; FruitPrice never applied
+        row = _contract_price_row(lot, tag)
+        if row is None:
+            continue                       # fell through to purchase price / estate constant
+        rev = row.live_revision()
+        if rev is None:
+            continue
+        delta = rev.final_price_per_ton - row.price_per_ton
+        if delta:
+            out.append((a, delta, rev))
+    return out
+
+
+def fruit_trueup_cost(lot):
+    """Σ (allocated tons × signed delta/ton) — the fruit price true-up on this lot.
+
+    Signed: a final price below the provisional one credits the lot. Kept as its own
+    term rather than folded into `fruit_cost()` so the Cost tile and the QBO fruit
+    line can both show what was booked at delivery and what the true-up moved,
+    instead of one blended number nobody can tie to a contract.
+    """
+    total = 0.0
+    for alloc, delta, _rev in trueup_allocations(lot):
+        tons = float(alloc.allocated_net_lbs) / 2000.0
+        total += tons * float(delta)
     return total
 
 
@@ -159,8 +217,8 @@ def adjustment_cost(lot):
 
 def lot_direct_cost(lot):
     """Costs incurred directly on this lot (not inherited from parents)."""
-    return (fruit_cost(lot) + addition_cost(lot) + spirit_cost(lot)
-            + lot_oak_depreciation(lot) + adjustment_cost(lot))
+    return (fruit_cost(lot) + fruit_trueup_cost(lot) + addition_cost(lot)
+            + spirit_cost(lot) + lot_oak_depreciation(lot) + adjustment_cost(lot))
 
 
 def to_business_date(value):

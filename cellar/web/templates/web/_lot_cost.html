@@ -2,6 +2,7 @@
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 <table class="kv cost-kv"><tbody>
   <tr><th>Fruit</th><td>${{ cost.fruit|floatformat:2 }}</td></tr>
+  {% if cost.fruit_trueup %}<tr><th>Fruit price true-up</th><td>${{ cost.fruit_trueup|floatformat:2 }}</td></tr>{% endif %}
   <tr><th>Additions</th><td>${{ cost.additions|floatformat:2 }}</td></tr>
   <tr><th>Spirit</th><td>${{ cost.spirit|floatformat:2 }}</td></tr>
   <tr><th>Oak depreciation</th><td>${{ cost.oak_depreciation|floatformat:2 }}</td></tr>
@@ -9,5 +10,6 @@
   <tr class="total"><th>Total</th><td>${{ cost.total|floatformat:2 }}</td></tr>
   <tr><th>Per gallon</th><td>{% if cost.per_gal is not None %}${{ cost.per_gal|floatformat:4 }}{% else %}—{% endif %}</td></tr>
 </tbody></table>
-<p class="verify">Fruit + additions + spirit + barrel depreciation + assigned costs, including cost inherited from parent lots.
+<p class="verify">Fruit + true-up + additions + spirit + barrel depreciation + assigned costs, including cost inherited from parent lots.
+{% if cost.fruit_trueup %}<br>&ldquo;Fruit price true-up&rdquo; is the signed difference between the provisional price booked at delivery and the final price on the FruitPrice revision &mdash; a credit when the published figure came in below the provisional one. The delivery-date fruit cost above is left as booked.{% endif %}
 {% if cost.adjustments %}<br>&ldquo;Assigned costs&rdquo; are hand-entered or pool-allocated dollars (LotCostAdjustment) rather than figures derived from recorded cellar events &mdash; on the back-loaded 2023/2024 vintages this is where oak and overhead live.{% endif %}</p>

@@ -26,6 +26,7 @@ from cellar.models import (
     LabAnalyte, LabAnalyteSynonym, ConfigConstant,
     Room, Location, BarrelOrder, Container, Rack,
     BottleFormat, DryGood, Material, ExternalDestination,
+    FruitPrice, FruitPriceRevision,
     TankAssignment,
 )
 
@@ -127,6 +128,13 @@ REGISTRY = {
                   ["name", "kind", "unit", "unit_cost"]),
         TableSpec("external-destinations", ExternalDestination, "External destinations",
                   ["name", "bw_number", "notes"]),
+        TableSpec("fruit-prices", FruitPrice, "Fruit prices",
+                  ["vintage_year", "variety", "block", "price_per_ton", "basis",
+                   "source_ref", "is_provisional", "notes"],
+                  order_by=["-vintage_year", "variety__name"]),
+        TableSpec("fruit-price-revisions", FruitPriceRevision, "Fruit price revisions",
+                  ["price", "final_price_per_ton", "basis", "source_ref", "effective_on"],
+                  order_by=["-effective_on"]),
     ]
 }
 

@@ -1,6 +1,8 @@
 """Master data: varieties, the abbreviation catalog, sources, vessels, additives, config."""
+from decimal import Decimal
+
 from django.db import models
-from .base import Program, SourceType
+from .base import AppendOnly, Program, SourceType
 
 
 class Variety(models.Model):
@@ -239,13 +241,52 @@ class FruitPrice(models.Model):
 
     Estate fruit is priced the same way — one row per vintage, entered from that
     year's farming cost, until the farming module can compute it.
+
+    WHY `basis` AND `source_ref`
+    ---------------------------
+    When the vineyard and the winery are separate entities under common control,
+    the price on this row is a related-party transfer price and has to be defensible
+    as arm's length. Three years later nobody remembers whether $1,600/ton came from
+    a signed third-party contract, a comparable sale of the same block, or a district
+    average off the Grape Crush Report — and "we don't remember" is the wrong answer
+    to give an examiner. `basis` records the METHOD, `source_ref` records the
+    DOCUMENT. Both travel with the price for the life of the vintage.
+
+    WHY `is_provisional`
+    --------------------
+    The Grape Crush Report for a vintage doesn't publish until February (preliminary)
+    and March (final) of the FOLLOWING year, so fruit delivered in September can only
+    be priced against the prior year's district average. A price booked on that basis
+    is provisional: it is the best number available on the day, not the final one.
+    Flagging it here is what lets `fruit_price_trueup_report()` find the rows still
+    owed a true-up once the report lands, instead of relying on somebody's memory.
+
+    The price on THIS row is never rewritten by the true-up. It is what was booked,
+    and it stays what was booked — see FruitPriceRevision.
     """
+
+    class Basis(models.TextChoices):
+        ARMS_LENGTH_SALE = "arms_length_sale", "Arm's-length sale (same vintage)"
+        CONTRACT = "contract", "Third-party purchase contract"
+        DISTRICT_AVERAGE = "district_average", "Grape Crush Report — same vintage"
+        PRIOR_YEAR_DISTRICT = "prior_year_district", "Grape Crush Report — prior vintage"
+        FARMING_COST = "farming_cost", "Actual farming cost"
+        NEGOTIATED = "negotiated", "Negotiated / other"
+
     vintage_year = models.PositiveSmallIntegerField()
     variety = models.ForeignKey(Variety, on_delete=models.PROTECT, related_name="prices")
     block = models.ForeignKey(Block, null=True, blank=True, on_delete=models.PROTECT,
                               related_name="prices",
                               help_text="blank = the varietal price for that vintage")
     price_per_ton = models.DecimalField(max_digits=9, decimal_places=2)
+    basis = models.CharField(max_length=20, choices=Basis.choices, default=Basis.CONTRACT,
+                             help_text="how this price was arrived at")
+    source_ref = models.CharField(max_length=160, blank=True,
+                                  help_text="the document behind it — contract or invoice no., "
+                                            "or 'Grape Crush Report 2025 Final, District 11, Zinfandel'")
+    is_provisional = models.BooleanField(default=False,
+                                         help_text="priced on data that will be superseded; "
+                                                   "owed a true-up when the final figure publishes")
     notes = models.CharField(max_length=120, blank=True)
 
     class Meta:
@@ -253,17 +294,109 @@ class FruitPrice(models.Model):
         ordering = ["-vintage_year", "variety__name"]
 
     @classmethod
-    def for_lot(cls, vintage_year, variety, block=None):
-        """Block-specific price if there is one, else the varietal price."""
+    def row_for_lot(cls, vintage_year, variety, block=None):
+        """The FruitPrice ROW that governs — block-specific if there is one.
+
+        `for_lot()` returns just the dollars and is what the costing chain has always
+        called. The true-up needs the row itself (to reach its revisions), so the
+        lookup lives here once and `for_lot()` delegates. Two implementations of the
+        same block-beats-varietal precedence would drift, and the one that drifted
+        would silently misprice fruit.
+        """
         if block is not None:
             row = cls.objects.filter(vintage_year=vintage_year, variety=variety,
                                      block=block).first()
             if row:
-                return row.price_per_ton
-        row = cls.objects.filter(vintage_year=vintage_year, variety=variety,
-                                 block__isnull=True).first()
+                return row
+        return cls.objects.filter(vintage_year=vintage_year, variety=variety,
+                                  block__isnull=True).first()
+
+    @classmethod
+    def for_lot(cls, vintage_year, variety, block=None):
+        """Block-specific price if there is one, else the varietal price."""
+        row = cls.row_for_lot(vintage_year, variety, block)
         return row.price_per_ton if row else None
+
+    def live_revision(self):
+        """The one live final-price revision on this row, or None."""
+        return self.revisions.filter(voided_at__isnull=True).order_by("-id").first()
+
+    @property
+    def final_price_per_ton(self):
+        """What the fruit ended up costing: the revision if there is one, else as-booked."""
+        rev = self.live_revision()
+        return rev.final_price_per_ton if rev else self.price_per_ton
+
+    @property
+    def trueup_delta_per_ton(self):
+        """Signed dollars/ton still to be booked. Zero when there's no revision."""
+        rev = self.live_revision()
+        if rev is None:
+            return Decimal("0")
+        return rev.final_price_per_ton - self.price_per_ton
 
     def __str__(self):
         who = f"{self.variety} {self.block}" if self.block_id else str(self.variety)
         return f"{self.vintage_year} {who} — ${self.price_per_ton}/ton"
+
+
+class FruitPriceRevision(AppendOnly):
+    """The final price for a vintage's fruit, booked after the provisional one.
+
+    WHY THIS IS A SEPARATE ROW AND NOT AN EDIT
+    ------------------------------------------
+    The obvious implementation is to reach into the FruitPrice row in March and
+    change `price_per_ton` to the published figure. That is wrong three times over:
+
+      1. It restates history. `FruitPrice` is read live by `costing.fruit_cost()`,
+         so overwriting it silently moves the fruit cost of every lot from that
+         vintage — including lots whose cost has already been posted, reported, and
+         summarised into a QBO journal entry for a CLOSED month.
+      2. It breaks reconciliation. `cost_ledger.reconcile()` diffs posted cost
+         against freshly computed cost. Repricing the source moves `computed` while
+         `posted` stays put, so every lot in the vintage reports as drifted and the
+         signal that reconciliation exists to give is buried in noise.
+      3. It destroys the evidence. The whole point of pricing provisionally is that
+         you booked the best number available on the day. If the row now says the
+         final number, there is nothing left to show that you did.
+
+    So the true-up is ADDITIVE: this row records the final price, the delta is
+    derived, and `costing.fruit_trueup_cost()` books the difference as its own
+    dated slice of fruit cost. The provisional price stays on the FruitPrice row
+    as the record of what was booked at delivery, and both numbers are visible.
+
+    The delta is signed. In a falling market the final figure comes in under the
+    provisional one and the true-up is a CREDIT — which is the normal case for a
+    prior-year-district-average basis after an oversupplied vintage.
+    """
+
+    price = models.ForeignKey(FruitPrice, on_delete=models.PROTECT,
+                              related_name="revisions")
+    final_price_per_ton = models.DecimalField(max_digits=9, decimal_places=2)
+    basis = models.CharField(max_length=20, choices=FruitPrice.Basis.choices,
+                             default=FruitPrice.Basis.DISTRICT_AVERAGE,
+                             help_text="how the FINAL price was arrived at")
+    source_ref = models.CharField(max_length=160, blank=True,
+                                  help_text="the published figure this came from — e.g. "
+                                            "'Grape Crush Report 2026 Final, District 11, Zinfandel'")
+    effective_on = models.DateField(
+        help_text="business date the true-up is booked — normally the date the final "
+                  "report published, NOT the delivery date")
+
+    class Meta:
+        ordering = ("-effective_on", "-id")
+        constraints = [
+            # One live revision per price row. A second correction supersedes the
+            # first by voiding it, so the delta is never ambiguous.
+            models.UniqueConstraint(
+                fields=["price"], condition=models.Q(voided_at__isnull=True),
+                name="fruitpricerevision_one_live_per_price"),
+        ]
+
+    @property
+    def delta_per_ton(self):
+        return self.final_price_per_ton - self.price.price_per_ton
+
+    def __str__(self):
+        return (f"{self.price} → ${self.final_price_per_ton}/ton "
+                f"({self.delta_per_ton:+}) {self.effective_on}")

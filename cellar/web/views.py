@@ -312,6 +312,7 @@ def lot_cost(request, pk):
     def extra(lot):
         breakdown, err = _safe(lambda l: {
             "fruit": costing_svc.fruit_cost(l),
+            "fruit_trueup": costing_svc.fruit_trueup_cost(l),
             "additions": costing_svc.addition_cost(l),
             "spirit": costing_svc.spirit_cost(l),
             "oak_depreciation": costing_svc.lot_oak_depreciation(l),
