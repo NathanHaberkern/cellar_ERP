@@ -219,17 +219,51 @@ class AgingPlacement(AppendOnly):
         end = self.emptied_at or asof or date.today()
         return max((end - self.filled_at).days, 0)
 
-    @property
-    def foreign_topped_gal(self):
+    def _foreign_gal_by_kind(self, kind):
         total = Decimal(0)
         for t in self.toppings.filter(voided_at__isnull=True):
-            if t.event.source_lot_id != self.lot_id:
+            if t.event.source_lot_id != self.lot_id and t.event.kind == kind:
                 total += t.volume_added
         return total
 
     @property
+    def routine_topped_gal(self):
+        """Foreign wine added by ROUTINE topping — the creep the 5-gal flag watches."""
+        return self._foreign_gal_by_kind(ToppingEvent.Kind.ROUTINE)
+
+    @property
+    def partial_fill_gal(self):
+        """Foreign wine added by deliberate PARTIAL_FILL ullage fills.
+
+        Tracked apart from routine topping on purpose. Both are real wine and
+        both count toward composition (see foreign_topped_gal, and the lineage
+        edges ToppingTarget writes) — labelling eligibility does not care what
+        you meant. But the 5-gallon flag exists to catch routine topping
+        QUIETLY ACCUMULATING past a material threshold, and a single recorded
+        35-gallon ullage fill is not that: it would trip the flag on day one
+        and then mask any genuine creep afterwards. Separating the accumulators
+        keeps the flag measuring the thing it was built to measure, without
+        pretending the fill wine isn't there.
+        """
+        return self._foreign_gal_by_kind(ToppingEvent.Kind.PARTIAL_FILL)
+
+    @property
+    def foreign_topped_gal(self):
+        """ALL foreign wine in this barrel, both kinds. This is the composition
+        number — unchanged in meaning from before the accumulators were split."""
+        return self.routine_topped_gal + self.partial_fill_gal
+
+    @property
     def is_flagged(self):
-        return self.emptied_at is None and self.foreign_topped_gal > 5
+        """Routine topping creep past 5 gal. Deliberate ullage fills are
+        excluded — see partial_fill_gal for why."""
+        return self.emptied_at is None and self.routine_topped_gal > 5
+
+    @property
+    def has_partial_fill(self):
+        """Surfaced separately so a barrel carrying a deliberate fill is still
+        visible in the UI without being mislabelled as topping contamination."""
+        return self.emptied_at is None and self.partial_fill_gal > 0
 
     def __str__(self):
         return f"{self.lot} in {self.container} ({self.volume_gal} gal)"
@@ -303,9 +337,17 @@ class ToppingTarget(AppendOnly):
                     # here is circular.
                     from cellar.services import costing as costing_svc
                     cpg = costing_svc.parent_cost_per_gal(ev.source_lot)
+                    # The ROUTINE/PARTIAL_FILL distinction already exists on the
+                    # event; before this it was flattened to TOPPING here and
+                    # lost to every downstream reader. Carrying it through is
+                    # what lets partx.py report a large cross-tax-class fill
+                    # while still skipping de minimis routine topping.
+                    rel = (LotLineage.Relationship.PARTIAL_FILL
+                           if ev.kind == ToppingEvent.Kind.PARTIAL_FILL
+                           else LotLineage.Relationship.TOPPING)
                     self.contribution = LotLineage.objects.create(
                         parent_lot=ev.source_lot, child_lot=target_lot,
-                        relationship_type=LotLineage.Relationship.TOPPING,
+                        relationship_type=rel,
                         volume_gal=self.volume_added,
                         occurred_at=costing_svc.to_business_date(ev.topped_at),
                         cost_per_gal_snapshot=cpg)
@@ -315,3 +357,69 @@ class ToppingTarget(AppendOnly):
 
     def __str__(self):
         return f"{self.event} → {self.placement.container} ({self.volume_added} gal)"
+
+
+class LotReservation(AppendOnly):
+    """Wine set aside for a future sale, bottling blend, or program.
+
+    WHY THE CONTAINER IS OPTIONAL RATHER THAN REQUIRED
+    ---------------------------------------------------
+    Three real granularities, one model:
+
+      container set, one row per barrel  — a barrel selection ("these 12 of the
+          40 barrels of 21TN1"). Barrel identity is not incidental here: the
+          Container model carries cooper/forest/toast/grain precisely because
+          which barrel a wine sat in changes what it is, and selecting barrels
+          for a reserve bottling is the entire practice.
+      container null, volume_gal set     — "500 gallons of this lot, barrels to
+          be chosen." The common case when a wine is committed before it has
+          been tasted through.
+      container null, volume_gal null    — the whole lot is spoken for. This is
+          the shape the 2019 TN_NW / TEMP_NW Naked Wines bulk blends needed and
+          had nowhere to live, which is what surfaced this gap.
+
+    WHY NOT ON Container ALONE: a barrel is emptied and refilled next vintage,
+    and a reservation anchored only to the container would silently carry over
+    onto unrelated wine. The thing reserved is THIS WINE IN THIS BARREL, so the
+    lot is always required and the container narrows it.
+
+    NOT the same axis as Lot.program (table/port/rose), which is TTB tax
+    classification. This is a commercial commitment and carries no tax meaning.
+    """
+    class Purpose(models.TextChoices):
+        SALE = "sale", "Sale to a buyer"
+        BLEND = "blend", "Future bottling blend"
+        HOLD = "hold", "Held / library"
+
+    lot = models.ForeignKey("cellar.Lot", on_delete=models.PROTECT, related_name="reservations")
+    placement = models.ForeignKey(AgingPlacement, null=True, blank=True,
+                                  on_delete=models.PROTECT, related_name="reservations",
+                                  help_text="specific barrel; null = lot-level reservation")
+    purpose = models.CharField(max_length=8, choices=Purpose.choices, default=Purpose.SALE)
+    destination = models.ForeignKey("cellar.ExternalDestination", null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name="reservations",
+                                    help_text="the buyer, where one is known")
+    label = models.CharField(max_length=80, blank=True,
+                             help_text="program name when it isn't a buyer yet, e.g. 'Naked Wines'")
+    volume_gal = models.DecimalField(max_digits=9, decimal_places=1, null=True, blank=True,
+                                     help_text="lot-level partial reservation; null with no "
+                                               "placement = the whole lot")
+    reserved_at = models.DateField()
+    released_at = models.DateField(null=True, blank=True,
+                                   help_text="released without being fulfilled")
+    satisfied_at = models.DateField(null=True, blank=True,
+                                    help_text="closed because the wine was blended away")
+
+    # Closing a reservation is a legitimate post-creation edit; the commitment
+    # itself is not. AppendOnly keeps released/satisfied rows visible, which is
+    # the point — if a buyer disputes what was set aside, the history is there.
+    CLOSE_FIELDS = ("released_at", "satisfied_at")
+
+    @property
+    def is_open(self):
+        return self.released_at is None and self.satisfied_at is None and self.voided_at is None
+
+    def __str__(self):
+        who = self.destination or self.label or self.get_purpose_display()
+        where = self.placement.container if self.placement else self.lot
+        return f"{where} reserved for {who}"

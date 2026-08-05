@@ -55,6 +55,9 @@ _LIQUID_EDGES = {
     LotLineage.Relationship.WHOLE_BLEND,
     LotLineage.Relationship.PARTIAL_BLEND,
     LotLineage.Relationship.TOPPING,
+    # Moves liquid exactly as TOPPING does — same action, larger scale. The two
+    # differ only in partx.py's tax-class treatment, not here.
+    LotLineage.Relationship.PARTIAL_FILL,
     LotLineage.Relationship.SPLIT_SAIGNEE,
     LotLineage.Relationship.SPLIT_DRAINOFF,
 }

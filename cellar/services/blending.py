@@ -70,7 +70,8 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from cellar.models import Lot, LotLineage, TankAssignment, InoculationEvent
+from cellar.models import (AgingPlacement, InoculationEvent, LineageSource, Lot,
+                           LotLineage, TankAssignment)
 from cellar.services import operations as ops
 from cellar.services import volumes as vol_svc
 
@@ -179,13 +180,61 @@ def preview(source_lot, dest_lot, *, kind, volume_gal=None):
 
 
 @transaction.atomic
+def _resolve_sources(sources, source_lot, edge_volume):
+    """Validate barrel detail against the edge it will hang under.
+
+    Two failure modes worth catching loudly rather than storing quietly wrong
+    genealogy: a barrel that doesn't actually hold this lot (usually a stale
+    placement pk, or the wine was already racked out), and detail that doesn't
+    add up to the volume on the edge.
+    """
+    rows = []
+    total = ZERO
+    for item in sources:
+        placement, gal = item
+        if not isinstance(placement, AgingPlacement):
+            placement = AgingPlacement.objects.select_related("container", "lot").get(pk=placement)
+        if placement.lot_id != source_lot.pk:
+            raise ValueError(
+                f"{placement.container} holds {placement.lot.code}, not {source_lot.code} — "
+                f"it can't be a source for this blend.")
+        if placement.emptied_at is not None:
+            raise ValueError(
+                f"{placement.container} was already emptied on {placement.emptied_at}; "
+                f"record the blend against the barrels that actually held the wine.")
+        gal = _d(gal)
+        if gal is None or gal <= 0:
+            raise ValueError(f"{placement.container}: enter the gallons contributed.")
+        total += gal
+        rows.append((placement, gal))
+
+    if (total - edge_volume).copy_abs() > GAL:
+        raise ValueError(
+            f"Barrel detail sums to {total} gal but the blend moves {edge_volume} gal. "
+            f"These must agree.")
+    return rows
+
+
 def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOLE_BLEND,
-          volume_gal=None, to_vessel=None, allow_overdraw=False, actor=None):
+          volume_gal=None, to_vessel=None, allow_overdraw=False, actor=None,
+          sources=None):
     """Blend `source_lot` into `dest_lot`.
 
     kind        : WHOLE_BLEND (moves the source's entire current balance) or
                   PARTIAL_BLEND (moves exactly `volume_gal`).
     volume_gal  : required for PARTIAL_BLEND; ignored (computed) for WHOLE_BLEND.
+    sources     : optional [(AgingPlacement | pk, gallons), ...] naming WHICH
+                  BARRELS of the source fed this blend. Writes LineageSource
+                  detail rows under the edge.
+
+                  Omitted → behaves exactly as before, one edge and no barrel
+                  detail. That is correct for a tank-to-tank blend, and it is
+                  what every blend recorded before this parameter existed looks
+                  like; an empty set never means "no barrels involved".
+
+                  Given → each placement must currently hold `source_lot`, and
+                  the gallons must sum to the edge's volume. Without that check
+                  the detail could quietly contradict the edge it hangs under.
     to_vessel   : if given, also books the physical move — closes the source's
                   open tank assignment and opens/co-occupies `to_vessel` for the
                   destination lot via `force_assign_lot_to_vessel` (the only
@@ -221,10 +270,15 @@ def blend(source_lot, dest_lot, *, blended_at, kind=LotLineage.Relationship.WHOL
     from cellar.services import costing as costing_svc
     cpg = costing_svc.parent_cost_per_gal(source_lot)
 
+    rows = _resolve_sources(sources, source_lot, vol) if sources else []
+
     edge = LotLineage.objects.create(
         parent_lot=source_lot, child_lot=dest_lot,
         relationship_type=kind, volume_gal=vol,
         occurred_at=blended_at, cost_per_gal_snapshot=cpg)
+
+    for placement, gal in rows:
+        LineageSource.objects.create(lineage=edge, placement=placement, volume_gal=gal)
 
     if to_vessel is not None:
         # Close the source's own tank assignment — its wine (all or in part) has

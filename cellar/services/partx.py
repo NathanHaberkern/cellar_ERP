@@ -118,8 +118,15 @@ def build_part_x(year, month):
     # ---------------------------------------------- change of tax class
     for e in in_period_dt(LotLineage.objects, "created_at").select_related(
             "parent_lot", "child_lot"):
+        # PARTIAL_FILL is included but plain TOPPING is not, and the line
+        # between them is scale, not kind of action. Replacing a gallon of
+        # evaporation from a different tax class is de minimis and reporting it
+        # would bury the report in noise. Filling a 35-gallon-short Port barrel
+        # from a table-wine lot moves a material volume across classes and
+        # belongs in footnote 5/ like any other cross-class movement.
         if e.relationship_type not in (LotLineage.Relationship.WHOLE_BLEND,
-                                       LotLineage.Relationship.PARTIAL_BLEND):
+                                       LotLineage.Relationship.PARTIAL_BLEND,
+                                       LotLineage.Relationship.PARTIAL_FILL):
             continue
         pc, cc = lot_tax_class(e.parent_lot), lot_tax_class(e.child_lot)
         if pc == cc:

@@ -243,6 +243,23 @@ class LotLineage(AppendOnly):
         WHOLE_BLEND = "whole_blend", "Whole-lot blend"
         PARTIAL_BLEND = "partial_blend_contribution", "Partial blend contribution"
         TOPPING = "topping_contribution", "Topping contribution"
+        # A partial-barrel ullage fill from a different lot.
+        #
+        # WHY THIS IS SEPARATE FROM TOPPING: it is the same ACTION — bringing a
+        # barrel up to full — but at a materially different scale. Routine
+        # topping replaces evaporation, a gallon or two at a time; a partial
+        # fill brings a 35-gallon-short barrel up, and that volume is large
+        # enough to matter for reporting. Specifically, partx.py's
+        # change-of-tax-class narrative (footnote 5) fires on blend edges and
+        # deliberately skips TOPPING as de minimis. That exclusion is right for
+        # a 1-gallon top and wrong for a 35-gallon fill, so this type is
+        # INCLUDED there while otherwise behaving exactly like TOPPING.
+        #
+        # It is deliberately NOT a blend type: a blend is a winemaking decision
+        # about what the wine should be, an ullage fill is cellar hygiene. The
+        # distinction already existed at ToppingEvent.Kind and used to be
+        # flattened away here; this preserves it into the ledger.
+        PARTIAL_FILL = "partial_fill_contribution", "Partial-fill contribution"
         BOTTLING_SPLIT = "bottling_split", "Bottling parcel split"
 
     parent_lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="lineage_as_parent")
@@ -283,3 +300,42 @@ class LotLineage(AppendOnly):
 
     def __str__(self):
         return f"{self.parent_lot} → {self.child_lot} [{self.relationship_type}]"
+
+
+class LineageSource(AppendOnly):
+    """Which specific barrels of the parent lot fed a lineage edge.
+
+    WHY THIS IS A CHILD TABLE AND NOT A FIELD ON LotLineage
+    -------------------------------------------------------
+    A blend of 12 barrels into a tank is ONE movement of wine, so it is one
+    LotLineage edge. Hanging `placement` directly on the edge would force
+    twelve edges instead, and three readers — volumes.py (_LIQUID_EDGES),
+    partx.py (footnote 5) and aging.composition_of() — all walk edges and sum
+    volume_gal. Twelve rows summing to the same total is arithmetically
+    identical but structurally different, and every one of those readers would
+    need re-verifying for a change that buys nothing. A child table is purely
+    additive: existing readers see exactly the rows they see today, and barrel
+    detail is an optional join for anyone who wants it.
+
+    This is the same header/detail shape the codebase already uses for
+    ToppingEvent → ToppingTarget, so it is not a new pattern.
+
+    OPTIONAL BY DESIGN: a tank-to-tank blend has no barrels to name, and a
+    barrels→tank→blend sequence recorded without detail is still valid (that is
+    what every blend before this model looked like). Absence of LineageSource
+    rows means "not recorded", never "no barrels involved" — do not infer a
+    negative from an empty set.
+
+    WHAT IT UNLOCKS: barrel-level blend genealogy (what oak regime a bottling
+    actually saw, which barrels are in this blend), and it is what lets a
+    barrel-level LotReservation know it has been satisfied — see
+    cellar/services/reservations.py, which reads these rows rather than trying
+    to infer the link from rack-out timestamps sitting near a blend date.
+    """
+    lineage = models.ForeignKey(LotLineage, on_delete=models.PROTECT, related_name="sources")
+    placement = models.ForeignKey("cellar.AgingPlacement", on_delete=models.PROTECT,
+                                  related_name="lineage_sources")
+    volume_gal = models.DecimalField(max_digits=9, decimal_places=1)
+
+    def __str__(self):
+        return f"{self.placement.container} → {self.lineage} ({self.volume_gal} gal)"

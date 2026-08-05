@@ -368,13 +368,20 @@ def movements(lot):
                      "start": e.parent_lot.code, "end": lot.code,
                      "gallons": e.volume_gal, "note": "parcel racked off bulk"})
 
-    # Topping gain — foreign wine topped into this lot's barrels (LotLineage TOPPING)
+    # Topping gain — foreign wine added into this lot's barrels. Both kinds
+    # appear (they are both topping gain), but labelled apart so a deliberate
+    # ullage fill doesn't read on the timeline as routine topping creep.
+    _TOP_KINDS = {
+        LotLineage.Relationship.TOPPING: ("Topping gain", "topping contribution"),
+        LotLineage.Relationship.PARTIAL_FILL: ("Partial fill", "ullage fill from another lot"),
+    }
     for e in (LotLineage.objects.filter(child_lot=lot, voided_at__isnull=True,
-                                        relationship_type=LotLineage.Relationship.TOPPING)
+                                        relationship_type__in=list(_TOP_KINDS))
               .select_related("parent_lot")):
-        rows.append({"type": "Topping gain", "date": _d(e.created_at),
+        label, note = _TOP_KINDS[e.relationship_type]
+        rows.append({"type": label, "date": _d(e.created_at),
                      "start": e.parent_lot.code, "end": lot.code,
-                     "gallons": e.volume_gal, "note": "topping contribution"})
+                     "gallons": e.volume_gal, "note": note})
 
     # Topping loss — evaporative loss booked on this lot (auto from ToppingTarget),
     # plus any other recorded volume loss. Kept as the exact rows 5120.17 reads.

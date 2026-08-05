@@ -6,6 +6,7 @@ from .reference import (
 )
 from .spine import (
     HarvestEvent, WeighTag, WeighTagBin, Lot, LotDesignation, WeighTagAllocation, LotLineage,
+    LineageSource,
     LotSectionNote, LotCompositionOverride,
 )
 from .spirits import HighProofSpiritLedger
@@ -20,7 +21,7 @@ from .crushout import (
 )
 from .aging import (
     OakTier, Room, Location, BarrelOrder, Container, Rack, RackAssignment, AgingPlacement,
-    VolumeLoss, ToppingEvent, ToppingTarget,
+    VolumeLoss, ToppingEvent, ToppingTarget, LotReservation,
 )
 from .bottling import (
     BottleFormat, DryGood, BottlingRun, BottlingDryGoodUse, TaxPaidRemoval,
@@ -40,13 +41,14 @@ __all__ = [
     "Additive", "LabAnalyte", "LabAnalyteSynonym", "ConfigConstant", "LotSequenceCounter",
     "FruitPrice", "FruitPriceRevision",
     "HarvestEvent", "WeighTag", "WeighTagBin", "Lot", "LotDesignation", "WeighTagAllocation", "LotLineage",
+    "LineageSource",
     "LotSectionNote", "LotCompositionOverride",
     "HighProofSpiritLedger", "Reading", "Addition",
     "DestemmingEvent", "TankAssignment", "ColdSoakSchedule", "PumpOverEvent", "PunchDownEvent",
     "InoculationEvent", "LabRequest", "LabResult", "LabResultValue", "CellarNote",
     "TaxClass", "VolumeMeasurement", "PressingEvent", "FortificationEvent", "BookToBond",
     "OakTier", "BarrelOrder", "Container", "Rack", "RackAssignment", "AgingPlacement",
-    "VolumeLoss", "ToppingEvent", "ToppingTarget", "Room", "Location",
+    "VolumeLoss", "ToppingEvent", "ToppingTarget", "LotReservation", "Room", "Location",
     "BottleFormat", "DryGood", "BottlingRun", "BottlingDryGoodUse", "TaxPaidRemoval",
     "Phase", "BondTransfer", "Material", "MaterialTransaction", "SweeteningEvent", "BondAdjustment", "BulkTaxPaidRemoval",
     "ExternalDestination", "MustSale",
