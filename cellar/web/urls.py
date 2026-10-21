@@ -25,6 +25,7 @@ from . import weightags
 from . import sweeten
 from . import lotshell
 from . import oakflow
+from . import users
 
 urlpatterns = [
     # session auth (built-in Django views, our templates)
@@ -183,4 +184,9 @@ urlpatterns = [
     path("reference/<slug:slug>/create/", ref.reference_create, name="reference-create"),  # HTMX
     path("reference/<slug:slug>/<int:pk>/edit/", ref.reference_edit_row, name="reference-edit-row"),  # HTMX
     path("reference/<slug:slug>/<int:pk>/update/", ref.reference_update, name="reference-update"),  # HTMX
+
+    # staff logins + roles (needs auth.change_user)
+    path("users/", users.users_list, name="users"),
+    path("users/new/", users.user_create, name="user-create"),
+    path("users/<int:pk>/", users.user_edit, name="user-edit"),
 ]

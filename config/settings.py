@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "corsheaders",             # so the web / iOS clients can call the API
     "cellar.apps.CellarConfig",
     "cellar.web.apps.CellarWebConfig",   # <-- ADD: HTMX front end
+    "shipping.apps.ShippingConfig",      # DTC labels: C7 -> FedEx/UPS -> C7
 ]
 
 
@@ -159,5 +160,46 @@ WINERY = {
     "REGISTRY": os.environ.get("WINERY_REGISTRY", "BW-CA-5526"),
     "NAME_ADDRESS": os.environ.get(
         "WINERY_NAME_ADDRESS", "St. Amant Winery, 1 Winemaster Way, Lodi, CA 95240"),
+}
+
+# --- shipping (carrier + Commerce7 credentials) -----------------------------
+# Secrets come only from the environment: .env locally, Heroku config vars in
+# production. *_ENV is "sandbox" or "production" per carrier, so FedEx can go
+# live (Tranche 4) while UPS is still being tested.
+SHIPPING = {
+    "FEDEX": {
+        "ENV": os.environ.get("FEDEX_ENV", "sandbox"),
+        "CLIENT_ID": os.environ.get("FEDEX_CLIENT_ID", ""),
+        "CLIENT_SECRET": os.environ.get("FEDEX_CLIENT_SECRET", ""),
+        "ACCOUNT_NUMBER": os.environ.get("FEDEX_ACCOUNT_NUMBER", ""),
+        # alcoholDetail.shipperAgreementType -- the entity type on the FedEx
+        # alcohol agreement. Left blank unless FedEx's validation asks for it.
+        "ALCOHOL_SHIPPER_AGREEMENT": os.environ.get("FEDEX_ALCOHOL_SHIPPER_AGREEMENT", ""),
+    },
+    "UPS": {
+        "ENV": os.environ.get("UPS_ENV", "sandbox"),
+        "CLIENT_ID": os.environ.get("UPS_CLIENT_ID", ""),
+        "CLIENT_SECRET": os.environ.get("UPS_CLIENT_SECRET", ""),
+        "ACCOUNT_NUMBER": os.environ.get("UPS_ACCOUNT_NUMBER", ""),
+    },
+    "C7": {
+        "APP_ID": os.environ.get("C7_APP_ID", ""),
+        "APP_SECRET": os.environ.get("C7_APP_SECRET", ""),
+        "TENANT_ID": os.environ.get("C7_TENANT_ID", ""),
+    },
+    # Ship-from on every label. Phone is required by both carriers and has no
+    # default on purpose -- set SHIP_FROM_PHONE.
+    "SHIP_FROM": {
+        "company": os.environ.get("SHIP_FROM_COMPANY", "St. Amant Winery"),
+        "name": os.environ.get("SHIP_FROM_NAME", "Shipping"),
+        "street1": os.environ.get("SHIP_FROM_STREET1", "1 Winemaster Way"),
+        "street2": os.environ.get("SHIP_FROM_STREET2", ""),
+        "city": os.environ.get("SHIP_FROM_CITY", "Lodi"),
+        "state": os.environ.get("SHIP_FROM_STATE", "CA"),
+        "postal_code": os.environ.get("SHIP_FROM_ZIP", "95240"),
+        "country": "US",
+        "phone": os.environ.get("SHIP_FROM_PHONE", ""),
+        "email": os.environ.get("SHIP_FROM_EMAIL", ""),
+    },
 }
 

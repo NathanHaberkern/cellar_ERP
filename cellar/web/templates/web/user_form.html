@@ -1,0 +1,39 @@
+{% extends "web/base.html" %}
+{% block title %}{% if creating %}Add user{% else %}{{ target.username }}{% endif %}{% endblock %}
+{% block content %}
+<style>
+  .checks ul, .checks > div { list-style:none; margin:0; padding:0 }
+  .checks label { display:flex; gap:8px; align-items:center; font-size:14px; color:var(--ink); margin:0 0 6px }
+  .field { margin-bottom:14px }
+  .help { font-size:12px; color:var(--muted); margin-top:4px }
+  .help ul { margin:4px 0 0 16px; padding:0 }
+  .errorlist { color:var(--red-ink); font-size:12px; margin:4px 0 0; padding:0; list-style:none }
+</style>
+
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{% url 'users' %}">Users</a></p>
+    <h1>{% if creating %}Add user{% else %}{{ target.username }}{% endif %}</h1></div>
+</div>
+
+<form method="post" class="card" style="max-width:640px">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    <div class="field {% if field.name == 'groups' or field.name == 'direct_perms' %}checks{% endif %}">
+      {% if field.name == "is_active" %}
+        <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink)">{{ field }} {{ field.label }}</label>
+        {% if editing_self %}<div class="help">You can't deactivate your own login.</div>{% endif %}
+      {% else %}
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text|safe }}</div>{% endif %}
+      {% endif %}
+      {{ field.errors }}
+    </div>
+  {% endfor %}
+  <div class="row" style="justify-content:flex-end">
+    <div style="flex:0 0 auto"><a class="btn ghost" style="display:inline-block" href="{% url 'users' %}">Cancel</a></div>
+    <div style="flex:0 0 auto"><button class="btn" type="submit">{% if creating %}Create user{% else %}Save{% endif %}</button></div>
+  </div>
+</form>
+{% endblock %}
