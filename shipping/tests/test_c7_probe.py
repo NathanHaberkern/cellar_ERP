@@ -112,3 +112,29 @@ class ProbeCommandTests(SimpleTestCase):
     def test_missing_creds_is_command_error(self):
         with self.assertRaises(CommandError):
             call_command("c7_probe", stdout=mock.MagicMock())
+
+
+@override_settings(SHIPPING=C7)
+class CheckCommandTests(SimpleTestCase):
+    def _run(self, responses, env):
+        s = SeqSession(responses)
+        buf = __import__("io").StringIO()
+        with mock.patch("integrations.commerce7.requests.Session", return_value=s), \
+                mock.patch.dict("os.environ", env, clear=False):
+            call_command("c7_check", stdout=buf)
+        return buf.getvalue()
+
+    def test_secret_never_printed_and_hint_on_401(self):
+        out = self._run([FakeResponse(401, {"message": "Unauthenticated User"})],
+                        {"C7_APP_ID": "st-amant-erp", "C7_APP_SECRET": "SuperSecret123",
+                         "C7_TENANT_ID": "st-amant"})
+        self.assertNotIn("SuperSecret123", out)
+        self.assertIn("14 chars", out)
+        self.assertIn("'st-amant-erp'", out)
+        self.assertIn("installed on the St. Amant tenant", out)
+
+    def test_flags_trailing_space(self):
+        out = self._run([FakeResponse(200, {"orders": [], "total": 5})],
+                        {"C7_APP_ID": "app ", "C7_APP_SECRET": "x", "C7_TENANT_ID": "t"})
+        self.assertIn("BAD CHARS: pos 4: SPACE", out)
+        self.assertIn("200 OK", out)
