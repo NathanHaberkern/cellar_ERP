@@ -7,6 +7,7 @@ from django.conf import settings
 
 from .base import CarrierConfigError
 from .fedex import FedExAdapter
+from .ups import UPSAdapter
 
 
 def get_adapter(carrier: str):
@@ -20,5 +21,10 @@ def get_adapter(carrier: str):
             alcohol_shipper_agreement=c.get("ALCOHOL_SHIPPER_AGREEMENT", ""),
         )
     if carrier == "ups":
-        raise CarrierConfigError("UPS adapter arrives in Tranche 5")
+        c = conf["UPS"]
+        return UPSAdapter(
+            environment=c["ENV"], client_id=c["CLIENT_ID"], client_secret=c["CLIENT_SECRET"],
+            # UPS shipper numbers are 6 alphanumerics; strip spaces/dashes people paste.
+            account_number="".join(ch for ch in c["ACCOUNT_NUMBER"] if ch.isalnum()).upper(),
+        )
     raise CarrierConfigError(f"Unknown carrier {carrier!r}")

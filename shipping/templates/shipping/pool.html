@@ -1,0 +1,77 @@
+{% extends "web/base.html" %}
+{% block title %}{{ pool.name }}{% endblock %}
+{% block content %}
+<style>
+  .ship-sec { margin: 26px 0 10px; display:flex; align-items:baseline; justify-content:space-between; gap:12px }
+  .ship-sec h2 { margin:0; font-size:17px }
+  .ship-sec .n { color:var(--muted); font-size:13px; font-weight:400 }
+  td .sub { color:var(--muted); font-size:12px }
+  .contents { font-size:12px; color:var(--muted) }
+  .acts { white-space:nowrap }
+  .acts form { display:inline }
+  .trk { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px }
+</style>
+
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{% url 'shipping' %}">Shipping</a> · pool</p>
+    <h1>{{ pool.name }} <span class="badge live">{{ pool.get_carrier_display }}</span>
+      <span class="badge {% if pool.status == 'shipped' %}ok{% else %}voided{% endif %}">{{ pool.get_status_display }}</span></h1></div>
+  <div class="acts">
+    {% if can_print and missing %}<form method="post" action="{% url 'shipping-pool-buy' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Buy {{ missing }} label{{ missing|pluralize }}</button></form>{% endif %}
+    {% if can_print and labeled %}<a class="btn sm" href="{% url 'shipping-pool-pdf' pool.pk %}" target="_blank">Print all ({{ labeled }})</a>{% endif %}
+    {% if can_print and not missing and pool.status != 'shipped' %}<form method="post" action="{% url 'shipping-pool-post' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Post tracking to C7</button></form>{% endif %}
+    {% if can_build and pool.status == 'open' and not labeled %}<form method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}
+  </div>
+</div>
+
+{% for m in messages %}<div class="msg {% if m.tags == 'error' %}err{% else %}ok{% endif %}" style="margin-bottom:8px">{{ m }}</div>{% endfor %}
+
+{% if sandbox %}<div class="msg err" style="margin-bottom:8px"><b>{{ pool.get_carrier_display }} is on TEST keys ({{ env }}).</b> Labels bought here are not real, can't be shipped, and are never posted to Commerce7.</div>{% endif %}
+{% if not writeback_on %}<div class="msg err" style="margin-bottom:8px">C7 writeback is <b>off</b> (SHIP_C7_WRITEBACK) — tracking stays here; nothing is posted or emailed.</div>{% endif %}
+{% if changed %}<div class="msg err" style="margin-bottom:8px">{% for o in changed %}#{{ o.c7_order_number }} — {{ o.c7_change_note }}<br>{% endfor %}Dissolve and rebuild before buying labels.</div>{% endif %}
+
+<p class="verify">Pack each box in order, check it against the contents, then buy and print. When every box is labeled and packed, <b>Post tracking to C7</b> — C7 marks the orders fulfilled and emails each customer.</p>
+
+<div class="ship-sec"><h2>Boxes <span class="n">{{ labeled }} of {{ rows|length }} labeled</span></h2></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>#</th><th>Box</th><th>Weight</th><th>Ship to</th><th>Contents</th><th>Label</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}{% with p=r.package %}
+    <tr>
+      <td>{{ p.sequence }}</td>
+      <td>{{ p.box.name }}<br><span class="sub">{{ p.bottle_count }} btl</span></td>
+      <td>{{ p.weight_lb }} lb</td>
+      <td>{% for o in r.orders %}#{{ o.c7_order_number }} {{ o.ship_name }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+        {% with o=r.orders.0 %}{% if o %}<br><span class="sub">{{ o.ship_city }}, {{ o.ship_state }} · {{ o.ship_residential|yesno:"Home,Business,Unknown" }}</span>{% endif %}{% endwith %}</td>
+      <td class="contents">{% for c in p.contents %}{{ c.sku }}×{{ c.qty }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+      <td>{% if r.live %}<span class="trk">{{ r.live.tracking_number }}</span>{% if r.live.net_charge %}<br><span class="sub">${{ r.live.net_charge }}</span>{% endif %}{% if r.live.environment != 'production' %} <span class="badge danger">test</span>{% endif %}{% else %}<span class="sub">—</span>{% endif %}
+        {% for v in r.voided %}<br><span class="sub"><s>{{ v.tracking_number }}</s> void</span>{% endfor %}</td>
+      <td class="acts">
+        {% if r.live %}
+          {% if can_print %}<a class="btn ghost sm" href="{% url 'shipping-label-pdf' r.live.pk %}" target="_blank">Print</a>{% endif %}
+          {% if can_void %}<form method="post" action="{% url 'shipping-label-void' r.live.pk %}">{% csrf_token %}<button class="btn ghost sm">Void</button></form>{% endif %}
+        {% elif can_print %}
+          <form method="post" action="{% url 'shipping-package-buy' p.pk %}">{% csrf_token %}<button class="btn ghost sm">Buy</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endwith %}{% endfor %}
+  </tbody>
+</table></div>
+
+<div class="ship-sec"><h2>Orders <span class="n">{{ orders|length }}</span></h2></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Order</th><th>Ship to</th><th>Status</th><th>Commerce7</th><th></th></tr></thead>
+  <tbody>
+  {% for o in orders %}
+    <tr>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>{{ o.ship_name }} <span class="sub">{{ o.ship_city }}, {{ o.ship_state }}</span></td>
+      <td>{{ o.get_status_display }}</td>
+      <td>{% for fp in o.fulfillment_posts.all %}{% if forloop.first %}{% if fp.succeeded %}<span class="badge ok">posted</span>{% else %}<span class="badge danger">failed{% if fp.http_status %} {{ fp.http_status }}{% endif %}</span> <span class="sub">{{ fp.response_summary.error|truncatechars:80 }}</span>{% endif %} <span class="sub">{{ fp.created_at|date:"M j H:i" }}</span>{% endif %}{% empty %}<span class="sub">—</span>{% endfor %}</td>
+      <td class="acts">{% if can_print and o.status == 'labeled' %}<form method="post" action="{% url 'shipping-order-post' o.pk %}">{% csrf_token %}<button class="btn ghost sm">Post</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

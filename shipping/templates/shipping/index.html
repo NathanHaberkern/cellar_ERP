@@ -145,8 +145,10 @@
 <div class="ship-sec"><h2>Open pools <span class="n">{{ open_pools|length }}</span></h2></div>
 {% for pool in open_pools %}
   <div class="card pool">
-    <h3>{{ pool.name }} <span class="badge live">{{ pool.get_carrier_display }}</span>
-      {% if can_build %}<form class="inline" method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}</h3>
+    <h3><a href="{% url 'shipping-pool' pool.pk %}">{{ pool.name }}</a> <span class="badge live">{{ pool.get_carrier_display }}</span>
+      {% if pool.status == 'labeled' %}<span class="badge ok">Labeled</span>{% endif %}
+      <a class="btn sm" href="{% url 'shipping-pool' pool.pk %}">Labels →</a>
+      {% if can_build and pool.status == 'open' %}<form class="inline" method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>#</th><th>Box</th><th>Bottles</th><th>Weight</th><th>Orders</th><th>Contents</th></tr></thead>
       <tbody>

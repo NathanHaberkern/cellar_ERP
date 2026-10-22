@@ -1,6 +1,6 @@
 # Shipping app — session handoff
 
-As of **Oct 21, 2026 (evening)** — Tranche 2 built. Read this, then `HANDOFF.md` (whole-ERP context), then the
+As of **Oct 22, 2026** — Tranches 1, 2 and 4 built; UPS adapter (first half of 5) built. Read this, then `HANDOFF.md` (whole-ERP context), then the
 build plan: https://claude.ai/artifact/NSpwCYVU7tNbdcfh7XFA4k
 
 ## 1. What this is
@@ -20,10 +20,10 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | Tranche | Scope | State |
 |---|---|---|
 | 1 | App skeleton, models, users/permissions page, FedEx adapter, box seed | **Built.** Sandbox label printed (2-Day, no alcohol). |
-| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Done.** Exit gate passed Oct 21 (replay). 241 tests. |
+| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Done.** Exit gate passed Oct 21 (replay). |
 | 3 | FedEx label certification | Blocked on FedEx (below). |
-| 4 | Queue/pool/print pages, void, C7 fulfillment writeback, low-volume live test | — |
-| 5 | UPS adapter; daily tracking sync + delivery-exception queue (both carriers) | — |
+| 4 | Pool page: buy labels, print 4x6 PDFs, void, post tracking to C7 | **Built Oct 22** (271 tests). Needs a live test. |
+| 5 | UPS adapter ✓ built Oct 22, CIE test label verified Oct 22 (prints upright, 4x6); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
 | 6 | Later: freight cost → QBO export, ZPL direct print, hold-at-location (same-state only) | — |
 
 ### Tranche 1 exit gate — partly met
@@ -77,6 +77,57 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 - New perm `override_compliance` (in Shipping Admin defaults for NEW installs only — existing
   groups unchanged; Nate is superuser).
 
+### Tranche 4 — what was built and decided (Oct 22)
+- **Pool page** `/shipping/pools/<id>/` (linked from "Open pools"): boxes in packing
+  order with contents, weight, ship-to, label; **Buy N labels** (one carrier call per
+  box, each saved as it comes back — a refusal on one box doesn't stop the rest; press
+  again to buy only the missing ones), per-box **Buy / Print / Void**, **Print all**
+  (one merged PDF in box order), **Post tracking to C7**, per-order **Post** retry.
+- **Statuses are recomputed from labels** (`services/shipments.refresh_pool`): pool
+  OPEN → LABELED (every box labeled) → SHIPPED (every order fulfilled); order POOLED →
+  LABELED → FULFILLED. A void puts exactly the affected orders back.
+- **Label request** per box: ship-to = first order's (combined orders share the
+  address), box dims + declared weight, reference = order numbers ("60812/60813"),
+  FedEx Home Delivery if residential else Ground; UPS Ground. Alcohol + adult
+  signature always. Recipient phone falls back to SHIP_FROM_PHONE when C7 has none;
+  **no recipient email** sent to the carrier (C7 sends the ship email).
+- **Refused before calling the carrier:** no SHIP_FROM_PHONE; any order in the pool
+  changed in C7 after pooling (dissolve + rebuild).
+- **C7 writeback** (`services/fulfillment.py`): `POST order/{id}/fulfillment`,
+  `type: Shipped`, `sendTransactionEmail: true`, `shipped.carrier` + `trackingNumbers`
+  (every box the order is in), `packageCount`, `items: [{orderItemId, quantity}]`
+  from the synced order's lines (`hasShipping` ones). A combined box posts the same
+  tracking to each order. **Never posts SANDBOX labels.** `SHIP_C7_WRITEBACK=off` =
+  buy real labels without touching C7. No double posts: an already-succeeded post is
+  skipped; after a timeout/5xx the retry first GETs the order and only posts if C7
+  doesn't already have the tracking. Every attempt is a `FulfillmentPost` row.
+  Carrier names sent to C7: `SHIP_C7_CARRIER_FEDEX` / `_UPS` (default "FedEx"/"UPS") —
+  match whatever Shipment Manager wrote (the replay output lists them).
+- **Void refused once posted to C7** — the customer already has that number. Delete
+  the fulfillment in C7 by hand first, then void here.
+- **Permissions:** pages + buy/print/post = `print_labels` (Packer has it); Void =
+  `void_labels` (Shipping Admin). Nav "Shipping" now also shows for print-only users.
+- Daily to-do gains "Post tracking to C7 for <pool>" for LABELED pools.
+- **Verify on the first live post** (low-volume test): the request body above was
+  written from C7's docs (`orderItemId` = the order line's `id`); the read-back shape
+  (`fulfillments[].shipped.trackingNumbers`) is the one the replay already reads.
+
+### UPS adapter (Oct 22)
+- `shipping/carriers/ups.py`, written from UPS's published OpenAPI spec (Shipping
+  v2409). OAuth client-credentials (HTTP Basic + `x-merchant-id`), ship, void.
+  CIE = `UPS_ENV=sandbox`.
+- Alcohol = shipment-level `RestrictedArticles.AlcoholicBeveragesIndicator` (needs the
+  UPS alcohol contract on the account); adult signature = package
+  `DeliveryConfirmation.DCISType 3`; negotiated rate preferred over published.
+- UPS has no PDF labels: we ask for **GIF and convert to a 4x6 PDF** (crop the doc
+  tab, rotate to portrait). Verified Oct 22 on the first CIE label: formatted
+  correctly, so `GIF_ROTATE = -90` is right.
+- `python manage.py ups_test_label --check` (token only), then `ups_test_label`
+  (1 Bottle, alcohol + adult sig), `--box "4 Bottle" --bottles 4 --home`,
+  `--no-alcohol`, `--void 1Z...`. Refuses unless UPS_ENV=sandbox.
+- UPS developer app keys are in Nate's `.env` (Oct 22). Still to confirm before going
+  live: the production UPS account has the UPS alcohol shipping agreement.
+
 ## 3. Files (all new unless noted)
 
 ```
@@ -100,6 +151,10 @@ T2: integrations/commerce7.py (shared C7 client), shipping/services/{packing,int
     {c7_check,c7_probe,shipping_pull,shipping_replay}.py, tests/{test_c7_probe,test_packing,
     test_intake_and_pools}.py; MODIFIED carriers/{base,fedex,__init__}.py, models.py,
     permissions.py, config/urls.py, base.html nav
+T4/T5: shipping/services/{shipments,fulfillment}.py, carriers/ups.py, templates/shipping/pool.html,
+    management/commands/ups_test_label.py, tests/{test_ups,test_labels_and_fulfillment}.py;
+    MODIFIED views.py, urls.py, carriers/registry.py, services/todo.py, index.html, settings
+    (SHIP_C7_WRITEBACK, SHIP_C7_CARRIER_*), .env.example
 MODIFIED: config/settings.py (INSTALLED_APPS + SHIPPING block), cellar/web/urls.py (users routes),
           cellar/web/templates/web/base.html (Users nav link), requirements.txt (+requests),
           .env.example (shipping keys), .gitignore (+label_output/)
@@ -179,13 +234,17 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 
 ## 6. First steps for the next session
 
-1. Tranche 2 done. First live Pull (Oct 21): 20 orders synced fine; FedEx SANDBOX address
-   validation returned canned Chilean data for every address, so the check now auto-skips
-   unless FEDEX_ENV=production (`SHIP_ADDRESS_VALIDATION=auto|on|off`); non-US answers are
-   never offered as fixes; "Re-check all" re-runs the review queue. Verify real address
-   validation when production keys go in (Tranche 3).
-3. First live **Pull orders**: check FedEx address-validation results look sane (review
-   queue not flooded by formatting); adjust `_material_differences` / parse if needed.
-4. FedEx sandbox alcohol + Ground still blocked (Nate to call FedEx) → Tranche 3 cert label.
-5. Then Tranche 4: pack/print pages, buy labels per package, void, C7 fulfillment writeback
-   (`POST /order/{id}/fulfillment`; a combined box posts the same tracking to every order in it).
+1. **FedEx:** sandbox alcohol + Ground still blocked (Nate to call FedEx, section 2) →
+   Tranche 3 certification label → production keys. With production keys, also
+   verify real address validation on a Pull (sandbox returned canned Chilean data).
+2. **UPS:** keys in Nate's `.env`; CIE test label verified Oct 22. Next: production
+   UPS keys (`UPS_ENV=production`) for the live test.
+3. **Live test (cutover rehearsal), low-volume week:** production keys, Pull →
+   Build pools → open a pool → Buy labels → Print all → pack → Post tracking to C7.
+   Check in C7 that the order shows Fulfilled with the right carrier name and
+   tracking, and that the customer email went out. Use `SHIP_C7_WRITEBACK=off` for a
+   first dry run if Shipment Manager is still posting the same orders.
+4. Then Tranche 5 second half: daily tracking sync (FedEx Track API, UPS Tracking
+   API) + delivery-exception queue; then Nate cancels Shipment Manager.
+5. Still one line to wire when Nate wants it: `shipping.services.todo.daily_items`
+   into `cellar/services/daily_plan.draft_items`.
