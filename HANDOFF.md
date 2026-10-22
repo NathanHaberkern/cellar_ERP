@@ -1,8 +1,8 @@
 # St. Amant Cellar ERP — Project Handoff / Context
 
 This document carries the full context needed to continue this project in a new
-conversation. Read it first. The complete, deployable codebase is in
-`stamant_cellar_COMPLETE.zip`.
+conversation. Read it first. The code lives in GitHub
+`NathanHaberkern/cellar_ERP` (the old `stamant_cellar_COMPLETE.zip` is retired).
 
 ---
 
@@ -31,7 +31,8 @@ Iberian; family connection via Tim Spencer).
 - **All business logic lives in `cellar/services/`** (pure Python functions on the models) —
   this is deliberate: it's the seam that lets an API + web + iOS client sit on top without
   rewriting logic. UI has always been scoped as a later layer on top of the finished model.
-- **Data-entry UI is currently the Django admin** (a build/test scaffold, NOT the final UX).
+- **Data-entry UI** is the web app in `cellar/web/` (templates + HTMX); the Django admin
+  is kept for back-office edits. (Early builds used the admin as the UI.)
 - **Append-only ledger**: most event models inherit `AppendOnly` (insert-only; can't edit or
   delete; correct mistakes by the "Void selected" admin action + a new row). Temporal models
   have `CLOSE_FIELDS` (e.g. `emptied_at`, `removed_at`) that can be set after creation.
@@ -118,36 +119,48 @@ these are classification/rate issues, not balance errors):
   scratch, and confirm the 5120.17 still ties) — the strongest final proof before live filing.
   Also Parts III/IV validated logically, not yet against filed Part III/IV figures.
 
-## 8. Deploy status (just completed)
+## 8. Deploy status
+**As of Oct 22, 2026 Heroku is not live yet** -- the app runs locally on Nate's laptop.
+The scaffold below is ready for when it goes up.
 `config/` scaffold is Heroku-ready and **tested**: `check --deploy` clean, migrations apply,
 WhiteNoise collectstatic works, gunicorn serves, host-allowlist + SSL-redirect verified.
 `rest_framework` + `corsheaders` already installed/configured for the API layer. See
 `DEPLOY.md` in the package. Runs on his current Basic dynos + Postgres Essential-0 (upgrade
 Postgres for backups, not size, before it's the system of record).
 
-## 9. What's next (roadmap — was mid-discussion when we stopped)
-The user wants to build the **front end**, scaling eventually to an **iOS app** + access from
-any PC. Agreed architecture: **API-first (Django REST Framework)** — headless backend on
-Heroku, thin clients (web first, iOS later) consuming the same JSON API. Next build = the
-**DRF API layer** exposing the existing services as endpoints.
+## 9. Where things stand (updated Oct 22, 2026)
 
-**OPEN QUESTION being discussed when we stopped: authentication approach.** Options laid out:
-self-hosted hybrid (session auth for web + token for iOS, cheap, he owns the risk) vs.
-outsourced identity (Auth0/Clerk/Cognito/Sign-in-with-Apple — more robust for compliance
-data, small cost, less to secure himself). Was leaning toward deciding based on (a) user
-count — few staff vs. eventual customers, and (b) how much he wants to own security. **Pick up
-here: get his auth decision, then design and build the DRF API layer.**
+Sections 1-8 describe the cellar core as of the first build. Since then the
+following were built and are in `main` -- **the auth question and the DRF API
+layer are done**, so ignore older notes that say "pick up at auth":
 
-Later: web front-end client (React SPA if iOS is firm, or Django+HTMX if iOS is "maybe"),
-then iOS (native Swift for offline + barcode scanning, or cross-platform). Barcode fields
-already exist on barrels and racks for a future scan-to-move flow.
+- **Auth (decided):** self-hosted hybrid -- Django session auth for the web,
+  DRF TokenAuthentication for iOS/off-origin (`cellar/api/auth.py`, endpoints
+  under `/api/auth/`). Upgrade path is django-rest-knox if users ever go past staff.
+- **DRF API** (`cellar/api/`): router viewsets + report endpoints
+  (`/api/reports/5120-17/`, part3/part4, PDFs, 5000.24 PDF, excise, crush report).
+- **Web UI** (`cellar/web/`, Django templates + HTMX): dashboard, daily plan +
+  checklist, lots and lot pages, receiving/weigh tags, moves, labs import, task
+  rules, oak, topping, blending, bottling, sweetening, stock, costs, reports,
+  Users page. The Django admin is now a back-office tool, not the main UI.
+- **Costing:** cost ledger, overhead, fruit costing (see `docs/SOP-fruit-costing.md`).
+  Bottling labor is still a $0 stub constant.
+- **Shipping app** (`shipping/`): replaces C7 Shipment Manager. Its own handoff is
+  **`docs/SHIPPING_HANDOFF.md`** -- read that for anything shipping.
+- **Commerce7 client** shared by the whole ERP: `integrations/commerce7.py`.
 
-Also outstanding: CDFA Crush Report *fillable* form (he'd need to provide the template to map
-it like the others); 5000.24/Crush form-fill exists but a real-month re-entry validation is
-pending; the two compliance findings to his filer.
+Still not built (toward the whole-ERP goal): QuickBooks Online API (only
+JE-shaped period summaries today), GLS, VoIP, email, sales price / margin /
+profit per bottle, vineyard farming operations, iOS client. Deposit
+reconciliation (C7 + Pulse -> bank -> QBO) is being built separately on Nate's
+laptop (branch `deposits-recon`), not yet in this repo.
+
+Still outstanding from the first build: CDFA Crush Report *fillable* form (needs
+the template), a real-month re-entry validation of 5120.17 / 5000.24, and the
+two compliance findings in section 6 for his filer.
 
 ## 10. Install / run (fresh)
-Unzip `stamant_cellar_COMPLETE.zip` at a project root. Then:
+Clone the repo, copy `.env.example` to `.env` and fill it in. Then:
 ```bash
 pip install -r requirements.txt          # (use --break-system-packages if needed)
 python manage.py migrate                 # SQLite locally

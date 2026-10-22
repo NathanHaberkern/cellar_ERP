@@ -66,4 +66,8 @@ def daily_items(today: date | None = None) -> list[dict]:
     for pool in PackPool.objects.filter(status=PackPool.Status.OPEN):
         items.append(_item(f"Pack and label {pool.name}",
                            f"{pool.packages.count()} packages", f"ship-pool-{pool.pk}"))
+    for pool in PackPool.objects.filter(status=PackPool.Status.LABELED):
+        items.append(_item(f"Post tracking to C7 for {pool.name}",
+                           "Shipping → pool → Post tracking to C7",
+                           f"ship-pool-post-{pool.pk}"))
     return items

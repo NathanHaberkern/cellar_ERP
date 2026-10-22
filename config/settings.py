@@ -226,5 +226,16 @@ SHIPPING = {
     "POOL_TARGET_CASES": 20,
     "POOL_MIN_CASES": 18,
     "POOL_MAX_CASES": 22,
+
+    # --- Tranche 4: labels and Commerce7 writeback ---------------------------
+    # Post tracking to C7 (which emails the customer). "on" by default because
+    # SANDBOX labels are never posted whatever this says -- only real ones.
+    # Set "off" to buy real labels without touching C7 (e.g. a dry run while
+    # Shipment Manager is still the system of record).
+    "C7_WRITEBACK": os.environ.get("SHIP_C7_WRITEBACK", "on").strip().lower(),
+    # The carrier names C7 shows on a fulfillment. Match what Shipment Manager
+    # wrote (the replay command prints them) so reports don't split one carrier.
+    "C7_CARRIER_NAMES": {"fedex": os.environ.get("SHIP_C7_CARRIER_FEDEX", "FedEx"),
+                         "ups": os.environ.get("SHIP_C7_CARRIER_UPS", "UPS")},
 }
 
