@@ -114,7 +114,7 @@ class CombiningTests(SimpleTestCase):
         self.assertEqual(len(self.ship([a, b])), 2)
 
     def test_order_with_nothing_to_box_is_a_problem_not_a_crash(self):
-        empty = order(9, lines=[LineData("23MFZ", "Zin", 0, 750)])
+        empty = order(9, street="9 Elm St", lines=[LineData("23MFZ", "Zin", 0, 750)])
         shipments, problems = build_shipments([empty, order(1, 4)], boxes(), weight, RESTRICTED)
         self.assertEqual(problems, [("9", "no shippable bottles")])
         self.assertEqual(len(plan_pools(shipments, default_skus=DEFAULT)), 1)
