@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "cellar.apps.CellarConfig",
     "cellar.web.apps.CellarWebConfig",   # <-- ADD: HTMX front end
     "shipping.apps.ShippingConfig",      # DTC labels: C7 -> FedEx/UPS -> C7
+    "integrations.apps.IntegrationsConfig",  # shared external clients (QBO token store)
 ]
 
 
@@ -182,6 +183,26 @@ SHIPPING = {
         "CLIENT_SECRET": os.environ.get("UPS_CLIENT_SECRET", ""),
         "ACCOUNT_NUMBER": os.environ.get("UPS_ACCOUNT_NUMBER", ""),
     },
+    # GLS US (wholesale, from QBO). Account number + API user/password from GLS.
+    # GLS has no test server: "sandbox" calls the live API too, but marks labels
+    # as tests (never written to QBO) and refuses pickups.
+    "GLS": {
+        "ENV": os.environ.get("GLS_ENV", "sandbox"),
+        "ACCOUNT_NUMBER": os.environ.get("GLS_ACCOUNT_NUMBER", ""),
+        "USERNAME": os.environ.get("GLS_USERNAME", ""),
+        "PASSWORD": os.environ.get("GLS_PASSWORD", ""),
+        "BASE_URL": os.environ.get("GLS_BASE_URL", ""),
+        # On-call pickups (24-hour HH:MM). Window = now until CLOSE; GLS needs a
+        # window of at least MIN_WINDOW minutes (4 h). If now..CLOSE is shorter,
+        # the pool page offers LATE_CLOSE today or the next business day from
+        # NEXT_DAY_FROM.
+        "PICKUP_CLOSE": os.environ.get("GLS_PICKUP_CLOSE", "15:00"),
+        "PICKUP_LATE_CLOSE": os.environ.get("GLS_PICKUP_LATE_CLOSE", "16:00"),
+        "PICKUP_MIN_WINDOW_MIN": int(os.environ.get("GLS_PICKUP_MIN_WINDOW_MIN", "240")),
+        "PICKUP_NEXT_DAY_FROM": os.environ.get("GLS_PICKUP_NEXT_DAY_FROM", "09:00"),
+        "PICKUP_INSTRUCTIONS": os.environ.get(
+            "GLS_PICKUP_INSTRUCTIONS", "We close at 3PM. If late, please call 661-808-3988."),
+    },
     "C7": {
         "APP_ID": os.environ.get("C7_APP_ID", ""),
         "APP_SECRET": os.environ.get("C7_APP_SECRET", ""),
@@ -236,6 +257,35 @@ SHIPPING = {
     # The carrier names C7 shows on a fulfillment. Match what Shipment Manager
     # wrote (the replay command prints them) so reports don't split one carrier.
     "C7_CARRIER_NAMES": {"fedex": os.environ.get("SHIP_C7_CARRIER_FEDEX", "FedEx"),
-                         "ups": os.environ.get("SHIP_C7_CARRIER_UPS", "UPS")},
+                         "ups": os.environ.get("SHIP_C7_CARRIER_UPS", "UPS"),
+                         "gls": "GLS"},
+
+    # --- QuickBooks (wholesale) orders that ship GLS -------------------------
+    # An invoice or sales receipt is queued when its Ship via (ShipMethodRef)
+    # matches one of these names, case-insensitive. Add spellings as needed.
+    "QBO_GLS_SHIP_METHODS": [s.strip().upper() for s in os.environ.get(
+        "SHIP_QBO_GLS_SHIP_METHODS", "GLS,GLS US,GSO").split(",") if s.strip()],
+    "QBO_LOOKBACK_DAYS": int(os.environ.get("SHIP_QBO_LOOKBACK_DAYS", "45")),
+    # Only lines posting to these income accounts are boxed (wine); CRV,
+    # freight and fee lines are skipped. Matched on the account name prefix.
+    "QBO_SHIP_ACCOUNTS": [s.strip() for s in os.environ.get(
+        "SHIP_QBO_SHIP_ACCOUNTS", "40100").split(",") if s.strip()],
+    # Wholesale lines are sold by the case. Used when the line description
+    # doesn't say "12 x 750 ml" itself.
+    "QBO_BOTTLES_PER_CASE": int(os.environ.get("SHIP_QBO_BOTTLES_PER_CASE", "12")),
+    # Write the tracking number + ship date onto the QBO invoice after labels.
+    # Sandbox labels are never written back, whatever this says.
+    "QBO_WRITEBACK": os.environ.get("SHIP_QBO_WRITEBACK", "on").strip().lower(),
+}
+
+# QuickBooks Online API app (developer.intuit.com). The rotating refresh token
+# is NOT here: Intuit replaces it on every refresh, so it lives in the database
+# (integrations.QBOConnection), written by the Connect page.
+QBO = {
+    "ENV": os.environ.get("QBO_ENV", "production"),
+    "CLIENT_ID": os.environ.get("QBO_CLIENT_ID", ""),
+    "CLIENT_SECRET": os.environ.get("QBO_CLIENT_SECRET", ""),
+    "REDIRECT_URI": os.environ.get("QBO_REDIRECT_URI",
+                                   "http://localhost:8000/integrations/qbo/callback/"),
 }
 

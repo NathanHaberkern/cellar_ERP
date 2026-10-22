@@ -22,6 +22,7 @@
   <div><p class="eyebrow">Shipping</p><h1>Orders &amp; pools</h1></div>
   <div class="acts">
     {% if can_sync %}<form method="post" action="{% url 'shipping-pull' %}">{% csrf_token %}<button class="btn sm" type="submit">Pull orders</button></form>{% endif %}
+    {% if can_sync and qbo_connected %}<form method="post" action="{% url 'shipping-pull-qbo' %}">{% csrf_token %}<button class="btn sm" type="submit">Pull QuickBooks (GLS)</button></form>{% endif %}
     {% if can_build and ready %}<form method="post" action="{% url 'shipping-build' %}">{% csrf_token %}<button class="btn sm" type="submit">Build pools ({{ ready|length }} orders)</button></form>{% endif %}
   </div>
 </div>
@@ -35,7 +36,8 @@
   <div class="card"><div class="n">{{ open_pools|length }}</div><div class="l">Open pools</div></div>
 </div>
 <p class="verify">Compliance gate: <b>{% if gate_on %}ON — only C7 “Compliant” orders pool without an override{% else %}OFF — every order ships; C7 status shown for reference{% endif %}</b>{% if new %} · {{ new }} order{{ new|pluralize }} not yet address-checked{% endif %}
- · Address check: <b>{% if av_on %}ON (FedEx){% else %}OFF — FedEx test keys{% endif %}</b></p>
+ · Address check: <b>{% if av_on %}ON (FedEx){% else %}OFF — FedEx test keys{% endif %}</b>
+ · QuickBooks (GLS orders): {% if qbo_connected %}<b>connected</b>{% elif user.is_superuser %}<a href="{% url 'qbo-status' %}">connect</a>{% else %}not connected{% endif %}</p>
 
 {% if changed %}
 <div class="ship-sec"><h2>Changed in C7 after packing started</h2></div>
@@ -50,7 +52,7 @@
   <tbody>
   {% for o in review %}
     <tr>
-      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}{% if o.is_qbo %} <span class="badge voided">QBO</span>{% endif %}</td>
       <td>{{ o.ship_name }}{% if o.ship_company %}, {{ o.ship_company }}{% endif %}<br>
           <span class="sub">{{ o.ship_street1 }}{% if o.ship_street2 %} {{ o.ship_street2 }}{% endif %}, {{ o.ship_city }}, {{ o.ship_state }} {{ o.ship_postal_code }}</span>
           {% if o.address_suggested %}<div class="sugg">FedEx: {{ o.address_suggested.ship_street1 }}{% if o.address_suggested.ship_street2 %} {{ o.address_suggested.ship_street2 }}{% endif %}, {{ o.address_suggested.ship_city }}, {{ o.address_suggested.ship_state }} {{ o.address_suggested.ship_postal_code }}</div>{% endif %}</td>
@@ -76,7 +78,7 @@
   <tbody>
   {% for o, reasons in held %}
     <tr>
-      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}{% if o.is_qbo %} <span class="badge voided">QBO</span>{% endif %}</td>
       <td>{{ o.ship_name }} <span class="sub">{{ o.ship_state }}</span></td>
       <td>{{ reasons|join:"; " }}</td>
       <td>{{ o.compliance_status|default:"—" }}</td>
@@ -89,7 +91,7 @@
   {% endfor %}
   {% for o in manual_holds %}
     <tr>
-      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}{% if o.is_qbo %} <span class="badge voided">QBO</span>{% endif %}</td>
       <td>{{ o.ship_name }} <span class="sub">{{ o.ship_state }}</span></td>
       <td>On hold: {{ o.hold_note }}</td>
       <td>{{ o.compliance_status|default:"—" }}</td>
@@ -107,7 +109,7 @@
   <tbody>
   {% for o in ready %}
     <tr>
-      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}<br><span class="sub">{{ o.club_package }}</span></td>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}{% if o.is_qbo %} <span class="badge voided">QBO</span>{% endif %}<br><span class="sub">{{ o.club_package }}</span></td>
       <td>{{ o.ship_name }} <span class="sub">{{ o.ship_city }}, {{ o.ship_state }}</span></td>
       <td>{{ o.bottle_count }}</td>
       <td>
@@ -119,7 +121,8 @@
           </select></form>{% else %}{{ o.ship_residential|yesno:"Home,Business,Unknown" }}{% endif %}
       </td>
       <td>
-        {% if can_sync %}<form method="post" class="inline" action="{% url 'shipping-order-action' o.pk 'carrier' %}">{% csrf_token %}
+        {% if o.is_qbo %}GLS <span class="sub">(QuickBooks)</span>
+        {% elif can_sync %}<form method="post" class="inline" action="{% url 'shipping-order-action' o.pk 'carrier' %}">{% csrf_token %}
           <select name="value" onchange="this.form.submit()">
             <option value="" {% if not o.carrier_override %}selected{% endif %}>Auto</option>
             <option value="fedex" {% if o.carrier_override == "fedex" %}selected{% endif %}>FedEx</option>

@@ -148,9 +148,14 @@ layer are done**, so ignore older notes that say "pick up at auth":
 - **Shipping app** (`shipping/`): replaces C7 Shipment Manager. Its own handoff is
   **`docs/SHIPPING_HANDOFF.md`** -- read that for anything shipping.
 - **Commerce7 client** shared by the whole ERP: `integrations/commerce7.py`.
+- **QuickBooks Online client** shared by the whole ERP: `integrations/qbo.py` (OAuth;
+  rotating refresh token in `integrations.QBOConnection`; connect at `/integrations/qbo/`).
+  First user: GLS wholesale orders in shipping. Use it for any later QBO work.
+- **GLS** carrier adapter (`shipping/carriers/gls.py`), written to GLS's ShipmentHub API v2
+  docs (not yet run with real credentials), plus on-call pickups on days with GLS boxes.
 
-Still not built (toward the whole-ERP goal): QuickBooks Online API (only
-JE-shaped period summaries today), GLS, VoIP, email, sales price / margin /
+Still not built (toward the whole-ERP goal): QBO posting beyond tracking (JEs,
+deposits — only JE-shaped period summaries today), VoIP, email, sales price / margin /
 profit per bottle, vineyard farming operations, iOS client. Deposit
 reconciliation (C7 + Pulse -> bank -> QBO) is being built separately on Nate's
 laptop (branch `deposits-recon`), not yet in this repo.

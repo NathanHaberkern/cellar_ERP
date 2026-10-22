@@ -24,6 +24,7 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Pool page: buy labels, print 4x6 PDFs, void, post tracking to C7 | **Built Oct 22** (271 tests). Needs a live test. |
 | 5 | UPS adapter ✓ built Oct 22, CIE test label verified Oct 22 (prints upright, 4x6); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
+| — | GLS adapter + pickups + QBO wholesale (GLS) order intake + tracking to QBO | **Built Oct 22**; QBO sandbox verified; waits on GLS credentials |
 | 6 | Later: freight cost → QBO export, ZPL direct print, hold-at-location (same-state only) | — |
 
 ### Tranche 1 exit gate — partly met
@@ -127,6 +128,56 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   `--no-alcohol`, `--void 1Z...`. Refuses unless UPS_ENV=sandbox.
 - UPS developer app keys are in Nate's `.env` (Oct 22). Still to confirm before going
   live: the production UPS account has the UPS alcohol shipping agreement.
+
+### GLS + QuickBooks wholesale orders (Oct 22)
+- **Why:** wholesale orders live in QBO, not C7. An Invoice or Sales Receipt whose
+  **Ship via** is GLS (`SHIP_QBO_GLS_SHIP_METHODS`, default `GLS,GLS US,GSO`) and has
+  no tracking number is pulled by **Pull QuickBooks (GLS)** on the Shipping page.
+  As of Oct 22 no QBO document uses a GLS ship method yet (seen: CUR, SAW) — Nate
+  needs a "GLS" entry in QBO's Shipping methods list.
+- Becomes a normal ShipOrder (`source=qbo`, key `qbo:Invoice:<Id>`, number = DocNumber):
+  same address check, holds, pools, labels, print page. Always GLS
+  (`carrier_override="gls"`, can't be changed here; GLS-only pools). Compliance gate
+  doesn't apply (wholesale). C7 sync never touches QBO orders.
+- **Our QBO data:** ShipAddr is usually free-form (Line1..5, last line "City, ST  ZIP",
+  name/attention first) — parsed in `qbo_intake.parse_address`; unreadable → address
+  review. Lines are **cases**: bottles = Qty × 12 (`SHIP_QBO_BOTTLES_PER_CASE`) unless
+  the description says "12 x 500 ml"; half cases count bottles. Only income account
+  `40100…` lines are boxed (CRV/fees skipped, `SHIP_QBO_SHIP_ACCOUNTS`). Bottle size:
+  SkuShippingProfile/bottling run → same SKU's C7 size → 750 ml.
+- **Tracking back:** "Post tracking" on a GLS pool writes `TrackingNum` (comma-separated,
+  31-char QBO limit) + `ShipDate` onto the invoice (sparse update, fresh SyncToken).
+  Never for sandbox labels; `SHIP_QBO_WRITEBACK=off` to skip. A QBO doc that later shows
+  a tracking number (or loses GLS, or is deleted) is closed/flagged on the next pull.
+- **QBO client** `integrations/qbo.py` (shared, like commerce7.py) + app `integrations`
+  with `QBOConnection` (the one DB row holding the rotating refresh token — Intuit
+  replaces it on every refresh, so it can't live in env). Connect once at
+  `/integrations/qbo/` (superuser): Intuit consent → callback saves tokens. Disconnect
+  there revokes the tokens at Intuit. 429/5xx retried with backoff (2s, 5s, 15s); every
+  error carries Intuit's `intuit_tid`. **Sandbox connect + pull verified by Nate 2026-10-22.**
+- **GLS adapter** `shipping/carriers/gls.py` — written to GLS's ShipmentHub API v2
+  (https://shipmenthub.gls-us.com, Postman collection, read Oct 22); not yet run
+  with real credentials. `https://ship.gls-us.com/v2`: GET /Token (12 h), POST/DELETE
+  /Shipment, POST /Pickup. Service CPS (GLS Ground), ADULT_SIG_REQD, label
+  PDF_4x5LABEL (base64 `PaperLabel`), weight rounded up to whole lb.
+  **No GLS test server**: GLS_ENV=sandbox calls the live API but marks labels as tests
+  (never written to QBO; GLS bills only on scan — void them anyway) and refuses pickups.
+  `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
+- **GLS pickups** (`CarrierPickup`, `shipments.request_pickup` / `pickup_options`): Nate
+  wants a pickup only when there are GLS boxes, never a standing one. On a labeled GLS
+  pool (production only): **Request GLS pickup (now–3 PM)**. GLS requires a 4-hour
+  window (`GLS_PICKUP_MIN_WINDOW_MIN`=240), so after ~11 AM, or on a weekend, the page asks
+  "Too late for 3 PM" and offers **Push to 4 PM today** (until ~noon) or the
+  **next business day** 9 AM–3 PM. One pickup covers every GLS box labeled since the
+  last pickup; a second press shows the booked one. Every request carries Nate's note
+  "We close at 3PM. If late, please call 661-808-3988." (`GLS_PICKUP_*` in .env).
+  GLS's docs don't name the confirmation field (table cut off) — `_find` tries likely
+  names; check on first use.
+- **Nate's actions:** (1) GLS API user/password + account number →
+  `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD`, then `gls_test_label --check`;
+  (2) ~~Intuit developer app + sandbox connect~~ done 2026-10-22; production keys need
+  the app hosted on https (App URLs, redirect URI) plus public EULA/privacy pages; (3) add "GLS" to
+  QBO Shipping methods and use it on wholesale invoices.
 
 ## 3. Files (all new unless noted)
 

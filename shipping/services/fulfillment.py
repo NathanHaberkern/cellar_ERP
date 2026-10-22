@@ -107,12 +107,18 @@ def _mark_fulfilled(order: ShipOrder):
 
 
 def post_order(order: ShipOrder, *, client=None, operator=None, send_email=True):
-    """Post one order. Returns ("posted" | "skipped" | "error", message)."""
+    """Post one order. Returns ("posted" | "skipped" | "error", message).
+
+    QBO (GLS) orders are handed to qbo_intake.write_tracking instead: their
+    tracking goes onto the QuickBooks invoice, not to Commerce7."""
     if order.status == S.FULFILLED:
         return "skipped", "already fulfilled"
     labels = order_labels(order)
     if labels is None:
         return "skipped", "not every box has a label yet"
+    if order.is_qbo:
+        from shipping.services.qbo_intake import write_tracking
+        return write_tracking(order, labels, operator=operator)
     if any(lb.environment != CarrierEnvironment.PRODUCTION for lb in labels):
         return "skipped", "test (sandbox) label -- never posted to C7"
     if not writeback_on():

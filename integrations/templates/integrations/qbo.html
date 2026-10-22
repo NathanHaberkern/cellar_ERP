@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+{% block title %}QuickBooks connection{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Integrations</p><h1>QuickBooks connection</h1></div>
+  <div class="acts">
+    {% if configured %}<form method="post" action="{% url 'qbo-connect' %}">{% csrf_token %}<button class="btn sm" type="submit">{% if conn %}Reconnect{% else %}Connect QuickBooks{% endif %}</button></form>{% endif %}
+    {% if conn %}<form method="post" action="{% url 'qbo-disconnect' %}">{% csrf_token %}<button class="btn sm" type="submit">Disconnect</button></form>{% endif %}
+  </div>
+</div>
+{% for m in messages %}<div class="msg {% if m.tags == 'error' %}err{% else %}ok{% endif %}" style="margin-bottom:8px">{{ m }}</div>{% endfor %}
+{% if conn %}
+<div class="card"><div class="l">Connected</div>
+  <p><b>{{ conn.company_name|default:"(company name not read)" }}</b> · company id {{ conn.realm_id }} · {{ conn.environment }}</p>
+  <p class="verify">Connected {{ conn.connected_at|date:"M j, Y" }}. Refreshes on its own;
+  {% if conn.refresh_expires_at %}reconnect needed only if unused until {{ conn.refresh_expires_at|date:"M j, Y" }}.{% endif %}</p>
+</div>
+{% else %}
+<p class="verify">Not connected. Pressing Connect opens Intuit's sign-in; pick the St. Amant Winery company. You only do this once.</p>
+{% endif %}
+{% endblock %}

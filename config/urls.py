@@ -10,6 +10,9 @@ urlpatterns = [
     # Shipping (C7 -> FedEx/UPS labels)
     path("shipping/", include("shipping.urls")),
 
+    # External connections (QuickBooks connect / callback)
+    path("integrations/", include("integrations.urls")),
+
     # HTMX front end (browser now): session auth, server-rendered
     path("", include("cellar.web.urls")),
 

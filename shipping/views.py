@@ -15,12 +15,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from integrations import qbo
 from integrations.commerce7 import C7Error
 from shipping.carriers import CarrierError
 from shipping.models import Label, Package, PackPool, ShipOrder
 from shipping.permissions import (BUILD_POOLS, OVERRIDE_COMPLIANCE, PRINT_LABELS, SYNC_ORDERS,
                                   VOID_LABELS, perm)
-from shipping.services import fulfillment, intake, pools, shipments
+from shipping.services import fulfillment, intake, pools, qbo_intake, shipments
 from shipping.services.labels import LabelRefused
 
 S = ShipOrder.Status
@@ -56,6 +57,7 @@ def index(request):
         "can_sync": request.user.has_perm(perm(SYNC_ORDERS)),
         "can_build": request.user.has_perm(perm(BUILD_POOLS)),
         "can_override": request.user.has_perm(perm(OVERRIDE_COMPLIANCE)),
+        "qbo_connected": qbo.connection() is not None,
     }
     return render(request, "shipping/index.html", ctx)
 
@@ -71,6 +73,23 @@ def pull(request):
             messages.error(request, err)
     except C7Error as e:
         messages.error(request, f"Commerce7: {e}")
+        return redirect("shipping")
+    _run_checks(request, intake.validate_new_orders)
+    return redirect("shipping")
+
+
+@login_required
+@require_POST
+def pull_qbo(request):
+    """QuickBooks invoices / sales receipts with Ship via = GLS."""
+    _need(request, SYNC_ORDERS)
+    try:
+        result = qbo_intake.sync_qbo_orders()
+        messages.success(request, f"QuickBooks: {result.summary()}.")
+        for err in result.errors[:5]:
+            messages.error(request, err)
+    except qbo.QBOError as e:
+        messages.error(request, f"QuickBooks: {e}")
         return redirect("shipping")
     _run_checks(request, intake.validate_new_orders)
     return redirect("shipping")
@@ -197,7 +216,7 @@ def dissolve(request, pk):
 # --- Tranche 4: one pool -- labels, printing, C7 ------------------------------
 
 def _carrier_env(carrier):
-    return settings.SHIPPING[{"fedex": "FEDEX", "ups": "UPS"}[carrier]]["ENV"]
+    return settings.SHIPPING[carrier.upper()]["ENV"]
 
 
 @login_required
@@ -225,8 +244,27 @@ def pool_detail(request, pk):
         "can_print": request.user.has_perm(perm(PRINT_LABELS)),
         "can_void": request.user.has_perm(perm(VOID_LABELS)),
         "can_build": request.user.has_perm(perm(BUILD_POOLS)),
+        "pickup": shipments.booked_pickup("gls") if pool.carrier == "gls" else None,
+        "pickup_plan": shipments.pickup_options() if pool.carrier == "gls" else None,
     }
     return render(request, "shipping/pool.html", ctx)
+
+
+@login_required
+@require_POST
+def pool_pickup(request, pk):
+    _need(request, PRINT_LABELS)
+    pool = get_object_or_404(PackPool, pk=pk)
+    try:
+        p = shipments.request_pickup(pool, option=request.POST.get("option", shipments.TODAY),
+                                     operator=request.user)
+    except (CarrierError, LabelRefused) as e:
+        messages.error(request, f"GLS pickup: {e}")
+        return redirect("shipping-pool", pk=pk)
+    messages.success(request, f"GLS pickup booked {p.pickup_date:%a %b} {p.pickup_date.day}, "
+                              f"{p.notes}: {p.packages} box{'es' if p.packages != 1 else ''}, "
+                              f"confirmation {p.confirmation}.")
+    return redirect("shipping-pool", pk=pk)
 
 
 @login_required
