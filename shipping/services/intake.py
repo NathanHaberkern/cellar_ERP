@@ -270,8 +270,32 @@ def _material_differences(order: ShipOrder, sug: Address) -> list[str]:
     return diffs
 
 
+US_STATES = set("""AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS
+MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR""".split())
+
+
+def address_validation_enabled() -> bool:
+    mode = settings.SHIPPING.get("ADDRESS_VALIDATION", "auto")
+    if mode in ("on", "off"):
+        return mode == "on"
+    return settings.SHIPPING["FEDEX"]["ENV"] == "production"
+
+
+def _skip_validation(order: ShipOrder) -> ShipOrder:
+    """Address check off: pass the order through as-is, residential unknown
+    (Ground by default; set Home on the Ready list where it matters)."""
+    order.address_issues, order.address_suggested = [], {}
+    order.address_classification = ""
+    order.address_validated_at = timezone.now()
+    order.status = S.READY
+    order.save()
+    return order
+
+
 def validate_order(order: ShipOrder, adapter=None) -> ShipOrder:
     """FedEx check for one NEW order. Clean -> READY; anything doubtful -> ADDRESS_REVIEW."""
+    if adapter is None and not address_validation_enabled():
+        return _skip_validation(order)
     adapter = adapter or get_adapter("fedex")
     try:
         v = adapter.validate_address(_as_address(order))
@@ -288,13 +312,21 @@ def validate_order(order: ShipOrder, adapter=None) -> ShipOrder:
     order.ship_residential = v.residential
     order.address_validated_at = timezone.now()
     issues = list(v.issues)
-    diffs = _material_differences(order, v.suggested) if v.suggested else []
+    suggested = v.suggested
+    if suggested and ((suggested.country or "US") != "US"
+                      or (suggested.state or "").upper() not in US_STATES):
+        # Not a real US answer (the sandbox's Chilean test data looks like this).
+        # Never offer it as a fix; just say the check didn't work.
+        suggested = None
+        issues = ["FedEx returned a non-US address — check not usable"]
+        order.address_classification, order.ship_residential = "", None
+    diffs = _material_differences(order, suggested) if suggested else []
     if diffs:
         issues = [f"FedEx suggests a different address — {'; '.join(diffs)}"] + issues
         order.address_suggested = {
-            "ship_street1": v.suggested.street1, "ship_street2": v.suggested.street2,
-            "ship_city": v.suggested.city, "ship_state": v.suggested.state,
-            "ship_postal_code": v.suggested.postal_code, "ship_country": v.suggested.country}
+            "ship_street1": suggested.street1, "ship_street2": suggested.street2,
+            "ship_city": suggested.city, "ship_state": suggested.state,
+            "ship_postal_code": suggested.postal_code, "ship_country": suggested.country}
     else:
         order.address_suggested = {}
     order.address_issues = issues
@@ -304,12 +336,22 @@ def validate_order(order: ShipOrder, adapter=None) -> ShipOrder:
 
 
 def validate_new_orders(adapter=None) -> dict:
-    counts = {"ready": 0, "review": 0}
-    adapter = adapter or get_adapter("fedex")
+    counts = {"ready": 0, "review": 0, "checked": address_validation_enabled() or bool(adapter)}
+    if adapter is None and counts["checked"]:
+        adapter = get_adapter("fedex")
     for order in ShipOrder.objects.filter(status=S.NEW):
         validate_order(order, adapter)
         counts["ready" if order.status == S.READY else "review"] += 1
     return counts
+
+
+def recheck_review_queue(adapter=None) -> dict:
+    """Send every order still waiting in address review (nobody has acted on it)
+    back through the check -- e.g. after switching FedEx keys or turning the
+    check off."""
+    ShipOrder.objects.filter(status=S.ADDRESS_REVIEW).update(
+        status=S.NEW, address_issues=[], address_suggested={})
+    return validate_new_orders(adapter)
 
 
 # --- review actions --------------------------------------------------------------

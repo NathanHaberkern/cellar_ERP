@@ -208,6 +208,10 @@ SHIPPING = {
     # orders C7 marks Compliant pool automatically; anything else is held until
     # someone with the override permission releases it with a note.
     "COMPLIANCE_GATE": os.environ.get("SHIP_COMPLIANCE_GATE", "off").strip().lower(),
+    # FedEx address check. "auto" = only with production FedEx keys: the sandbox
+    # answers every address with canned test data (Santiago, Chile), which is
+    # noise, not validation. "on" / "off" force it either way.
+    "ADDRESS_VALIDATION": os.environ.get("SHIP_ADDRESS_VALIDATION", "auto").strip().lower(),
     # How far back "Pull orders" looks for unfulfilled ship orders (by paid date).
     "SYNC_LOOKBACK_DAYS": int(os.environ.get("SHIP_SYNC_LOOKBACK_DAYS", "120")),
     # FedEx won't deliver wine to these states for us; they always go UPS, in

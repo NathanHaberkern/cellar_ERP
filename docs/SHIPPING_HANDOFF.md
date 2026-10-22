@@ -179,8 +179,11 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 
 ## 6. First steps for the next session
 
-1. Tranche 2 done except a live check: first real Pull orders. FedEx keys are SANDBOX, so
-   address validation results may be canned until production keys (Tranche 3).
+1. Tranche 2 done. First live Pull (Oct 21): 20 orders synced fine; FedEx SANDBOX address
+   validation returned canned Chilean data for every address, so the check now auto-skips
+   unless FEDEX_ENV=production (`SHIP_ADDRESS_VALIDATION=auto|on|off`); non-US answers are
+   never offered as fixes; "Re-check all" re-runs the review queue. Verify real address
+   validation when production keys go in (Tranche 3).
 3. First live **Pull orders**: check FedEx address-validation results look sane (review
    queue not flooded by formatting); adjust `_material_differences` / parse if needed.
 4. FedEx sandbox alcohol + Ground still blocked (Nate to call FedEx) → Tranche 3 cert label.

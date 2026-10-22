@@ -38,6 +38,7 @@ def index(request):
     ctx = {
         "nav": "shipping",
         "gate_on": intake.compliance_gate_on(),
+        "av_on": intake.address_validation_enabled(),
         "review": ShipOrder.objects.filter(status=S.ADDRESS_REVIEW).prefetch_related("lines"),
         "new": ShipOrder.objects.filter(status=S.NEW).count(),
         "manual_holds": ShipOrder.objects.filter(status=S.ON_HOLD).prefetch_related("lines"),
@@ -67,12 +68,29 @@ def pull(request):
     except C7Error as e:
         messages.error(request, f"Commerce7: {e}")
         return redirect("shipping")
+    _run_checks(request, intake.validate_new_orders)
+    return redirect("shipping")
+
+
+def _run_checks(request, fn):
     try:
-        counts = intake.validate_new_orders()
-        messages.success(request, f"FedEx: {counts['ready']} ready, "
-                                  f"{counts['review']} need address review.")
+        counts = fn()
     except CarrierError as e:
         messages.error(request, f"FedEx address check didn't run: {e}")
+        return
+    if counts["checked"]:
+        messages.success(request, f"FedEx: {counts['ready']} ready, "
+                                  f"{counts['review']} need address review.")
+    else:
+        messages.success(request, f"{counts['ready']} ready. Address check is off "
+                                  f"(FedEx test keys) — set Home/Business by hand if needed.")
+
+
+@login_required
+@require_POST
+def recheck(request):
+    _need(request, SYNC_ORDERS)
+    _run_checks(request, intake.recheck_review_queue)
     return redirect("shipping")
 
 

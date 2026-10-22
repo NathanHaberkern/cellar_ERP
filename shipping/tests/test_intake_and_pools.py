@@ -198,6 +198,34 @@ class AddressValidationTests(TestCase):
         self.assertEqual(self.order.address_original["ship_street1"], "1 Main St")
 
 
+class AddressCheckModeTests(TestCase):
+    def setUp(self):
+        sync([c7_order(1001)])
+        self.order = ShipOrder.objects.get()
+
+    def test_sandbox_skips_check(self):
+        with mock.patch("shipping.services.intake.get_adapter") as ga:
+            counts = intake.validate_new_orders()
+        ga.assert_not_called()
+        self.order.refresh_from_db()
+        self.assertEqual((self.order.status, counts["checked"]), (S.READY, False))
+
+    def test_non_us_answer_never_offered(self):
+        chile = Address(name="Pat", street1="1 MAIN ST", city="Santiago",
+                        state="Región Metropolitana de Santiago", postal_code="95240",
+                        country="CL")
+        intake.validate_order(self.order, FakeAV({"1 Main St": AddressValidation(True, chile)}))
+        self.assertEqual(self.order.status, S.ADDRESS_REVIEW)
+        self.assertEqual(self.order.address_suggested, {})
+        self.assertIn("non-US", self.order.address_issues[0])
+
+    def test_recheck_clears_queue_when_check_off(self):
+        ShipOrder.objects.update(status=S.ADDRESS_REVIEW, address_issues=["junk"])
+        counts = intake.recheck_review_queue()
+        self.assertEqual(counts["ready"], 1)
+        self.assertEqual(ShipOrder.objects.get().status, S.READY)
+
+
 class FedExParseTests(SimpleTestCase):
     ORIG = Address(name="Pat", street1="1 Main St", street2="Apt 4", city="Lodi", state="CA",
                    postal_code="95240")
@@ -346,6 +374,8 @@ class ShippingPageTests(TestCase):
         self.assertContains(resp, "FedEx Default")
         self.assertContains(resp, "Compliance gate: <b>OFF")
 
+    @override_settings(SHIPPING={**__import__("django.conf").conf.settings.SHIPPING,
+                                 "ADDRESS_VALIDATION": "on"})
     def test_pull_button(self):
         self.client.force_login(self.packer)
         with mock.patch("shipping.services.intake.Commerce7Client.from_settings",

@@ -35,4 +35,7 @@ class Command(BaseCommand):
             counts = validate_new_orders()
         except CarrierError as e:
             raise CommandError(f"FedEx: {e}")
-        self.stdout.write(f"FedEx: {counts['ready']} ready, {counts['review']} need address review")
+        if counts["checked"]:
+            self.stdout.write(f"FedEx: {counts['ready']} ready, {counts['review']} need address review")
+        else:
+            self.stdout.write(f"{counts['ready']} ready (address check off: FedEx test keys)")

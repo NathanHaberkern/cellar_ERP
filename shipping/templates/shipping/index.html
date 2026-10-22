@@ -34,14 +34,16 @@
   <div class="card"><div class="n">{{ ready|length }}</div><div class="l">Ready to pool</div></div>
   <div class="card"><div class="n">{{ open_pools|length }}</div><div class="l">Open pools</div></div>
 </div>
-<p class="verify">Compliance gate: <b>{% if gate_on %}ON — only C7 “Compliant” orders pool without an override{% else %}OFF — every order ships; C7 status shown for reference{% endif %}</b>{% if new %} · {{ new }} order{{ new|pluralize }} not yet address-checked{% endif %}</p>
+<p class="verify">Compliance gate: <b>{% if gate_on %}ON — only C7 “Compliant” orders pool without an override{% else %}OFF — every order ships; C7 status shown for reference{% endif %}</b>{% if new %} · {{ new }} order{{ new|pluralize }} not yet address-checked{% endif %}
+ · Address check: <b>{% if av_on %}ON (FedEx){% else %}OFF — FedEx test keys{% endif %}</b></p>
 
 {% if changed %}
 <div class="ship-sec"><h2>Changed in C7 after packing started</h2></div>
 <div class="msg err">{% for o in changed %}#{{ o.c7_order_number }} {{ o.ship_name }} — {{ o.c7_change_note }}<br>{% endfor %}</div>
 {% endif %}
 
-<div class="ship-sec"><h2>Address review <span class="n">{{ review|length }}</span></h2></div>
+<div class="ship-sec"><h2>Address review <span class="n">{{ review|length }}</span></h2>
+  {% if can_sync and review %}<form method="post" action="{% url 'shipping-recheck' %}">{% csrf_token %}<button class="btn ghost sm">Re-check all</button></form>{% endif %}</div>
 {% if review %}
 <div class="table-wrap"><table>
   <thead><tr><th>Order</th><th>Ship to</th><th>Problem</th><th>Type</th><th></th></tr></thead>
