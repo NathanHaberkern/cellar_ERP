@@ -400,8 +400,11 @@ def plan_pools(shipments: list[Shipment], *, default_skus, target_bottles=240,
         total = sum(bottles(u) for u in ordered)
         if not total:
             continue
-        n_pools = max(1, math.ceil(total / target_bottles))
-        per_pool = total / n_pools          # even split: 540 bottles -> 3 pools of ~180
+        # Fewest pools that stay under the max, nearest the target: rounding
+        # (not ceil) keeps pools near 20 cases instead of all sliding to 18,
+        # and the ceil-by-max floor keeps any pool from going over 22.
+        n_pools = max(1, round(total / target_bottles), math.ceil(total / max_bottles))
+        per_pool = total / n_pools          # even split: 1494 bottles -> 6 pools of ~249
 
         current, count, made = [], 0, 0
         for unit in ordered:
