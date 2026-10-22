@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "cellar.apps.CellarConfig",
     "cellar.web.apps.CellarWebConfig",   # <-- ADD: HTMX front end
     "shipping.apps.ShippingConfig",      # DTC labels: C7 -> FedEx/UPS -> C7
+    "clubdesk.apps.ClubdeskConfig",      # club member requests -> approved C7 changes
 ]
 
 
@@ -237,5 +238,19 @@ SHIPPING = {
     # wrote (the replay command prints them) so reports don't split one carrier.
     "C7_CARRIER_NAMES": {"fedex": os.environ.get("SHIP_C7_CARRIER_FEDEX", "FedEx"),
                          "ups": os.environ.get("SHIP_C7_CARRIER_UPS", "UPS")},
+}
+
+# --- club desk (member requests -> approved C7 changes) ---------------------
+CLUBDESK = {
+    # Pickup orders are taxed at the winery; used by the address/pickup tax guardrail.
+    "PICKUP_STATE": os.environ.get("CLUBDESK_PICKUP_STATE", "CA"),
+    "PICKUP_ZIP": os.environ.get("CLUBDESK_PICKUP_ZIP", "95240"),
+    # Block address changes into states C7 has no tax set up for.
+    "CHECK_TAX_STATES": True,
+    # C7 body shapes the public docs don't show. A plan action marked unverified
+    # (e.g. membership "onHolds") is refused until its name is listed here, after
+    # `clubdesk_probe` has shown the live shape.
+    "VERIFIED_SHAPES": [s.strip() for s in os.environ.get(
+        "CLUBDESK_VERIFIED_SHAPES", "").split(",") if s.strip()],
 }
 

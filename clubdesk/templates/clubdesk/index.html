@@ -1,0 +1,37 @@
+{% extends "web/base.html" %}
+{% block title %}Club desk{% endblock %}
+{% block content %}
+<style>
+  .req { border:1px solid var(--line, #ddd); border-radius:8px; padding:12px 14px; margin:12px 0 }
+  .req h3 { margin:0 0 4px; font-size:16px }
+  .req .sub { color:var(--muted); font-size:12px }
+  .req ul { margin:6px 0 6px 18px; padding:0 }
+  .req pre { white-space:pre-wrap; font-size:13px; background:var(--panel, #f6f6f4); padding:8px; border-radius:6px }
+  .block { color:#a33 }
+  .acts form { display:inline }
+</style>
+<div class="page-head"><div><p class="eyebrow">Club</p><h1>Club desk</h1></div></div>
+
+{% for r in open %}
+<div class="req">
+  <h3>{{ r.get_kind_display }} · {{ r.customer_name|default:r.customer_email }}
+    <span class="badge {% if r.status == 'blocked' or r.status == 'failed' %}voided{% else %}live{% endif %}">{{ r.get_status_display }}</span></h3>
+  <div class="sub">{{ r.received_at|date:"n/j g:i a" }} · {{ r.mailbox }} · {{ r.customer_email }}{% if r.requested_date %} · date {{ r.requested_date|date:"n/j/Y" }}{% endif %}{% if r.stage %} · {{ r.stage|cut:"_" }}{% endif %}</div>
+  {% if r.request_text %}<pre>{{ r.request_text|truncatechars:600 }}</pre>{% endif %}
+  {% if r.block_reasons %}<ul class="block">{% for b in r.block_reasons %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+  {% if r.actions %}<b>Will do</b><ul>{% for a in r.actions %}<li>{{ a.summary }}{% if a.target == "c7" %} <span class="sub">C7 {{ a.method }} /{{ a.path }}</span>{% endif %}{% if a.unverified %} <span class="block">(field shape not confirmed yet)</span>{% endif %}</li>{% endfor %}
+    {% if r.note_text %}<li>Note on C7 account: “{{ r.note_text }}”</li>{% endif %}</ul>{% endif %}
+  {% if r.manual_steps %}<b>By hand in C7</b><ul>{% for m in r.manual_steps %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+  {% if r.error %}<p class="block">{{ r.error }}</p>{% endif %}
+  {% if r.draft_text %}<details><summary>Draft reply (saved as a draft, never sent)</summary><pre>{{ r.draft_text }}</pre></details>{% endif %}
+  {% if can_approve %}<div class="acts">
+    {% if r.status == 'proposed' %}<form method="post" action="{% url 'clubdesk-action' r.pk 'approve' %}">{% csrf_token %}<button class="btn sm">Approve</button></form>{% endif %}
+    {% if r.status == 'approved' %}<form method="post" action="{% url 'clubdesk-action' r.pk 'apply' %}">{% csrf_token %}<button class="btn sm">Apply to C7</button></form>{% endif %}
+    <form method="post" action="{% url 'clubdesk-action' r.pk 'replan' %}">{% csrf_token %}<button class="btn ghost sm">Re-check</button></form>
+    <form method="post" action="{% url 'clubdesk-action' r.pk 'dismiss' %}">{% csrf_token %}<button class="btn ghost sm">Dismiss</button></form>
+  </div>{% endif %}
+</div>
+{% empty %}<p>No open club requests.</p>{% endfor %}
+
+{% if done %}<h2>Recently applied</h2><ul>{% for r in done %}<li>{{ r.applied_at|date:"n/j" }} · {{ r }} · approved by {{ r.approved_by }}</li>{% endfor %}</ul>{% endif %}
+{% endblock %}
