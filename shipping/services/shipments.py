@@ -12,6 +12,7 @@ labels, already paid for); it's reported and the rest carry on, and pressing
 """
 from __future__ import annotations
 
+import datetime as dt
 import io
 import logging
 from decimal import Decimal
@@ -160,32 +161,97 @@ def refresh_pool(pool: PackPool) -> PackPool:
 
 # --- pickups -------------------------------------------------------------------
 
-def todays_pickup(carrier: str, day=None) -> CarrierPickup | None:
-    return (CarrierPickup.objects.filter(carrier=carrier, pickup_date=day or timezone.localdate(),
+TODAY, LATE, NEXT_DAY = "today", "late", "next_day"
+
+
+def _hhmm(value: str) -> dt.time:
+    h, m = value.split(":")
+    return dt.time(int(h), int(m))
+
+
+def gls_time(t: dt.time) -> str:
+    """GLS wants "hh:mm am" (its examples: "12:40 pm", "06:00 pm")."""
+    return f"{(t.hour % 12) or 12:02d}:{t.minute:02d} {'am' if t.hour < 12 else 'pm'}"
+
+
+def next_business_day(day: dt.date) -> dt.date:
+    day += dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day += dt.timedelta(days=1)
+    return day
+
+
+def pickup_options(now=None) -> dict:
+    """What the pool page offers. Normal: now until 3 PM today. Too late for
+    that (less than the minimum notice left, or a weekend): 4 PM today if
+    there's still notice for it, and the next business day."""
+    conf = settings.SHIPPING["GLS"]
+    now = timezone.localtime(now) if now else timezone.localtime()
+    notice = dt.timedelta(minutes=conf["PICKUP_MIN_NOTICE_MIN"])
+    # Earliest = now rounded up to the next 5 minutes.
+    start = (now + dt.timedelta(minutes=4)).replace(second=0, microsecond=0)
+    start = start.replace(minute=start.minute - start.minute % 5)
+
+    def window(close):
+        end = now.replace(hour=close.hour, minute=close.minute, second=0, microsecond=0)
+        return (start.time(), close) if now + notice <= end else None
+
+    weekday = now.weekday() < 5
+    today = window(_hhmm(conf["PICKUP_CLOSE"])) if weekday else None
+    late = window(_hhmm(conf["PICKUP_LATE_CLOSE"])) if weekday and not today else None
+    nxt = next_business_day(now.date())
+    out = {"too_late": today is None, "options": {}}
+    if today:
+        out["options"][TODAY] = (now.date(), *today)
+    if late:
+        out["options"][LATE] = (now.date(), *late)
+    if not today:
+        out["options"][NEXT_DAY] = (nxt, _hhmm(conf["PICKUP_NEXT_DAY_FROM"]),
+                                    _hhmm(conf["PICKUP_CLOSE"]))
+    return out
+
+
+def booked_pickup(carrier: str, now=None) -> CarrierPickup | None:
+    """A successful pickup for today or later -- one covers all of today's boxes."""
+    today = timezone.localtime(now).date() if now else timezone.localdate()
+    return (CarrierPickup.objects.filter(carrier=carrier, pickup_date__gte=today,
                                          succeeded=True, voided_at__isnull=True)
-            .order_by("-created_at").first())
+            .order_by("pickup_date", "-created_at").first())
 
 
-def request_pickup(pool: PackPool, operator=None, adapter=None, day=None) -> CarrierPickup:
-    """Book a GLS on-call pickup for today's GLS boxes. GLS has no daily stop,
-    so this is only offered once a pool has labels, and once per day: every GLS
-    box labeled today (any pool) goes on the one pickup."""
+def request_pickup(pool: PackPool, option: str = TODAY, operator=None, adapter=None,
+                   now=None) -> CarrierPickup:
+    """Book a GLS on-call pickup. GLS has no daily stop, so this is only offered
+    once a pool has labels, and only once: every GLS box labeled since the last
+    pickup (any pool) goes on the one pickup. Every request carries the
+    closing-time note (PICKUP_INSTRUCTIONS)."""
     if pool.carrier != "gls":
         raise LabelRefused("Pickups are booked here for GLS only; FedEx and UPS come daily.")
-    day = day or timezone.localdate()
-    existing = todays_pickup("gls", day)
+    existing = booked_pickup("gls", now)
     if existing is not None:
-        raise LabelRefused(f"GLS pickup already booked for {day:%b} {day.day} "
-                           f"(confirmation {existing.confirmation}).")
+        raise LabelRefused(f"GLS pickup already booked for {existing.pickup_date:%a %b} "
+                           f"{existing.pickup_date.day} (confirmation {existing.confirmation}).")
+    plan = pickup_options(now)
+    if option not in plan["options"]:
+        raise LabelRefused("Too late for a 3 PM pickup today -- choose 4 PM or the next "
+                           "business day." if option == TODAY else
+                           "That pickup time isn't available any more -- reload the page.")
+    day, earliest, latest = plan["options"][option]
+    # The boxes waiting for GLS: live labels bought since the last pickup was
+    # booked (at most a week back, so an old forgotten label doesn't count).
+    since = timezone.now() - dt.timedelta(days=7)
+    last = (CarrierPickup.objects.filter(carrier="gls", succeeded=True, voided_at__isnull=True)
+            .order_by("-created_at").first())
+    if last is not None and last.created_at > since:
+        since = last.created_at
     labels = list(Label.objects.filter(carrier="gls", voided_at__isnull=True,
-                                       package__pool__carrier="gls",
-                                       created_at__date=day))
+                                       package__pool__carrier="gls", created_at__gt=since))
     if not any(lb.package.pool_id == pool.pk for lb in labels):
-        raise LabelRefused("No GLS labels bought today in this pool -- buy labels first.")
+        raise LabelRefused("No GLS labels waiting for pickup in this pool -- buy labels first.")
     conf = settings.SHIPPING["GLS"]
     frm = settings.SHIPPING["SHIP_FROM"]
     pr = gls.PickupRequest(
-        pickup_date=day, earliest=conf["PICKUP_EARLIEST"], latest=conf["PICKUP_LATEST"],
+        pickup_date=day, earliest=gls_time(earliest), latest=gls_time(latest),
         packages=len(labels), total_weight_lb=sum((lb.weight_lb for lb in labels), Decimal(0)),
         company=frm.get("company", ""), contact=frm.get("name", ""),
         phone=frm.get("phone", ""), email=frm.get("email", ""),
@@ -194,7 +260,8 @@ def request_pickup(pool: PackPool, operator=None, adapter=None, day=None) -> Car
         postal_code=frm.get("postal_code", ""), instructions=conf["PICKUP_INSTRUCTIONS"])
     adapter = adapter or get_adapter("gls")
     row = dict(carrier="gls", pool=pool, pickup_date=day, packages=pr.packages,
-               weight_lb=pr.total_weight_lb, operator=operator)
+               weight_lb=pr.total_weight_lb, operator=operator,
+               notes=f"{pr.earliest}-{pr.latest}")
     try:
         confirmation, body = adapter.request_pickup(pr)
     except CarrierError as e:

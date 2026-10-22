@@ -366,18 +366,55 @@ class QBOPoolAndTrackingTests(TestCase):
             result = fulfillment.post_pool(pool)
         self.assertEqual((fake.updates, len(result.skipped)), ([], 1))
 
-    def test_pickup_booked_once_per_day_for_todays_gls_boxes(self):
+    @staticmethod
+    def at(hour, minute=0, day=dt.date(2026, 10, 22)):              # a Thursday
+        return timezone.make_aware(dt.datetime.combine(day, dt.time(hour, minute)))
+
+    def test_pickup_window_now_until_3pm_with_closing_note(self):
         from shipping.models import CarrierPickup
         pool = self.labeled()
         fake = mock.Mock()
         fake.request_pickup.return_value = ("PU778", {"StatusCode": 200})
-        p = shipments.request_pickup(pool, adapter=fake)
+        p = shipments.request_pickup(pool, adapter=fake, now=self.at(10, 2))
         self.assertEqual((p.packages, p.confirmation, p.succeeded), (3, "PU778", True))
         pr = fake.request_pickup.call_args.args[0]
-        self.assertEqual((pr.packages, pr.pickup_date), (3, timezone.localdate()))
+        self.assertEqual((pr.pickup_date, pr.earliest, pr.latest, pr.packages),
+                         (dt.date(2026, 10, 22), "10:05 am", "03:00 pm", 3))
+        self.assertEqual(pr.instructions, "We close at 3PM. If late, please call 661-808-3988.")
         with self.assertRaisesMessage(shipments.LabelRefused, "already booked"):
-            shipments.request_pickup(pool, adapter=fake)
+            shipments.request_pickup(pool, adapter=fake, now=self.at(10, 30))
         self.assertEqual(CarrierPickup.objects.count(), 1)
+
+    def test_too_late_offers_4pm_or_next_business_day(self):
+        plan = shipments.pickup_options(self.at(14, 15))
+        self.assertTrue(plan["too_late"])
+        self.assertEqual(set(plan["options"]), {"late", "next_day"})
+        late = plan["options"]["late"]
+        self.assertEqual((late[2], shipments.gls_time(late[1])), (dt.time(16, 0), "02:15 pm"))
+        self.assertEqual(set(shipments.pickup_options(self.at(15, 30))["options"]), {"next_day"})
+        friday = shipments.pickup_options(self.at(15, 30, dt.date(2026, 10, 23)))
+        self.assertEqual(friday["options"]["next_day"][:2],
+                         (dt.date(2026, 10, 26), dt.time(9, 0)))           # Monday 9 am
+        self.assertEqual(set(shipments.pickup_options(self.at(13, 59))["options"]), {"today"})
+        pool = self.labeled()
+        fake = mock.Mock()
+        fake.request_pickup.return_value = ("PU5", {})
+        with self.assertRaisesMessage(shipments.LabelRefused, "Too late for a 3 PM"):
+            shipments.request_pickup(pool, adapter=fake, now=self.at(14, 15))
+        shipments.request_pickup(pool, option="late", adapter=fake, now=self.at(14, 15))
+        self.assertEqual(fake.request_pickup.call_args.args[0].latest, "04:00 pm")
+
+    def test_pool_page_pickup_buttons(self):
+        pool = self.labeled()
+        self.client.force_login(User.objects.create_superuser("nate", "n@example.com", "x"))
+        gls_conf = dict(settings.SHIPPING["GLS"], ENV="production")
+        with override_settings(SHIPPING=dict(settings.SHIPPING, GLS=gls_conf), **WEB), \
+                mock.patch("shipping.services.shipments.pickup_options",
+                           return_value=shipments.pickup_options(self.at(14, 15))):
+            page = self.client.get(reverse("shipping-pool", args=[pool.pk]))
+        self.assertContains(page, "Too late for a 3 PM GLS pickup")
+        self.assertContains(page, "Push GLS pickup to 4 PM today")
+        self.assertContains(page, "GLS pickup Fri Oct 23")
 
     def test_pickup_failure_logged_and_retryable(self):
         from shipping.models import CarrierPickup
@@ -385,16 +422,17 @@ class QBOPoolAndTrackingTests(TestCase):
         fake = mock.Mock()
         fake.request_pickup.side_effect = CarrierError("Outside pickup window")
         with self.assertRaises(CarrierError):
-            shipments.request_pickup(pool, adapter=fake)
+            shipments.request_pickup(pool, adapter=fake, now=self.at(10))
         self.assertFalse(CarrierPickup.objects.get().succeeded)
         fake.request_pickup.side_effect = None
         fake.request_pickup.return_value = ("PU9", {})
-        self.assertEqual(shipments.request_pickup(pool, adapter=fake).confirmation, "PU9")
+        self.assertEqual(shipments.request_pickup(pool, adapter=fake, now=self.at(10))
+                         .confirmation, "PU9")
 
     def test_no_pickup_without_labels(self):
         pool = PackPool.objects.create(name="GLS empty", carrier="gls")
         with self.assertRaisesMessage(shipments.LabelRefused, "buy labels first"):
-            shipments.request_pickup(pool, adapter=mock.Mock())
+            shipments.request_pickup(pool, adapter=mock.Mock(), now=self.at(10))
 
     def test_qbo_error_logged(self):
         pool = self.labeled()

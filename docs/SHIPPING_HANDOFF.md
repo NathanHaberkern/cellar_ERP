@@ -163,12 +163,16 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   **No GLS test server**: GLS_ENV=sandbox calls the live API but marks labels as tests
   (never written to QBO; GLS bills only on scan — void them anyway) and refuses pickups.
   `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
-- **GLS pickups** (`CarrierPickup`, `shipments.request_pickup`): Nate wants a pickup only
-  on days with GLS boxes, never a standing one. "Request GLS pickup" on a labeled GLS
-  pool (production only) books one on-call pickup for today covering every GLS box
-  labeled today; a second press says it's already booked. Window from
-  `GLS_PICKUP_EARLIEST/LATEST` (default 01:00 pm–05:00 pm). The confirmation field name
-  isn't in GLS's docs (table cut off) — `_find` tries the likely names; check on first use.
+- **GLS pickups** (`CarrierPickup`, `shipments.request_pickup` / `pickup_options`): Nate
+  wants a pickup only when there are GLS boxes, never a standing one. On a labeled GLS
+  pool (production only): **Request GLS pickup (now–3 PM)**. If less than
+  `GLS_PICKUP_MIN_NOTICE_MIN` (60) is left before 3 PM, or it's a weekend, the page asks
+  "Too late for 3 PM" and offers **Push to 4 PM today** (if there's still notice) or the
+  **next business day** 9 AM–3 PM. One pickup covers every GLS box labeled since the
+  last pickup; a second press shows the booked one. Every request carries Nate's note
+  "We close at 3PM. If late, please call 661-808-3988." (`GLS_PICKUP_*` in .env).
+  GLS's docs don't name the confirmation field (table cut off) — `_find` tries likely
+  names; check on first use.
 - **Nate's actions:** (1) GLS API user/password + account number →
   `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD`, then `gls_test_label --check`;
   (2) ~~Intuit developer app + sandbox connect~~ done 2026-10-22; production keys need

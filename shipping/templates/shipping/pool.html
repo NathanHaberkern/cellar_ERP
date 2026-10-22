@@ -20,10 +20,11 @@
     {% if can_print and missing %}<form method="post" action="{% url 'shipping-pool-buy' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Buy {{ missing }} label{{ missing|pluralize }}</button></form>{% endif %}
     {% if can_print and labeled %}<a class="btn sm" href="{% url 'shipping-pool-pdf' pool.pk %}" target="_blank">Print all ({{ labeled }})</a>{% endif %}
     {% if can_print and not missing and pool.status != 'shipped' %}<form method="post" action="{% url 'shipping-pool-post' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Post tracking to {% if pool.carrier == 'gls' %}QuickBooks{% else %}C7{% endif %}</button></form>{% endif %}
-    {% if pool.carrier == 'gls' and can_print and labeled %}{% if pickup %}<span class="badge ok">Pickup booked · {{ pickup.confirmation }}</span>{% elif not sandbox %}<form method="post" action="{% url 'shipping-pool-pickup' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Request GLS pickup</button></form>{% endif %}{% endif %}
+    {% if pool.carrier == 'gls' and can_print and labeled %}{% if pickup %}<span class="badge ok">GLS pickup {{ pickup.pickup_date|date:"D M j" }} {{ pickup.notes }} · {{ pickup.confirmation }}</span>{% elif not sandbox %}{% for key, opt in pickup_plan.options.items %}<form method="post" action="{% url 'shipping-pool-pickup' pool.pk %}">{% csrf_token %}<input type="hidden" name="option" value="{{ key }}"><button class="btn sm" type="submit">{% if key == 'today' %}Request GLS pickup (now–{{ opt.2|time:"g A" }}){% elif key == 'late' %}Push GLS pickup to {{ opt.2|time:"g A" }} today{% else %}GLS pickup {{ opt.0|date:"D M j" }}{% endif %}</button></form>{% endfor %}{% endif %}{% endif %}
     {% if can_build and pool.status == 'open' and not labeled %}<form method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}
   </div>
 </div>
+{% if pool.carrier == 'gls' and labeled and not pickup and not sandbox and pickup_plan.too_late %}<div class="msg err" style="margin-bottom:8px">Too late for a 3 PM GLS pickup today. Push it to 4 PM{% if not pickup_plan.options.late %} (also too late now){% endif %}, or book the next business day?</div>{% endif %}
 
 {% for m in messages %}<div class="msg {% if m.tags == 'error' %}err{% else %}ok{% endif %}" style="margin-bottom:8px">{{ m }}</div>{% endfor %}
 

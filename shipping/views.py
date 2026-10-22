@@ -244,7 +244,8 @@ def pool_detail(request, pk):
         "can_print": request.user.has_perm(perm(PRINT_LABELS)),
         "can_void": request.user.has_perm(perm(VOID_LABELS)),
         "can_build": request.user.has_perm(perm(BUILD_POOLS)),
-        "pickup": shipments.todays_pickup(pool.carrier) if pool.carrier == "gls" else None,
+        "pickup": shipments.booked_pickup("gls") if pool.carrier == "gls" else None,
+        "pickup_plan": shipments.pickup_options() if pool.carrier == "gls" else None,
     }
     return render(request, "shipping/pool.html", ctx)
 
@@ -255,12 +256,14 @@ def pool_pickup(request, pk):
     _need(request, PRINT_LABELS)
     pool = get_object_or_404(PackPool, pk=pk)
     try:
-        p = shipments.request_pickup(pool, operator=request.user)
+        p = shipments.request_pickup(pool, option=request.POST.get("option", shipments.TODAY),
+                                     operator=request.user)
     except (CarrierError, LabelRefused) as e:
         messages.error(request, f"GLS pickup: {e}")
         return redirect("shipping-pool", pk=pk)
-    messages.success(request, f"GLS pickup booked for today: {p.packages} box"
-                              f"{'es' if p.packages != 1 else ''}, confirmation {p.confirmation}.")
+    messages.success(request, f"GLS pickup booked {p.pickup_date:%a %b} {p.pickup_date.day}, "
+                              f"{p.notes}: {p.packages} box{'es' if p.packages != 1 else ''}, "
+                              f"confirmation {p.confirmation}.")
     return redirect("shipping-pool", pk=pk)
 
 
