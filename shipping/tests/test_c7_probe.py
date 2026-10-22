@@ -108,6 +108,17 @@ class ProbeCommandTests(SimpleTestCase):
         self.assertEqual(p["channel"], "Club")
         self.assertTrue(p["orderPaidDate"].startswith("gte:"))
 
+    def test_club_permission_error_keeps_orders(self):
+        s = SeqSession([FakeResponse(200, {"orders": [ORDER], "cursor": None}),
+                        FakeResponse(401, {"message": "Unauthorized User for Route"})])
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch("integrations.commerce7.requests.Session", return_value=s):
+            out = Path(d) / "p.json"
+            call_command("c7_probe", "--club", "--out", str(out), stdout=mock.MagicMock())
+            data = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(data["order_count"], 1)
+        self.assertIn("Unauthorized User for Route", data["club_membership_error"])
+
     @override_settings(SHIPPING={"C7": {"APP_ID": "", "APP_SECRET": "", "TENANT_ID": ""}})
     def test_missing_creds_is_command_error(self):
         with self.assertRaises(CommandError):

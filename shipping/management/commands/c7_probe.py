@@ -117,13 +117,22 @@ class Command(BaseCommand):
             orders = [scrub(r) for r in client.iter_pages("order", "orders", params, o["limit"])]
             out = {"params": params, "order_count": len(orders),
                    "census": census(orders), "orders": orders}
-            if o["club"]:
+        except C7Error as e:
+            raise CommandError(f"{e}\n{json.dumps(e.body)[:500] if e.body else ''}")
+        if o["club"]:
+            # Club access is a separate app permission in the C7 Dev Center. A
+            # missing permission ("Unauthorized User for Route") must not throw
+            # away the orders we already have -- record it and keep going.
+            try:
                 clubs = [scrub(r) for r in client.iter_pages("club-membership", "clubMemberships",
                                                              None, 15)]
                 out["club_membership_census"] = census(clubs)
                 out["club_memberships"] = clubs
-        except C7Error as e:
-            raise CommandError(f"{e}\n{json.dumps(e.body)[:500] if e.body else ''}")
+            except C7Error as e:
+                out["club_membership_error"] = f"{e} {e.body}"
+                self.stdout.write(self.style.WARNING(
+                    f"Club memberships skipped: {e}. Grant the app read access to Club "
+                    "Memberships in the C7 Dev Center to include them."))
 
         path = Path(o["out"])
         path.parent.mkdir(parents=True, exist_ok=True)
