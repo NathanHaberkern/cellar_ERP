@@ -65,7 +65,8 @@ def preview(today: date | None = None):
     day = today or timezone.localdate()
     # f"{d:%b} {d.day}" rather than %-d: Windows strftime has no %-d.
     pools = plan_pools(shipments, default_skus=conf["DEFAULT_CLUB_SKUS"],
-                       target=conf["POOL_TARGET_PACKAGES"], max_size=conf["POOL_MAX_PACKAGES"],
+                       target_bottles=12 * conf["POOL_TARGET_CASES"],
+                       max_bottles=12 * conf["POOL_MAX_CASES"],
                        label_prefix=f"{day:%b} {day.day} ")
     return pools, problems, {str(o.pk): o for o in orders}
 

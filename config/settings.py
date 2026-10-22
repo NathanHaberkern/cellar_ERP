@@ -218,9 +218,9 @@ SHIPPING = {
     # lines go to the single "Default" pool. Update when the default changes.
     "DEFAULT_CLUB_SKUS": [s.strip() for s in os.environ.get(
         "SHIP_DEFAULT_CLUB_SKUS", "23RTEMP,24SOUZ,24IRED,24TN").split(",") if s.strip()],
-    # Pool size in packages (boxes): aim for ~20, 18-22 is fine.
-    "POOL_TARGET_PACKAGES": 20,
-    "POOL_MIN_PACKAGES": 18,
-    "POOL_MAX_PACKAGES": 22,
+    # Pool size in 12-bottle cases of wine: aim for ~20, 18-22 is fine.
+    "POOL_TARGET_CASES": 20,
+    "POOL_MIN_CASES": 18,
+    "POOL_MAX_CASES": 22,
 }
 

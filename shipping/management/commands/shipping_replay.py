@@ -138,12 +138,14 @@ class Command(BaseCommand):
         out += carrier_lines or ["  all match"]
 
         pools = plan_pools(shipments, default_skus=conf["DEFAULT_CLUB_SKUS"],
-                           target=conf["POOL_TARGET_PACKAGES"],
-                           max_size=conf["POOL_MAX_PACKAGES"])
+                           target_bottles=12 * conf["POOL_TARGET_CASES"],
+                       max_bottles=12 * conf["POOL_MAX_CASES"])
         say("")
-        say(f"POOLS  {len(pools)} pools, {sum(p.package_count for p in pools)} packages")
+        say(f"POOLS  {len(pools)} pools, {sum(p.package_count for p in pools)} packages, "
+            f"{sum(p.bottle_count for p in pools)} bottles")
         for p in pools:
-            say(f"  {p.name}: {p.package_count} packages, {len(p.shipments)} shipments")
+            say(f"  {p.name}: {p.cases} cases ({p.bottle_count} btl), {p.package_count} packages, "
+                f"{len(p.shipments)} shipments")
             for s in p.shipments:
                 boxes = ", ".join(pk.box.name + "[" + " ".join(
                     "%sx%s" % (c["sku"], c["qty"]) for c in pk.contents) + "]"

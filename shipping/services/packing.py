@@ -28,7 +28,7 @@ Boxes (closest fit, fewest packages)
   * Everything else: fill 12-bottle boxes, then the smallest box that holds the
     remainder. 42 bottles -> 12 + 12 + 12 + 6.
 
-Pools (~20 packages, 18-22 fine)
+Pools (~20 twelve-bottle cases of wine = ~240 bottles; 18-22 cases fine)
   * Carrier first: a pool never mixes carriers.
   * The identical default club shipments (exactly 1 each of the default SKUs)
     all go in one Default pool per carrier, whatever its size.
@@ -152,6 +152,15 @@ class PlannedPool:
     @property
     def package_count(self) -> int:
         return sum(len(s.packages) for s in self.shipments)
+
+    @property
+    def bottle_count(self) -> int:
+        return sum(p.bottle_count for s in self.shipments for p in s.packages)
+
+    @property
+    def cases(self) -> float:
+        """Twelve-bottle-case equivalents -- how Nate sizes a pool."""
+        return round(self.bottle_count / 12, 1)
 
 
 class PackingError(Exception):
@@ -352,8 +361,8 @@ def is_default_shipment(s: Shipment, default_skus) -> bool:
             == sorted((sku, 1) for sku in default_skus))
 
 
-def plan_pools(shipments: list[Shipment], *, default_skus, target=20, max_size=22,
-               label_prefix="") -> list[PlannedPool]:
+def plan_pools(shipments: list[Shipment], *, default_skus, target_bottles=240,
+               max_bottles=264, label_prefix="") -> list[PlannedPool]:
     pools = []
     by_carrier = defaultdict(list)
     for s in shipments:
@@ -381,16 +390,19 @@ def plan_pools(shipments: list[Shipment], *, default_skus, target=20, max_size=2
             return (-biggest, sorted(p.signature() for p in pk))
 
         ordered = sorted(units.values(), key=sort_key)
-        total = sum(len(p) for u in ordered for s in u for p in [s.packages])
+        def bottles(unit):
+            return sum(p.bottle_count for s in unit for p in s.packages)
+
+        total = sum(bottles(u) for u in ordered)
         if not total:
             continue
-        n_pools = max(1, math.ceil(total / target))
-        per_pool = total / n_pools          # even split, e.g. 45 -> 15/15/15, 50 -> 17/17/16
+        n_pools = max(1, math.ceil(total / target_bottles))
+        per_pool = total / n_pools          # even split: 540 bottles -> 3 pools of ~180
 
         current, count, made = [], 0, 0
         for unit in ordered:
-            size = sum(len(s.packages) for s in unit)
-            if current and (count + size > max_size or
+            size = bottles(unit)
+            if current and (count + size > max_bottles or
                             (count >= per_pool and made < n_pools - 1)):
                 made += 1
                 pools.append(PlannedPool(carrier=carrier, name=f"{label_prefix}{cname} {made}",

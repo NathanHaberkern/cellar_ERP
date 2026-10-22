@@ -149,15 +149,18 @@ class PoolTests(SimpleTestCase):
         (p,) = self.pools([edited])
         self.assertFalse(p.is_default)
 
-    def test_pools_are_even_and_within_max(self):
-        orders = [order(i, 4, street=f"{i} Elm St") for i in range(1, 46)]   # 45 packages
-        pools = self.pools(orders, target=20, max_size=22)
-        self.assertEqual([p.package_count for p in pools], [15, 15, 15])
+    def test_pools_sized_in_cases_even_and_within_max(self):
+        orders = [order(i, 12, street=f"{i} Elm St") for i in range(1, 46)]   # 45 cases
+        pools = self.pools(orders)
+        self.assertEqual([p.cases for p in pools], [15, 15, 15])
+        small = [order(i, 4, street=f"{i} Oak St") for i in range(1, 61)]      # 60 x 4 = 20 cases
+        (p,) = self.pools(small)
+        self.assertEqual((p.cases, p.package_count), (20, 60))
 
     def test_same_address_different_names_same_pool(self):
-        orders = [order(i, 4, street=f"{i} Elm St") for i in range(1, 40)]
+        orders = [order(i, 12, street=f"{i} Elm St") for i in range(1, 40)]
         orders.append(order(999, 4, street="5 Elm St", name="Other Person"))
-        pools = self.pools(orders, target=20, max_size=22)
+        pools = self.pools(orders)
         home = [p.name for p in pools for s in p.shipments if s.orders[0].street1 == "5 Elm St"]
         self.assertEqual(len(home), 2)
         self.assertEqual(len(set(home)), 1)

@@ -56,8 +56,8 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   ZIP+4) → one shipment, boxes combined. Same address, different name → separate, same pool.
 - **Box fit:** magnum alone; "Port Club Volume" items in Port box; rest fills 12s then closest.
 - **Pools:** carrier first; Default pool = exactly 1 each of `SHIP_DEFAULT_CLUB_SKUS`;
-  rest sorted by box/SKU signature, split evenly near 20 **packages** (assumption: Nate's
-  "~20 cases" = boxes — confirm). Address units never split across pools.
+  rest sorted by box/SKU signature, split evenly near 20 **12-bottle cases** (~240 bottles,
+  216-264 ok; confirmed by Nate). Address units never split across pools.
 - **Bottle size** order of trust: SkuShippingProfile → C7 volumeInML → ERP BottleFormat → hold.
 - **Address validation:** FedEx `/address/v1/addresses/resolve`. Formatting-only changes
   pass; real changes / unresolved / suite missing → review queue (Use FedEx / Keep / Edit).
@@ -176,7 +176,6 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 1. `git pull`; confirm Nate ran `migrate` and `shipping_replay`. Read
    `label_output/shipping_replay.txt` (stage it from his folder) — box-count, combining and
    carrier differences are the Tranche 2 exit gate. Fix rule gaps it shows.
-2. Confirm "~20 cases" means 20 boxes (packages), or switch pool sizing to bottles/12.
 3. First live **Pull orders**: check FedEx address-validation results look sane (review
    queue not flooded by formatting); adjust `_material_differences` / parse if needed.
 4. FedEx sandbox alcohol + Ground still blocked (Nate to call FedEx) → Tranche 3 cert label.

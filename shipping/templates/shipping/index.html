@@ -125,7 +125,7 @@
 
 <div class="ship-sec"><h2>Pools if built now</h2></div>
 {% for p in preview %}
-  <div class="card pool"><h3>{{ p.name }} — {{ p.package_count }} package{{ p.package_count|pluralize }}</h3>
+  <div class="card pool"><h3>{{ p.name }} — {{ p.cases }} cases · {{ p.package_count }} package{{ p.package_count|pluralize }}</h3>
   {% for s in p.shipments %}<div class="contents">{% for o in s.orders %}#{{ o.number }}{% if not forloop.last %}/{% endif %}{% endfor %} {{ s.orders.0.state }}{% if s.carrier_reason %} · {{ s.carrier_reason }}{% endif %}: {% for pk in s.packages %}{{ pk.box.name }} ({{ pk.bottle_count }}){% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endfor %}
   </div>
 {% endfor %}
