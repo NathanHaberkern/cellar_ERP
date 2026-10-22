@@ -344,6 +344,10 @@ def build_shipments(orders: list[OrderData], boxes, weight_for_ml, restricted_st
         except PackingError as e:
             problems += [(o.number, str(e)) for o in group]
             continue
+        if not packages:
+            # e.g. only gift cards / non-shipping lines, or every quantity 0
+            problems += [(o.number, "no shippable bottles") for o in group]
+            continue
         if len(group) > 1:
             reason = "; ".join(r for r in (reason, f"combined {len(group)} orders") if r)
         shipments.append(Shipment(carrier=carrier, carrier_reason=reason, orders=group,
