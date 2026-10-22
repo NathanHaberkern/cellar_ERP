@@ -53,6 +53,8 @@ MAGNUM_MIN_ML = 1500
 
 FEDEX = "fedex"
 UPS = "ups"
+GLS = "gls"
+CARRIER_NAMES = {FEDEX: "FedEx", UPS: "UPS", GLS: "GLS"}
 
 
 # --- plain data --------------------------------------------------------------
@@ -94,7 +96,7 @@ class OrderData:
     compliance_status: str = ""
     requested_ship_date: date | None = None
     customer_id: str = ""
-    carrier_override: str = ""       # "", "fedex" or "ups" -- set by hand on the order
+    carrier_override: str = ""       # "", "fedex", "ups" (by hand) or "gls" (QBO GLS orders)
 
     @property
     def bottles(self) -> int:
@@ -264,9 +266,13 @@ def route(o, restricted_states) -> tuple[str, str]:
     FedEx-restricted state.
     """
     state = (o.state or "").upper()
+    override = getattr(o, "carrier_override", "")
+    # GLS is chosen in QuickBooks (the invoice's ship method), never by these
+    # rules, and the FedEx state list doesn't apply to it.
+    if override == GLS:
+        return GLS, "GLS (QuickBooks ship method)"
     if state in set(restricted_states):
         return UPS, f"FedEx-restricted state ({state})"
-    override = getattr(o, "carrier_override", "")
     if override == UPS:
         return UPS, "set to UPS by hand"
     if override == FEDEX:
@@ -386,11 +392,11 @@ def plan_pools(shipments: list[Shipment], *, default_skus, target_bottles=240,
     for s in shipments:
         by_carrier[s.carrier].append(s)
 
-    for carrier in (FEDEX, UPS):
+    for carrier in (FEDEX, UPS, GLS):
         items = by_carrier.get(carrier) or []
         if not items:
             continue
-        cname = "FedEx" if carrier == FEDEX else "UPS"
+        cname = CARRIER_NAMES[carrier]
         defaults = [s for s in items if is_default_shipment(s, default_skus)]
         rest = [s for s in items if s not in defaults]
         if defaults:

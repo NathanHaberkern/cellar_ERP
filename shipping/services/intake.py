@@ -197,6 +197,7 @@ def upsert_order(raw: dict, result: SyncResult):
 def _close_missing(client, seen_ids, result: SyncResult):
     """Open orders that didn't come back as unfulfilled: ask C7 what happened."""
     candidates = ShipOrder.objects.filter(
+        source=ShipOrder.Source.C7,                 # QBO orders close in qbo_intake
         status__in=OPEN_EDITABLE + (S.POOLED,)).exclude(c7_order_id__in=seen_ids)
     for order in candidates:
         try:
@@ -387,6 +388,8 @@ def edit_address(order: ShipOrder, user, fields: dict, adapter=None):
 
 
 def set_carrier_override(order: ShipOrder, value: str):
+    if order.is_qbo:
+        raise ValueError("QuickBooks orders ship GLS — change Ship via in QuickBooks instead")
     if value not in ("", "fedex", "ups"):
         raise ValueError(f"Unknown carrier {value!r}")
     order.carrier_override = value
@@ -418,7 +421,8 @@ def hold_reasons(order: ShipOrder, today: date | None = None) -> list[str]:
     reasons = []
     if order.requested_ship_date and order.requested_ship_date > today:
         reasons.append(f"Ships on {order.requested_ship_date:%b} {order.requested_ship_date.day}")
-    if (compliance_gate_on() and order.compliance_status != COMPLIANT
+    # The DtC compliance gate (VinoCheck) doesn't apply to wholesale QBO orders.
+    if (compliance_gate_on() and not order.is_qbo and order.compliance_status != COMPLIANT
             and not order.compliance_override_at):
         reasons.append(f"Compliance: {order.compliance_status or 'unknown'}")
     unknown = [ln.sku for ln in order.lines.all() if ln.ml is None]

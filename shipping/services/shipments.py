@@ -20,14 +20,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from shipping.carriers import Address, CarrierError, LabelRequest, Parcel, get_adapter
-from shipping.carriers import fedex, ups
+from shipping.carriers import fedex, gls, ups
 from shipping.models import Label, Package, PackPool, ShipOrder
 from shipping.services.labels import LabelRefused, buy_label, void_label
 
 log = logging.getLogger(__name__)
 S = ShipOrder.Status
 
-SERVICE_FOR = {"fedex": fedex.default_service, "ups": ups.default_service}
+SERVICE_FOR = {"fedex": fedex.default_service, "ups": ups.default_service,
+               "gls": gls.default_service}
 
 
 def ship_from() -> Address:

@@ -7,6 +7,7 @@ from django.conf import settings
 
 from .base import CarrierConfigError
 from .fedex import FedExAdapter
+from .gls import GLSAdapter
 from .ups import UPSAdapter
 
 
@@ -27,4 +28,9 @@ def get_adapter(carrier: str):
             # UPS shipper numbers are 6 alphanumerics; strip spaces/dashes people paste.
             account_number="".join(ch for ch in c["ACCOUNT_NUMBER"] if ch.isalnum()).upper(),
         )
+    if carrier == "gls":
+        c = conf["GLS"]
+        return GLSAdapter(environment=c["ENV"], account_number=c["ACCOUNT_NUMBER"].strip(),
+                          username=c["USERNAME"], password=c["PASSWORD"],
+                          base_url=c.get("BASE_URL", ""))
     raise CarrierConfigError(f"Unknown carrier {carrier!r}")

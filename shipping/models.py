@@ -28,6 +28,7 @@ from .permissions import CUSTOM_PERMISSIONS
 class Carrier(models.TextChoices):
     FEDEX = "fedex", "FedEx"
     UPS = "ups", "UPS"
+    GLS = "gls", "GLS"
 
 
 class CarrierEnvironment(models.TextChoices):
@@ -124,12 +125,22 @@ class SkuShippingProfile(models.Model):
 # --- orders -----------------------------------------------------------------
 
 class ShipOrder(models.Model):
-    """One Commerce7 order that ships, with the ship-to frozen at sync time.
+    """One order that ships, with the ship-to frozen at sync time.
+
+    Most orders come from Commerce7 (DtC). Wholesale orders whose QuickBooks
+    invoice / sales receipt has a GLS ship method come from QBO (source=qbo);
+    for those, `c7_order_id` holds "qbo:<Invoice|SalesReceipt>:<QBO Id>" (it's
+    the row's unique external key, named before QBO orders existed) and
+    `c7_order_number` holds the QBO DocNumber.
 
     The address is a snapshot on purpose: once a label is bought, a later edit
-    in C7 must not silently change what this row says the label was for. A
-    changed C7 address shows up as a mismatch on re-sync instead.
+    in C7 or QBO must not silently change what this row says the label was for.
+    A changed address shows up as a mismatch on re-sync instead.
     """
+
+    class Source(models.TextChoices):
+        C7 = "c7", "Commerce7"
+        QBO = "qbo", "QuickBooks"
 
     class Status(models.TextChoices):
         NEW = "new", "New"
@@ -141,7 +152,10 @@ class ShipOrder(models.Model):
         ON_HOLD = "on_hold", "On hold"
         CANCELLED = "cancelled", "Cancelled"
 
-    c7_order_id = models.CharField(max_length=64, unique=True)
+    source = models.CharField(max_length=4, choices=Source.choices, default=Source.C7,
+                              db_index=True)
+    c7_order_id = models.CharField(max_length=64, unique=True,
+                                   help_text="C7 order id, or qbo:<type>:<id> for QBO orders")
     c7_order_number = models.CharField(max_length=32, db_index=True)
     ordered_at = models.DateTimeField(null=True, blank=True)
 
@@ -221,6 +235,16 @@ class ShipOrder(models.Model):
     @property
     def bottle_count(self):
         return sum(line.bottle_count for line in self.lines.all())
+
+    @property
+    def is_qbo(self):
+        return self.source == self.Source.QBO
+
+    @property
+    def qbo_ref(self):
+        """(entity, id) for a QBO order, e.g. ("Invoice", "17805")."""
+        _, entity, txn_id = self.c7_order_id.split(":", 2)
+        return entity, txn_id
 
 
 class ShipOrderLine(models.Model):
@@ -357,7 +381,9 @@ class LabelDocument(models.Model):
 
 
 class FulfillmentPost(AppendOnly):
-    """One call to Commerce7's fulfillment endpoint, logged whether it worked or not.
+    """One tracking write-back, logged whether it worked or not: a Commerce7
+    fulfillment for C7 orders, or the TrackingNum/ShipDate update on the QBO
+    invoice for QBO (GLS) orders -- response_summary["target"] says which.
 
     Keyed on order + tracking numbers so a retry after a timeout can check
     whether C7 already has the fulfillment before posting (and emailing) again.

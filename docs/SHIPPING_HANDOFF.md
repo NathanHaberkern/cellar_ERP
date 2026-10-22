@@ -24,6 +24,7 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Pool page: buy labels, print 4x6 PDFs, void, post tracking to C7 | **Built Oct 22** (271 tests). Needs a live test. |
 | 5 | UPS adapter ✓ built Oct 22, CIE test label verified Oct 22 (prints upright, 4x6); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
+| — | GLS adapter + QBO wholesale (GLS) order intake + tracking to QBO | **Built Oct 22**, waits on GLS + Intuit credentials |
 | 6 | Later: freight cost → QBO export, ZPL direct print, hold-at-location (same-state only) | — |
 
 ### Tranche 1 exit gate — partly met
@@ -127,6 +128,41 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   `--no-alcohol`, `--void 1Z...`. Refuses unless UPS_ENV=sandbox.
 - UPS developer app keys are in Nate's `.env` (Oct 22). Still to confirm before going
   live: the production UPS account has the UPS alcohol shipping agreement.
+
+### GLS + QuickBooks wholesale orders (Oct 22)
+- **Why:** wholesale orders live in QBO, not C7. An Invoice or Sales Receipt whose
+  **Ship via** is GLS (`SHIP_QBO_GLS_SHIP_METHODS`, default `GLS,GLS US,GSO`) and has
+  no tracking number is pulled by **Pull QuickBooks (GLS)** on the Shipping page.
+  As of Oct 22 no QBO document uses a GLS ship method yet (seen: CUR, SAW) — Nate
+  needs a "GLS" entry in QBO's Shipping methods list.
+- Becomes a normal ShipOrder (`source=qbo`, key `qbo:Invoice:<Id>`, number = DocNumber):
+  same address check, holds, pools, labels, print page. Always GLS
+  (`carrier_override="gls"`, can't be changed here; GLS-only pools). Compliance gate
+  doesn't apply (wholesale). C7 sync never touches QBO orders.
+- **Our QBO data:** ShipAddr is usually free-form (Line1..5, last line "City, ST  ZIP",
+  name/attention first) — parsed in `qbo_intake.parse_address`; unreadable → address
+  review. Lines are **cases**: bottles = Qty × 12 (`SHIP_QBO_BOTTLES_PER_CASE`) unless
+  the description says "12 x 500 ml"; half cases count bottles. Only income account
+  `40100…` lines are boxed (CRV/fees skipped, `SHIP_QBO_SHIP_ACCOUNTS`). Bottle size:
+  SkuShippingProfile/bottling run → same SKU's C7 size → 750 ml.
+- **Tracking back:** "Post tracking" on a GLS pool writes `TrackingNum` (comma-separated,
+  31-char QBO limit) + `ShipDate` onto the invoice (sparse update, fresh SyncToken).
+  Never for sandbox labels; `SHIP_QBO_WRITEBACK=off` to skip. A QBO doc that later shows
+  a tracking number (or loses GLS, or is deleted) is closed/flagged on the next pull.
+- **QBO client** `integrations/qbo.py` (shared, like commerce7.py) + app `integrations`
+  with `QBOConnection` (the one DB row holding the rotating refresh token — Intuit
+  replaces it on every refresh, so it can't live in env). Connect once at
+  `/integrations/qbo/` (superuser): Intuit consent → callback saves tokens.
+- **GLS adapter** `shipping/carriers/gls.py` — **written ahead of GLS's API guide**
+  (no public docs; GSO-era REST shape). Every path/field is in that one file.
+  `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
+  Service CPS, adult signature, label PDF (image labels converted to 4x6).
+- **Nate's actions:** (1) GLS account + API guide + web-services user/password →
+  `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD` (send me the guide to correct field names);
+  (2) Intuit developer app (developer.intuit.com, Accounting scope) →
+  `QBO_CLIENT_ID/QBO_CLIENT_SECRET`, add redirect URI
+  `http://localhost:8000/integrations/qbo/callback/`, then Connect; (3) add "GLS" to
+  QBO Shipping methods and use it on wholesale invoices.
 
 ## 3. Files (all new unless noted)
 

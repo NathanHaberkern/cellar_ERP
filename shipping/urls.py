@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.index, name="shipping"),
     path("pull/", views.pull, name="shipping-pull"),
+    path("pull-qbo/", views.pull_qbo, name="shipping-pull-qbo"),
     path("build/", views.build, name="shipping-build"),
     path("recheck/", views.recheck, name="shipping-recheck"),
     path("pools/<int:pk>/", views.pool_detail, name="shipping-pool"),
