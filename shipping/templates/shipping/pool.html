@@ -19,7 +19,8 @@
   <div class="acts">
     {% if can_print and missing %}<form method="post" action="{% url 'shipping-pool-buy' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Buy {{ missing }} label{{ missing|pluralize }}</button></form>{% endif %}
     {% if can_print and labeled %}<a class="btn sm" href="{% url 'shipping-pool-pdf' pool.pk %}" target="_blank">Print all ({{ labeled }})</a>{% endif %}
-    {% if can_print and not missing and pool.status != 'shipped' %}<form method="post" action="{% url 'shipping-pool-post' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Post tracking to C7</button></form>{% endif %}
+    {% if can_print and not missing and pool.status != 'shipped' %}<form method="post" action="{% url 'shipping-pool-post' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Post tracking to {% if pool.carrier == 'gls' %}QuickBooks{% else %}C7{% endif %}</button></form>{% endif %}
+    {% if pool.carrier == 'gls' and can_print and labeled %}{% if pickup %}<span class="badge ok">Pickup booked · {{ pickup.confirmation }}</span>{% elif not sandbox %}<form method="post" action="{% url 'shipping-pool-pickup' pool.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Request GLS pickup</button></form>{% endif %}{% endif %}
     {% if can_build and pool.status == 'open' and not labeled %}<form method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}
   </div>
 </div>

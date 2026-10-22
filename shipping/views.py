@@ -244,8 +244,24 @@ def pool_detail(request, pk):
         "can_print": request.user.has_perm(perm(PRINT_LABELS)),
         "can_void": request.user.has_perm(perm(VOID_LABELS)),
         "can_build": request.user.has_perm(perm(BUILD_POOLS)),
+        "pickup": shipments.todays_pickup(pool.carrier) if pool.carrier == "gls" else None,
     }
     return render(request, "shipping/pool.html", ctx)
+
+
+@login_required
+@require_POST
+def pool_pickup(request, pk):
+    _need(request, PRINT_LABELS)
+    pool = get_object_or_404(PackPool, pk=pk)
+    try:
+        p = shipments.request_pickup(pool, operator=request.user)
+    except (CarrierError, LabelRefused) as e:
+        messages.error(request, f"GLS pickup: {e}")
+        return redirect("shipping-pool", pk=pk)
+    messages.success(request, f"GLS pickup booked for today: {p.packages} box"
+                              f"{'es' if p.packages != 1 else ''}, confirmation {p.confirmation}.")
+    return redirect("shipping-pool", pk=pk)
 
 
 @login_required

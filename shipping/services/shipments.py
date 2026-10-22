@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import logging
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
@@ -21,7 +22,7 @@ from django.utils import timezone
 
 from shipping.carriers import Address, CarrierError, LabelRequest, Parcel, get_adapter
 from shipping.carriers import fedex, gls, ups
-from shipping.models import Label, Package, PackPool, ShipOrder
+from shipping.models import CarrierPickup, Label, Package, PackPool, ShipOrder
 from shipping.services.labels import LabelRefused, buy_label, void_label
 
 log = logging.getLogger(__name__)
@@ -155,6 +156,53 @@ def refresh_pool(pool: PackPool) -> PackPool:
         pool.status = new
         pool.save(update_fields=["status"])
     return pool
+
+
+# --- pickups -------------------------------------------------------------------
+
+def todays_pickup(carrier: str, day=None) -> CarrierPickup | None:
+    return (CarrierPickup.objects.filter(carrier=carrier, pickup_date=day or timezone.localdate(),
+                                         succeeded=True, voided_at__isnull=True)
+            .order_by("-created_at").first())
+
+
+def request_pickup(pool: PackPool, operator=None, adapter=None, day=None) -> CarrierPickup:
+    """Book a GLS on-call pickup for today's GLS boxes. GLS has no daily stop,
+    so this is only offered once a pool has labels, and once per day: every GLS
+    box labeled today (any pool) goes on the one pickup."""
+    if pool.carrier != "gls":
+        raise LabelRefused("Pickups are booked here for GLS only; FedEx and UPS come daily.")
+    day = day or timezone.localdate()
+    existing = todays_pickup("gls", day)
+    if existing is not None:
+        raise LabelRefused(f"GLS pickup already booked for {day:%b} {day.day} "
+                           f"(confirmation {existing.confirmation}).")
+    labels = list(Label.objects.filter(carrier="gls", voided_at__isnull=True,
+                                       package__pool__carrier="gls",
+                                       created_at__date=day))
+    if not any(lb.package.pool_id == pool.pk for lb in labels):
+        raise LabelRefused("No GLS labels bought today in this pool -- buy labels first.")
+    conf = settings.SHIPPING["GLS"]
+    frm = settings.SHIPPING["SHIP_FROM"]
+    pr = gls.PickupRequest(
+        pickup_date=day, earliest=conf["PICKUP_EARLIEST"], latest=conf["PICKUP_LATEST"],
+        packages=len(labels), total_weight_lb=sum((lb.weight_lb for lb in labels), Decimal(0)),
+        company=frm.get("company", ""), contact=frm.get("name", ""),
+        phone=frm.get("phone", ""), email=frm.get("email", ""),
+        street1=frm.get("street1", ""), street2=frm.get("street2", ""),
+        city=frm.get("city", ""), state=frm.get("state", ""),
+        postal_code=frm.get("postal_code", ""), instructions=conf["PICKUP_INSTRUCTIONS"])
+    adapter = adapter or get_adapter("gls")
+    row = dict(carrier="gls", pool=pool, pickup_date=day, packages=pr.packages,
+               weight_lb=pr.total_weight_lb, operator=operator)
+    try:
+        confirmation, body = adapter.request_pickup(pr)
+    except CarrierError as e:
+        CarrierPickup.objects.create(**row, response_summary={"error": str(e),
+                                                              "details": e.details})
+        raise
+    return CarrierPickup.objects.create(**row, succeeded=True, confirmation=confirmation,
+                                        response_summary=body)
 
 
 # --- printing ------------------------------------------------------------------

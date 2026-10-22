@@ -37,14 +37,25 @@ class GLSResp(FakeResponse):
         self.headers = headers or {}
 
 
-def gls_session(ship=None, token_status=200):
+def ship_body(tracking="552100001"):
+    return {"AccountNumber": 12345, "TrackingNumber": tracking, "ServiceCode": "CPS",
+            "ShipmentCharges": {"TransportationCharge": 15.5, "OtherCharge": [
+                {"Code": "ASR", "Description": "Adult Signature Fee", "Fee": 3.25}],
+                "TotalCharge": 18.75},
+            "PaperLabel": base64.b64encode(pdf_page()).decode(), "ThermalLabel": None,
+            "StatusCode": 200, "StatusDescription": "OK", "ErrorCount": 0, "ErrorDetail": None}
+
+
+def gls_session(ship=None, token_status=201, pickup=None):
     def token():
-        return GLSResp(token_status, {}, {"Token": "gls-tok"} if token_status == 200 else {})
-    ship = ship or (lambda: GLSResp(200, {"ShipmentResponse": {
-        "TrackingNumber": "552100001", "TotalCharge": "18.75",
-        "ShipmentLabel": base64.b64encode(pdf_page()).decode()}}))
-    return FakeSession({("GET", "/token"): token, ("POST", "/Shipment"): ship,
-                        ("DELETE", "/Shipment"): lambda: GLSResp(200, {"Result": "Voided"})})
+        return GLSResp(token_status, {}, {"Token": "gls-tok", "TokenExpiry": "x"}
+                       if token_status in (200, 201) else {})
+    ship = ship or (lambda: GLSResp(200, ship_body()))
+    pickup = pickup or (lambda: GLSResp(200, {"PickupConfirmationNumber": "PU778",
+                                              "StatusCode": 200, "ErrorDetail": None}))
+    return FakeSession({("GET", "/Token"): token, ("POST", "/Shipment"): ship,
+                        ("DELETE", "/Shipment"): lambda: GLSResp(200, {"StatusCode": 200}),
+                        ("POST", "/Pickup"): pickup})
 
 
 def gls(session=None):
@@ -69,12 +80,18 @@ class GLSAdapterTests(TestCase):
         cache.clear()
 
     def test_payload(self):
-        sh = gls().build_ship_payload(gls_req())["Shipment"]
-        self.assertEqual((sh["ServiceCode"], sh["SignatureCode"]), ("CPS", "SIG_REQD_ADULT"))
-        self.assertEqual((sh["Length"], sh["Height"], sh["Weight"]), (19, 15, 40.9))
-        self.assertEqual(sh["DeliveryAddressType"], "B")
+        body = gls().build_ship_payload(gls_req())
+        sh = body["Shipment"]
+        self.assertEqual(body["AccountNumber"], 12345)
+        self.assertEqual((sh["ServiceCode"], sh["SignatureCode"]), ("CPS", "ADULT_SIG_REQD"))
+        self.assertEqual(sh["Dimensions"], {"Length": 19, "Width": 14, "Height": 15,
+                                            "UnitOfMeasure": "inch"})
+        self.assertEqual((sh["Weight"], sh["WeightUnitOfMeasure"]), (41, "lb"))  # rounded up
+        self.assertEqual((sh["ShipmentLabelType"], sh["DeliveryAddressType"]),
+                         ("PDF_4x5LABEL", "B"))
         self.assertEqual(sh["ShipperPhone"], "2095550199")
         self.assertEqual(sh["ShipmentReference"], "SAW-26242")
+        self.assertIs(sh["CommercialInvoiceAttached"], False)
         self.assertEqual(gls().build_ship_payload(gls_req(adult=False))["Shipment"]
                          ["SignatureCode"], "SIG_REQD")
 
@@ -83,8 +100,11 @@ class GLSAdapterTests(TestCase):
         result = gls(s).create_label(gls_req())
         self.assertEqual((result.tracking_number, result.net_charge), ("552100001", Decimal("18.75")))
         self.assertTrue(result.documents[0].content.startswith(b"%PDF"))
-        self.assertEqual(s.calls[0][2]["headers"]["AccountNumber"], "12345")
+        self.assertEqual(s.calls[0][1], "https://ship.gls-us.com/v2/Token")
+        self.assertEqual(s.calls[0][2]["headers"]["Username"], "u")
         self.assertEqual(s.calls[1][2]["headers"]["Token"], "gls-tok")
+        self.assertIn("ver=2.0", s.calls[1][2]["headers"]["Content-Type"])
+        self.assertIn("chars stripped", result.response_summary["PaperLabel"])
 
     def test_png_label_becomes_pdf(self):
         from PIL import Image
@@ -93,11 +113,13 @@ class GLSAdapterTests(TestCase):
         self.assertTrue(to_pdf(buf.getvalue()).startswith(b"%PDF"))
 
     def test_errors(self):
-        s = gls_session(ship=lambda: GLSResp(400, {"ErrorCode": "E12",
-                                                   "ErrorMessage": "Invalid ZIP"}))
+        s = gls_session(ship=lambda: GLSResp(400, {
+            "StatusCode": 400, "ErrorCount": 1,
+            "ErrorDetail": [{"ErrorCode": "Failure", "ErrorDescription": "Invalid ZIP"}]}))
         with self.assertRaises(CarrierError) as cm:
             gls(s).create_label(gls_req())
-        self.assertEqual((cm.exception.code, str(cm.exception)), ("E12", "[E12] Invalid ZIP"))
+        self.assertEqual((cm.exception.code, str(cm.exception)),
+                         ("Failure", "[Failure] Invalid ZIP"))
         cache.clear()
         with self.assertRaises(CarrierConfigError):
             gls(gls_session(token_status=401)).create_label(gls_req())
@@ -107,7 +129,27 @@ class GLSAdapterTests(TestCase):
     def test_void(self):
         s = gls_session()
         gls(s).void_label("552100001")
-        self.assertEqual(s.calls[-1][2]["params"]["TrackingNumber"], "552100001")
+        self.assertEqual(s.calls[-1][2]["json"],
+                         {"AccountNumber": 12345, "TrackingNumber": "552100001"})
+
+    def test_pickup_production_only(self):
+        from shipping.carriers.gls import PickupRequest
+        pr = PickupRequest(pickup_date=dt.date(2026, 10, 23), earliest="01:00 pm",
+                           latest="05:00 pm", packages=3, total_weight_lb=Decimal("120.4"),
+                           company="St. Amant Winery", contact="Shipping", phone="(209) 555-0199",
+                           email="", street1="1 Winemaster Way", street2="Ste I", city="Lodi",
+                           state="CA", postal_code="95240")
+        with self.assertRaises(CarrierConfigError):
+            gls().request_pickup(pr)
+        s = gls_session()
+        prod = GLSAdapter(environment="production", account_number="12345", username="u",
+                          password="p", session=s)
+        conf, _ = prod.request_pickup(pr)
+        self.assertEqual(conf, "PU778")
+        body = s.calls[-1][2]["json"]
+        self.assertEqual((body["NumberofPackages"], body["TotalWeight"], body["PickupDate"]),
+                         (3, 121, "2026-10-23"))
+        self.assertEqual(body["OnCallPickupLocation"]["PickupContactPhone"], "2095550199")
 
 
 # --- QBO documents ---------------------------------------------------------------------
@@ -323,6 +365,36 @@ class QBOPoolAndTrackingTests(TestCase):
         with mock.patch("shipping.services.qbo_intake.QBOClient", return_value=fake):
             result = fulfillment.post_pool(pool)
         self.assertEqual((fake.updates, len(result.skipped)), ([], 1))
+
+    def test_pickup_booked_once_per_day_for_todays_gls_boxes(self):
+        from shipping.models import CarrierPickup
+        pool = self.labeled()
+        fake = mock.Mock()
+        fake.request_pickup.return_value = ("PU778", {"StatusCode": 200})
+        p = shipments.request_pickup(pool, adapter=fake)
+        self.assertEqual((p.packages, p.confirmation, p.succeeded), (3, "PU778", True))
+        pr = fake.request_pickup.call_args.args[0]
+        self.assertEqual((pr.packages, pr.pickup_date), (3, timezone.localdate()))
+        with self.assertRaisesMessage(shipments.LabelRefused, "already booked"):
+            shipments.request_pickup(pool, adapter=fake)
+        self.assertEqual(CarrierPickup.objects.count(), 1)
+
+    def test_pickup_failure_logged_and_retryable(self):
+        from shipping.models import CarrierPickup
+        pool = self.labeled()
+        fake = mock.Mock()
+        fake.request_pickup.side_effect = CarrierError("Outside pickup window")
+        with self.assertRaises(CarrierError):
+            shipments.request_pickup(pool, adapter=fake)
+        self.assertFalse(CarrierPickup.objects.get().succeeded)
+        fake.request_pickup.side_effect = None
+        fake.request_pickup.return_value = ("PU9", {})
+        self.assertEqual(shipments.request_pickup(pool, adapter=fake).confirmation, "PU9")
+
+    def test_no_pickup_without_labels(self):
+        pool = PackPool.objects.create(name="GLS empty", carrier="gls")
+        with self.assertRaisesMessage(shipments.LabelRefused, "buy labels first"):
+            shipments.request_pickup(pool, adapter=mock.Mock())
 
     def test_qbo_error_logged(self):
         pool = self.labeled()

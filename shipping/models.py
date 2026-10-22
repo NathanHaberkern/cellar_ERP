@@ -401,3 +401,27 @@ class FulfillmentPost(AppendOnly):
 
     def __str__(self):
         return f"C7 fulfillment #{self.order.c7_order_number} {self.tracking_numbers}"
+
+
+class CarrierPickup(AppendOnly):
+    """An on-call pickup request (GLS only so far), logged whether it worked or not.
+
+    GLS doesn't come by daily: a pickup is booked on days a GLS pool has labels.
+    One successful, unvoided pickup per carrier per day covers every pool --
+    a second pool the same day is just more boxes for the same driver.
+    """
+    carrier = models.CharField(max_length=10, choices=Carrier.choices)
+    pool = models.ForeignKey(PackPool, null=True, blank=True, on_delete=models.PROTECT,
+                             related_name="pickups")
+    pickup_date = models.DateField()
+    packages = models.PositiveSmallIntegerField()
+    weight_lb = models.DecimalField(max_digits=8, decimal_places=2)
+    succeeded = models.BooleanField(default=False)
+    confirmation = models.CharField(max_length=40, blank=True)
+    response_summary = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_carrier_display()} pickup {self.pickup_date} {self.confirmation}"

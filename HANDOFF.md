@@ -151,7 +151,8 @@ layer are done**, so ignore older notes that say "pick up at auth":
 - **QuickBooks Online client** shared by the whole ERP: `integrations/qbo.py` (OAuth;
   rotating refresh token in `integrations.QBOConnection`; connect at `/integrations/qbo/`).
   First user: GLS wholesale orders in shipping. Use it for any later QBO work.
-- **GLS** carrier adapter (`shipping/carriers/gls.py`), written ahead of GLS's API guide.
+- **GLS** carrier adapter (`shipping/carriers/gls.py`), written to GLS's ShipmentHub API v2
+  docs (not yet run with real credentials), plus on-call pickups on days with GLS boxes.
 
 Still not built (toward the whole-ERP goal): QBO posting beyond tracking (JEs,
 deposits — only JE-shaped period summaries today), VoIP, email, sales price / margin /

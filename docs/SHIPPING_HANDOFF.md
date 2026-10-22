@@ -24,7 +24,7 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Pool page: buy labels, print 4x6 PDFs, void, post tracking to C7 | **Built Oct 22** (271 tests). Needs a live test. |
 | 5 | UPS adapter ✓ built Oct 22, CIE test label verified Oct 22 (prints upright, 4x6); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
-| — | GLS adapter + QBO wholesale (GLS) order intake + tracking to QBO | **Built Oct 22**, waits on GLS + Intuit credentials |
+| — | GLS adapter + pickups + QBO wholesale (GLS) order intake + tracking to QBO | **Built Oct 22**; QBO sandbox verified; waits on GLS credentials |
 | 6 | Later: freight cost → QBO export, ZPL direct print, hold-at-location (same-state only) | — |
 
 ### Tranche 1 exit gate — partly met
@@ -155,12 +155,22 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   `/integrations/qbo/` (superuser): Intuit consent → callback saves tokens. Disconnect
   there revokes the tokens at Intuit. 429/5xx retried with backoff (2s, 5s, 15s); every
   error carries Intuit's `intuit_tid`. **Sandbox connect + pull verified by Nate 2026-10-22.**
-- **GLS adapter** `shipping/carriers/gls.py` — **written ahead of GLS's API guide**
-  (no public docs; GSO-era REST shape). Every path/field is in that one file.
+- **GLS adapter** `shipping/carriers/gls.py` — written to GLS's ShipmentHub API v2
+  (https://shipmenthub.gls-us.com, Postman collection, read Oct 22); not yet run
+  with real credentials. `https://ship.gls-us.com/v2`: GET /Token (12 h), POST/DELETE
+  /Shipment, POST /Pickup. Service CPS (GLS Ground), ADULT_SIG_REQD, label
+  PDF_4x5LABEL (base64 `PaperLabel`), weight rounded up to whole lb.
+  **No GLS test server**: GLS_ENV=sandbox calls the live API but marks labels as tests
+  (never written to QBO; GLS bills only on scan — void them anyway) and refuses pickups.
   `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
-  Service CPS, adult signature, label PDF (image labels converted to 4x6).
-- **Nate's actions:** (1) GLS account + API guide + web-services user/password →
-  `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD` (send me the guide to correct field names);
+- **GLS pickups** (`CarrierPickup`, `shipments.request_pickup`): Nate wants a pickup only
+  on days with GLS boxes, never a standing one. "Request GLS pickup" on a labeled GLS
+  pool (production only) books one on-call pickup for today covering every GLS box
+  labeled today; a second press says it's already booked. Window from
+  `GLS_PICKUP_EARLIEST/LATEST` (default 01:00 pm–05:00 pm). The confirmation field name
+  isn't in GLS's docs (table cut off) — `_find` tries the likely names; check on first use.
+- **Nate's actions:** (1) GLS API user/password + account number →
+  `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD`, then `gls_test_label --check`;
   (2) ~~Intuit developer app + sandbox connect~~ done 2026-10-22; production keys need
   the app hosted on https (App URLs, redirect URI) plus public EULA/privacy pages; (3) add "GLS" to
   QBO Shipping methods and use it on wholesale invoices.

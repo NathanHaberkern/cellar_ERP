@@ -13,6 +13,7 @@ urlpatterns = [
     path("pools/<int:pk>/buy/", views.pool_buy, name="shipping-pool-buy"),
     path("pools/<int:pk>/labels.pdf", views.pool_pdf, name="shipping-pool-pdf"),
     path("pools/<int:pk>/post/", views.pool_post, name="shipping-pool-post"),
+    path("pools/<int:pk>/pickup/", views.pool_pickup, name="shipping-pool-pickup"),
     path("packages/<int:pk>/buy/", views.package_buy, name="shipping-package-buy"),
     path("labels/<int:pk>.pdf", views.label_pdf, name="shipping-label-pdf"),
     path("labels/<int:pk>/void/", views.label_void, name="shipping-label-void"),

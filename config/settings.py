@@ -183,14 +183,19 @@ SHIPPING = {
         "CLIENT_SECRET": os.environ.get("UPS_CLIENT_SECRET", ""),
         "ACCOUNT_NUMBER": os.environ.get("UPS_ACCOUNT_NUMBER", ""),
     },
-    # GLS US (wholesale, from QBO). Account number + web-services user/password
-    # from GLS. GLS_BASE_URL overrides the endpoint if GLS's guide names another.
+    # GLS US (wholesale, from QBO). Account number + API user/password from GLS.
+    # GLS has no test server: "sandbox" calls the live API too, but marks labels
+    # as tests (never written to QBO) and refuses pickups.
     "GLS": {
         "ENV": os.environ.get("GLS_ENV", "sandbox"),
         "ACCOUNT_NUMBER": os.environ.get("GLS_ACCOUNT_NUMBER", ""),
         "USERNAME": os.environ.get("GLS_USERNAME", ""),
         "PASSWORD": os.environ.get("GLS_PASSWORD", ""),
         "BASE_URL": os.environ.get("GLS_BASE_URL", ""),
+        # On-call pickup window, in GLS's "hh:mm am" format.
+        "PICKUP_EARLIEST": os.environ.get("GLS_PICKUP_EARLIEST", "01:00 pm"),
+        "PICKUP_LATEST": os.environ.get("GLS_PICKUP_LATEST", "05:00 pm"),
+        "PICKUP_INSTRUCTIONS": os.environ.get("GLS_PICKUP_INSTRUCTIONS", ""),
     },
     "C7": {
         "APP_ID": os.environ.get("C7_APP_ID", ""),

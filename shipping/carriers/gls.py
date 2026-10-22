@@ -1,15 +1,24 @@
-"""GLS US adapter (formerly GSO): token auth, ship, void.
+"""GLS US adapter: token auth, ship, void, on-call pickup.
 
-!! UNVERIFIED !!  GLS US doesn't publish its API; the guide comes with the
-account. This is written from GSO's REST web services as they were before the
-GLS rebrand, and every endpoint path and field name sits in the constants and
-the two build/parse methods below so they can be corrected in one place when
-the guide arrives. Nothing else in the app knows GLS's JSON.
+Written to GLS's ShipmentHub API v2 (https://shipmenthub.gls-us.com, a Postman
+collection, read 2026-10-22). Not yet run against GLS with real credentials.
 
-    GET    {base}/token      headers UserName / Password / AccountNumber
-                             -> token in the "Token" response header
+    GET    {base}/Token      headers Username / Password -> "Token" (+ "TokenExpiry")
+                             response headers; good for 12 hours
     POST   {base}/Shipment   header Token; {"AccountNumber", "Shipment": {...}}
-    DELETE {base}/Shipment   ?TrackingNumber=...&AccountNumber=...
+                             -> TrackingNumber, ShipmentCharges.TotalCharge, PaperLabel
+                             (base64 PDF when ShipmentLabelType = PDF_4x5LABEL)
+    DELETE {base}/Shipment   body {"AccountNumber", "TrackingNumber"}
+    POST   {base}/Pickup     on-call pickup -> a confirmation number
+
+Every call sends `Accept/Content-Type: ...; ver=2.0`, as the collection does.
+Errors come back as {"StatusCode", "ErrorCount", "ErrorDetail": [{"ErrorCode",
+"ErrorDescription"}]}.
+
+GLS has NO test server: GLS_ENV=sandbox still calls the live API. That's safe
+for labels because GLS only bills a shipment once it is scanned at a GLS
+facility (unscanned data is dropped after 90 days) -- void test labels anyway.
+Pickups are real dispatches, so request_pickup refuses unless GLS_ENV=production.
 
 What GLS is used for here: wholesale cases to licensed accounts, queued from
 QuickBooks invoices whose Ship via is GLS (see services/qbo_intake.py).
@@ -22,6 +31,7 @@ import base64
 import io
 import logging
 import math
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 import requests
@@ -32,22 +42,43 @@ from .base import (CarrierAdapter, CarrierConfigError, CarrierError, LabelDocume
 
 log = logging.getLogger(__name__)
 
-BASE_URLS = {
-    "sandbox": "https://api.gls-us.com/Rest/v1",       # confirm: GLS may give a separate test URL
-    "production": "https://api.gls-us.com/Rest/v1",
-}
+BASE_URL = "https://ship.gls-us.com/v2"
 TIMEOUT_S = 30
-TOKEN_TTL_S = 3 * 3600          # GSO tokens lasted a few hours; refreshed on 401 anyway
+TOKEN_TTL_S = 11 * 3600          # GLS tokens last 12 h; refreshed on 401 anyway
+ACCEPT = "text/plain; ver=2.0"
+CONTENT_TYPE = "application/json-patch+json; ver=2.0"
 
-SERVICE_GROUND = "CPS"          # GLS "California Parcel Service" (ground, western states)
-SERVICE_NAMES = {"CPS": "GLS Ground (CPS)"}
+SERVICE_GROUND = "CPS"           # GLS Ground
+SERVICE_NAMES = {"CPS": "GLS Ground", "PDS": "GLS Priority Overnight",
+                 "EPS": "GLS Early Priority Overnight", "NPS": "GLS Noon Priority Overnight",
+                 "SDS": "GLS Saturday Delivery"}
 
-SIGNATURE_ADULT = "SIG_REQD_ADULT"
+SIGNATURE_ADULT = "ADULT_SIG_REQD"
 SIGNATURE_REQUIRED = "SIG_REQD"
+LABEL_TYPE = "PDF_4x5LABEL"      # GLS's only PDF label: 4 x 5, prints fine on 4 x 6 stock
 
 
 def default_service(residential: bool | None) -> str:
     return SERVICE_GROUND
+
+
+@dataclass
+class PickupRequest:
+    pickup_date: object                  # date
+    earliest: str                        # "12:00 pm"
+    latest: str                          # "05:00 pm"
+    packages: int
+    total_weight_lb: Decimal
+    company: str
+    contact: str
+    phone: str
+    email: str
+    street1: str
+    street2: str
+    city: str
+    state: str
+    postal_code: str
+    instructions: str = ""
 
 
 class GLSAdapter(CarrierAdapter):
@@ -56,33 +87,37 @@ class GLSAdapter(CarrierAdapter):
     def __init__(self, *, environment, account_number, username, password, base_url="",
                  session=None):
         super().__init__(environment)
-        if environment not in BASE_URLS:
+        if environment not in ("sandbox", "production"):
             raise CarrierConfigError(f"GLS_ENV must be sandbox or production, not {environment!r}")
         missing = [n for n, v in (("GLS_ACCOUNT_NUMBER", account_number),
                                   ("GLS_USERNAME", username), ("GLS_PASSWORD", password))
                    if not v]
         if missing:
             raise CarrierConfigError(f"Missing in .env / config vars: {', '.join(missing)}")
-        self.base_url = (base_url or BASE_URLS[environment]).rstrip("/")
-        self.account_number = account_number
+        self.base_url = (base_url or BASE_URL).rstrip("/")
+        self.account_number = str(account_number).strip()
         self.username = username
         self.password = password
         self.session = session or requests.Session()
 
+    @property
+    def _account(self):
+        # Documented as Integer(10); the collection's own example sends a string.
+        return int(self.account_number) if self.account_number.isdigit() else self.account_number
+
     # --- auth ---------------------------------------------------------------
 
     def _token_cache_key(self):
-        return f"shipping:gls:token:{self.environment}:{self.account_number}"
+        return f"shipping:gls:token:{self.account_number}:{self.username}"
 
     def _token(self) -> str:
         key = self._token_cache_key()
         token = cache.get(key)
         if token:
             return token
-        resp = self.session.request("GET", f"{self.base_url}/token", timeout=TIMEOUT_S, headers={
-            "UserName": self.username, "Password": self.password,
-            "AccountNumber": self.account_number})
-        token = resp.headers.get("Token") if resp.status_code == 200 else ""
+        resp = self.session.request("GET", f"{self.base_url}/Token", timeout=TIMEOUT_S, headers={
+            "Accept": ACCEPT, "Username": self.username, "Password": self.password})
+        token = (resp.headers.get("Token") or "") if resp.status_code in (200, 201) else ""
         if not token:
             code, msg = _first_error(_json(resp), default=f"GLS authorization failed "
                                                           f"(HTTP {resp.status_code})")
@@ -95,8 +130,8 @@ class GLSAdapter(CarrierAdapter):
             resp = self.session.request(
                 method, f"{self.base_url}{path}", json=payload, params=params,
                 timeout=TIMEOUT_S,
-                headers={"Token": self._token(), "AccountNumber": self.account_number,
-                         "Content-Type": "application/json", "Accept": "application/json"})
+                headers={"Token": self._token(), "Content-Type": CONTENT_TYPE,
+                         "Accept": ACCEPT})
             if resp.status_code == 401 and attempt == 1:
                 cache.delete(self._token_cache_key())
                 continue
@@ -114,27 +149,31 @@ class GLSAdapter(CarrierAdapter):
         p, frm, to = req.parcel, req.ship_from, req.ship_to
         digits = lambda v: "".join(ch for ch in (v or "") if ch.isdigit())  # noqa: E731
         return {
-            "AccountNumber": self.account_number,
+            "AccountNumber": self._account,
             "Shipment": {
-                "ServiceCode": req.service,
-                "ShipDate": req.ship_date.isoformat(),
-                "ShipmentReference": p.reference[:40],
-                "SignatureCode": SIGNATURE_ADULT if req.adult_signature else SIGNATURE_REQUIRED,
-                "Weight": float(round(Decimal(p.weight_lb), 1)),
-                "Length": math.ceil(p.length_in), "Width": math.ceil(p.width_in),
-                "Height": math.ceil(p.height_in),
-                "ShipperCompany": frm.company[:40], "ShipperContact": frm.name[:40],
-                "ShipperPhone": digits(frm.phone), "ShipperEmail": frm.email,
-                "PickupAddress1": frm.street1[:40], "PickupAddress2": frm.street2[:40],
-                "PickupCity": frm.city, "PickupState": frm.state, "PickupZip": frm.postal_code,
-                "ShipToCompany": (to.company or to.name)[:40],
-                "ShipToAttention": (to.name or to.company)[:40],
-                "ShipToPhone": digits(to.phone),
-                "DeliveryAddress1": to.street1[:40], "DeliveryAddress2": to.street2[:40],
-                "DeliveryCity": to.city, "DeliveryState": to.state, "DeliveryZip": to.postal_code,
+                "ShipperCompany": frm.company[:50], "ShipperContact": frm.name[:50],
+                "ShipperPhone": digits(frm.phone)[:20], "ShipperEmail": frm.email[:50],
+                "PickupAddress1": frm.street1[:50], "PickupAddress2": frm.street2[:50],
+                "PickupCity": frm.city[:50], "PickupState": frm.state,
+                "PickupZip": frm.postal_code, "PickupCountryCode": "US",
+                "PickupAddressType": "B",
+                "ShipToCompany": (to.company or to.name)[:50],
+                "ShipToAttention": (to.name or to.company)[:50],
+                "ShipToPhone": digits(to.phone)[:20],
+                "DeliveryAddress1": to.street1[:50], "DeliveryAddress2": to.street2[:50],
+                "DeliveryCity": to.city[:50], "DeliveryState": to.state,
+                "DeliveryZip": to.postal_code, "DeliveryCountryCode": to.country or "US",
                 "DeliveryAddressType": "R" if to.residential else "B",
-                "ContainsAlcohol": bool(req.contains_alcohol),
-                "LabelType": "PDF_4X6",
+                "ShipDate": req.ship_date.isoformat(),
+                "ServiceCode": req.service,
+                # "Package weight in pounds. Round up to next pound."
+                "Weight": math.ceil(Decimal(p.weight_lb)), "WeightUnitOfMeasure": "lb",
+                "Dimensions": {"Length": math.ceil(p.length_in), "Width": math.ceil(p.width_in),
+                               "Height": math.ceil(p.height_in), "UnitOfMeasure": "inch"},
+                "ShipmentLabelType": LABEL_TYPE,
+                "SignatureCode": SIGNATURE_ADULT if req.adult_signature else SIGNATURE_REQUIRED,
+                "ShipmentReference": p.reference[:25],
+                "CommercialInvoiceAttached": False,
             },
         }
 
@@ -143,24 +182,21 @@ class GLSAdapter(CarrierAdapter):
         return self.parse_ship_response(body, req)
 
     def parse_ship_response(self, body: dict, req: LabelRequest) -> LabelResult:
-        """Defensive on purpose until checked against GLS's guide: finds the
-        tracking number and the label image wherever they sit in the response."""
-        tracking = _find(body, ("TrackingNumber", "TrackingNo", "trackingNumber"))
+        tracking = body.get("TrackingNumber")
         if not tracking:
             raise CarrierError("GLS returned no tracking number", details=_strip_images(body))
         docs = []
-        for raw in _find_all(body, ("ShipmentLabel", "Label", "LabelImage", "LabelData",
-                                    "label")):
-            if isinstance(raw, str) and len(raw) > 100:
-                try:
-                    docs.append(LabelDocumentData(kind="LABEL",
-                                                  content=to_pdf(base64.b64decode(raw))))
-                except (ValueError, OSError) as e:
-                    log.warning("GLS label image not readable: %s", e)
+        raw = body.get("PaperLabel")
+        if isinstance(raw, str) and raw:
+            try:
+                docs.append(LabelDocumentData(kind="LABEL",
+                                              content=to_pdf(base64.b64decode(raw))))
+            except (ValueError, OSError) as e:
+                log.warning("GLS label not readable: %s", e)
         if not docs:
             raise CarrierError(f"GLS created {tracking} but returned no readable label -- "
                                f"void it with `void_label`", details=_strip_images(body))
-        charge = _find(body, ("TotalCharge", "ShipmentCharge", "NetCharge", "Charge"))
+        charge = (body.get("ShipmentCharges") or {}).get("TotalCharge")
         try:
             charge = Decimal(str(charge)) if charge not in (None, "") else None
         except InvalidOperation:
@@ -173,8 +209,42 @@ class GLSAdapter(CarrierAdapter):
     # --- void ---------------------------------------------------------------
 
     def void_label(self, tracking_number: str) -> dict:
-        return self._call("DELETE", "/Shipment", params={
-            "TrackingNumber": tracking_number, "AccountNumber": self.account_number})
+        return self._call("DELETE", "/Shipment", payload={
+            "AccountNumber": self._account, "TrackingNumber": tracking_number})
+
+    # --- pickup -------------------------------------------------------------
+
+    def request_pickup(self, pr: PickupRequest) -> tuple[str, dict]:
+        """Book an on-call pickup. Returns (confirmation number, response)."""
+        if self.environment != "production":
+            raise CarrierConfigError("GLS has no test server, so pickups are only requested "
+                                     "with GLS_ENV=production.")
+        digits = "".join(ch for ch in (pr.phone or "") if ch.isdigit())
+        body = self._call("POST", "/Pickup", payload={
+            "AccountNumber": self._account,
+            "PickupDate": pr.pickup_date.isoformat(),
+            "EarliestPickupTime": pr.earliest, "LatestPickupTime": pr.latest,
+            "NumberofPackages": pr.packages,
+            "TotalWeight": math.ceil(Decimal(pr.total_weight_lb)),
+            "OnCallPickupLocation": {
+                "PickupCompany": pr.company[:50], "PickupAddress1": pr.street1[:50],
+                "PickupAddress2": pr.street2[:50], "PickupCity": pr.city[:50],
+                "PickupState": pr.state, "PickupZip": pr.postal_code,
+                "PickupAddressType": "B", "PickupContact": pr.contact[:50],
+                "PickupContactEmail": pr.email[:50], "PickupContactPhone": digits[:20],
+                "PickupRequestNotification": bool(pr.email),
+                "PickupInstruction": pr.instructions[:100],
+            },
+        })
+        # The collection's response table is cut off before the field name.
+        confirmation = _find(body, ("PickupConfirmationNumber", "ConfirmationNumber",
+                                    "PickupConfirmation", "PickupNumber",
+                                    "ConfirmationNo"))
+        if not confirmation:
+            raise CarrierError("GLS accepted the pickup but returned no confirmation number "
+                               "-- check with GLS before requesting again",
+                               details=_strip_images(body))
+        return str(confirmation), _strip_images(body)
 
 
 # --- helpers ----------------------------------------------------------------
@@ -213,6 +283,14 @@ def _json(resp):
 def _first_error(body, default):
     if not isinstance(body, dict):
         return "", default
+    detail = body.get("ErrorDetail")
+    if isinstance(detail, dict):
+        detail = [detail]
+    if isinstance(detail, list) and detail and isinstance(detail[0], dict):
+        e = detail[0]
+        msg = e.get("ErrorDescription") or e.get("ErrorMessage")
+        if msg:
+            return str(e.get("ErrorCode") or e.get("ErrorId") or ""), msg
     for key in ("ErrorMessage", "Error", "Message", "error"):
         v = body.get(key)
         if isinstance(v, str) and v:

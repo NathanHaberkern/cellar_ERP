@@ -4,10 +4,12 @@
     python manage.py gls_test_label                # 12 Bottle box, 12 x 750 ml, adult signature
     python manage.py gls_test_label --void 5XXXXXXX
 
-The GLS adapter is written ahead of GLS's API guide (see shipping/carriers/gls.py),
-so the first run is the real check: if GLS refuses a field, the error names it.
-Refuses unless GLS_ENV=sandbox. Ship-to is a business address on GLS's own
-network (Lodi), so a test label never names a customer.
+GLS has no test server, so this calls the live API: the shipment is only
+billed once GLS scans the box, but void the test label right after anyway.
+The first run is the real check of the adapter: if GLS refuses a field, the
+error names it. Refuses unless GLS_ENV=sandbox (which marks the label as a
+test, so it's never written to QuickBooks). Ship-to is a Lodi test business,
+so a test label never names a customer.
 """
 import datetime as dt
 from pathlib import Path
