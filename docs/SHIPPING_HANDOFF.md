@@ -165,9 +165,9 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
 - **GLS pickups** (`CarrierPickup`, `shipments.request_pickup` / `pickup_options`): Nate
   wants a pickup only when there are GLS boxes, never a standing one. On a labeled GLS
-  pool (production only): **Request GLS pickup (now–3 PM)**. If less than
-  `GLS_PICKUP_MIN_NOTICE_MIN` (60) is left before 3 PM, or it's a weekend, the page asks
-  "Too late for 3 PM" and offers **Push to 4 PM today** (if there's still notice) or the
+  pool (production only): **Request GLS pickup (now–3 PM)**. GLS requires a 4-hour
+  window (`GLS_PICKUP_MIN_WINDOW_MIN`=240), so after ~11 AM, or on a weekend, the page asks
+  "Too late for 3 PM" and offers **Push to 4 PM today** (until ~noon) or the
   **next business day** 9 AM–3 PM. One pickup covers every GLS box labeled since the
   last pickup; a second press shows the booked one. Every request carries Nate's note
   "We close at 3PM. If late, please call 661-808-3988." (`GLS_PICKUP_*` in .env).

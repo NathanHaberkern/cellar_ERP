@@ -183,18 +183,18 @@ def next_business_day(day: dt.date) -> dt.date:
 
 def pickup_options(now=None) -> dict:
     """What the pool page offers. Normal: now until 3 PM today. Too late for
-    that (less than the minimum notice left, or a weekend): 4 PM today if
-    there's still notice for it, and the next business day."""
+    that (GLS needs a 4-hour window, or it's a weekend): 4 PM today if a
+    4-hour window still fits, and the next business day."""
     conf = settings.SHIPPING["GLS"]
     now = timezone.localtime(now) if now else timezone.localtime()
-    notice = dt.timedelta(minutes=conf["PICKUP_MIN_NOTICE_MIN"])
+    min_window = dt.timedelta(minutes=conf["PICKUP_MIN_WINDOW_MIN"])
     # Earliest = now rounded up to the next 5 minutes.
     start = (now + dt.timedelta(minutes=4)).replace(second=0, microsecond=0)
     start = start.replace(minute=start.minute - start.minute % 5)
 
     def window(close):
         end = now.replace(hour=close.hour, minute=close.minute, second=0, microsecond=0)
-        return (start.time(), close) if now + notice <= end else None
+        return (start.time(), close) if start + min_window <= end else None
 
     weekday = now.weekday() < 5
     today = window(_hhmm(conf["PICKUP_CLOSE"])) if weekday else None

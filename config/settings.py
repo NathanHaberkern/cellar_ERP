@@ -192,12 +192,13 @@ SHIPPING = {
         "USERNAME": os.environ.get("GLS_USERNAME", ""),
         "PASSWORD": os.environ.get("GLS_PASSWORD", ""),
         "BASE_URL": os.environ.get("GLS_BASE_URL", ""),
-        # On-call pickups (24-hour HH:MM). Window = now until CLOSE. If that's
-        # less than MIN_NOTICE minutes away, the pool page offers LATE_CLOSE
-        # today or the next business day from NEXT_DAY_FROM.
+        # On-call pickups (24-hour HH:MM). Window = now until CLOSE; GLS needs a
+        # window of at least MIN_WINDOW minutes (4 h). If now..CLOSE is shorter,
+        # the pool page offers LATE_CLOSE today or the next business day from
+        # NEXT_DAY_FROM.
         "PICKUP_CLOSE": os.environ.get("GLS_PICKUP_CLOSE", "15:00"),
         "PICKUP_LATE_CLOSE": os.environ.get("GLS_PICKUP_LATE_CLOSE", "16:00"),
-        "PICKUP_MIN_NOTICE_MIN": int(os.environ.get("GLS_PICKUP_MIN_NOTICE_MIN", "60")),
+        "PICKUP_MIN_WINDOW_MIN": int(os.environ.get("GLS_PICKUP_MIN_WINDOW_MIN", "240")),
         "PICKUP_NEXT_DAY_FROM": os.environ.get("GLS_PICKUP_NEXT_DAY_FROM", "09:00"),
         "PICKUP_INSTRUCTIONS": os.environ.get(
             "GLS_PICKUP_INSTRUCTIONS", "We close at 3PM. If late, please call 661-808-3988."),

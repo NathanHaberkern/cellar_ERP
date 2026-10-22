@@ -386,22 +386,22 @@ class QBOPoolAndTrackingTests(TestCase):
         self.assertEqual(CarrierPickup.objects.count(), 1)
 
     def test_too_late_offers_4pm_or_next_business_day(self):
-        plan = shipments.pickup_options(self.at(14, 15))
+        plan = shipments.pickup_options(self.at(11, 30))          # 4-hour window to 3 PM: no
         self.assertTrue(plan["too_late"])
         self.assertEqual(set(plan["options"]), {"late", "next_day"})
         late = plan["options"]["late"]
-        self.assertEqual((late[2], shipments.gls_time(late[1])), (dt.time(16, 0), "02:15 pm"))
-        self.assertEqual(set(shipments.pickup_options(self.at(15, 30))["options"]), {"next_day"})
+        self.assertEqual((late[2], shipments.gls_time(late[1])), (dt.time(16, 0), "11:30 am"))
+        self.assertEqual(set(shipments.pickup_options(self.at(12, 5))["options"]), {"next_day"})
         friday = shipments.pickup_options(self.at(15, 30, dt.date(2026, 10, 23)))
         self.assertEqual(friday["options"]["next_day"][:2],
                          (dt.date(2026, 10, 26), dt.time(9, 0)))           # Monday 9 am
-        self.assertEqual(set(shipments.pickup_options(self.at(13, 59))["options"]), {"today"})
+        self.assertEqual(set(shipments.pickup_options(self.at(10, 58))["options"]), {"today"})
         pool = self.labeled()
         fake = mock.Mock()
         fake.request_pickup.return_value = ("PU5", {})
         with self.assertRaisesMessage(shipments.LabelRefused, "Too late for a 3 PM"):
-            shipments.request_pickup(pool, adapter=fake, now=self.at(14, 15))
-        shipments.request_pickup(pool, option="late", adapter=fake, now=self.at(14, 15))
+            shipments.request_pickup(pool, adapter=fake, now=self.at(11, 30))
+        shipments.request_pickup(pool, option="late", adapter=fake, now=self.at(11, 30))
         self.assertEqual(fake.request_pickup.call_args.args[0].latest, "04:00 pm")
 
     def test_pool_page_pickup_buttons(self):
@@ -410,7 +410,7 @@ class QBOPoolAndTrackingTests(TestCase):
         gls_conf = dict(settings.SHIPPING["GLS"], ENV="production")
         with override_settings(SHIPPING=dict(settings.SHIPPING, GLS=gls_conf), **WEB), \
                 mock.patch("shipping.services.shipments.pickup_options",
-                           return_value=shipments.pickup_options(self.at(14, 15))):
+                           return_value=shipments.pickup_options(self.at(11, 30))):
             page = self.client.get(reverse("shipping-pool", args=[pool.pk]))
         self.assertContains(page, "Too late for a 3 PM GLS pickup")
         self.assertContains(page, "Push GLS pickup to 4 PM today")
