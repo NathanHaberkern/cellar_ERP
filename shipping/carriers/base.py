@@ -90,6 +90,26 @@ class LabelResult:
     response_summary: dict = field(default_factory=dict)
 
 
+@dataclass
+class AddressValidation:
+    """Carrier-neutral result of an address check.
+
+    `resolved` -- the carrier matched it to a real delivery point.
+    `suggested` -- the carrier's standardized version of the address.
+    `classification` -- RESIDENTIAL / BUSINESS / MIXED / UNKNOWN.
+    `issues` -- human-readable problems (suite missing, interpolated, ...).
+    """
+    resolved: bool
+    suggested: Address | None
+    classification: str = "UNKNOWN"
+    issues: list[str] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
+
+    @property
+    def residential(self) -> bool | None:
+        return {"RESIDENTIAL": True, "BUSINESS": False}.get(self.classification)
+
+
 class CarrierAdapter(abc.ABC):
     code: str = ""
 
@@ -103,3 +123,7 @@ class CarrierAdapter(abc.ABC):
     @abc.abstractmethod
     def void_label(self, tracking_number: str) -> dict:
         """Cancel a label at the carrier. Returns the carrier's response summary."""
+
+    def validate_address(self, address: Address) -> AddressValidation:
+        """Optional: carriers without an address API raise CarrierConfigError."""
+        raise CarrierConfigError(f"{self.code} has no address validation")

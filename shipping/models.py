@@ -159,10 +159,36 @@ class ShipOrder(models.Model):
                                            help_text="from address validation; blank = unknown")
     address_validated_at = models.DateTimeField(null=True, blank=True)
 
+    # Pre-validation address, kept when FedEx's suggestion is accepted or the
+    # address is edited by hand, so the change is never silent.
+    address_original = models.JSONField(default=dict, blank=True)
+    address_suggested = models.JSONField(default=dict, blank=True,
+                                         help_text="FedEx's resolved address, if different")
+    address_issues = models.JSONField(default=list, blank=True,
+                                      help_text="why this address is in review")
+    address_classification = models.CharField(max_length=20, blank=True,
+                                              help_text="FedEx: RESIDENTIAL / BUSINESS / MIXED / UNKNOWN")
+    address_reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                            on_delete=models.PROTECT, related_name="+")
+
+    c7_customer_id = models.CharField(max_length=64, blank=True, db_index=True)
     is_club = models.BooleanField(default=False, help_text="shown as the Club tag")
     club_name = models.CharField(max_length=120, blank=True)
+    club_package = models.CharField(max_length=120, blank=True,
+                                    help_text="C7 club package, e.g. 'Fall 2026 (4-Bottle)'")
+    requested_ship_date = models.DateField(null=True, blank=True,
+                                           help_text="customer's requested ship date; held until then")
     compliance_status = models.CharField(max_length=40, blank=True,
                                          help_text="as reported by Commerce7 / VinoCheck")
+    compliance_override_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                               on_delete=models.PROTECT, related_name="+")
+    compliance_override_at = models.DateTimeField(null=True, blank=True)
+    compliance_override_note = models.CharField(max_length=200, blank=True)
+    hold_note = models.CharField(max_length=200, blank=True,
+                                 help_text="why it was put on hold by hand")
+    c7_change_note = models.CharField(
+        max_length=200, blank=True,
+        help_text="set when C7 changed the order after it was pooled or labeled")
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW,
                               db_index=True)
@@ -181,6 +207,16 @@ class ShipOrder(models.Model):
 
     def __str__(self):
         return f"#{self.c7_order_number} {self.ship_name}"
+
+    ADDRESS_FIELDS = ("ship_name", "ship_company", "ship_street1", "ship_street2", "ship_city",
+                      "ship_state", "ship_postal_code", "ship_country")
+
+    def address_dict(self):
+        return {f: getattr(self, f) for f in self.ADDRESS_FIELDS}
+
+    @property
+    def bottle_count(self):
+        return sum(line.bottle_count for line in self.lines.all())
 
 
 class ShipOrderLine(models.Model):
@@ -214,6 +250,8 @@ class PackPool(models.Model):
 
     name = models.CharField(max_length=60)
     carrier = models.CharField(max_length=10, choices=Carrier.choices)
+    is_default = models.BooleanField(default=False,
+                                     help_text="the identical default-club-shipment pool")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
@@ -235,7 +273,13 @@ class Package(models.Model):
     bottle_count = models.PositiveSmallIntegerField()
     weight_lb = models.DecimalField(max_digits=6, decimal_places=2,
                                     help_text="declared weight sent to the carrier")
+    contents = models.JSONField(default=list, blank=True,
+                                help_text="what goes in this box: [{order, sku, qty}]")
+    sequence = models.PositiveSmallIntegerField(default=0, help_text="packing order in the pool")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pool_id", "sequence", "id"]
 
     def __str__(self):
         return f"Package {self.pk} — {self.box} ({self.bottle_count} btl)"

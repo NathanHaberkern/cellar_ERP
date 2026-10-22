@@ -1,0 +1,153 @@
+{% extends "web/base.html" %}
+{% block title %}Shipping{% endblock %}
+{% block content %}
+<style>
+  .ship-sec { margin: 26px 0 10px; display:flex; align-items:baseline; justify-content:space-between; gap:12px }
+  .ship-sec h2 { margin:0; font-size:17px }
+  .ship-sec .n { color:var(--muted); font-size:13px; font-weight:400 }
+  .inline { display:inline }
+  .acts input[type=text], .inline input[type=text] { width:140px; padding:4px 6px; font-size:12px; display:inline-block }
+  .inline select { width:auto; padding:3px 6px; font-size:13px }
+  td .sub { color:var(--muted); font-size:12px }
+  .issues { margin:0; padding-left:16px; font-size:12px; color:var(--red-ink) }
+  .sugg { font-size:12px; color:var(--olive) }
+  .pool { margin-bottom:14px }
+  .pool h3 { margin:0 0 6px; font-size:15px }
+  .contents { font-size:12px; color:var(--muted) }
+  .acts { white-space:nowrap }
+  .acts form { display:inline }
+</style>
+
+<div class="page-head">
+  <div><p class="eyebrow">Shipping</p><h1>Orders &amp; pools</h1></div>
+  <div class="acts">
+    {% if can_sync %}<form method="post" action="{% url 'shipping-pull' %}">{% csrf_token %}<button class="btn sm" type="submit">Pull orders</button></form>{% endif %}
+    {% if can_build and ready %}<form method="post" action="{% url 'shipping-build' %}">{% csrf_token %}<button class="btn sm" type="submit">Build pools ({{ ready|length }} orders)</button></form>{% endif %}
+  </div>
+</div>
+
+{% for m in messages %}<div class="msg {% if m.tags == 'error' %}err{% else %}ok{% endif %}" style="margin-bottom:8px">{{ m }}</div>{% endfor %}
+
+<div class="cards">
+  <div class="card"><div class="n">{{ review|length }}</div><div class="l">Address review</div></div>
+  <div class="card"><div class="n">{{ held|length|add:manual_holds.count }}</div><div class="l">Held</div></div>
+  <div class="card"><div class="n">{{ ready|length }}</div><div class="l">Ready to pool</div></div>
+  <div class="card"><div class="n">{{ open_pools|length }}</div><div class="l">Open pools</div></div>
+</div>
+<p class="verify">Compliance gate: <b>{% if gate_on %}ON — only C7 “Compliant” orders pool without an override{% else %}OFF — every order ships; C7 status shown for reference{% endif %}</b>{% if new %} · {{ new }} order{{ new|pluralize }} not yet address-checked{% endif %}</p>
+
+{% if changed %}
+<div class="ship-sec"><h2>Changed in C7 after packing started</h2></div>
+<div class="msg err">{% for o in changed %}#{{ o.c7_order_number }} {{ o.ship_name }} — {{ o.c7_change_note }}<br>{% endfor %}</div>
+{% endif %}
+
+<div class="ship-sec"><h2>Address review <span class="n">{{ review|length }}</span></h2></div>
+{% if review %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Order</th><th>Ship to</th><th>Problem</th><th>Type</th><th></th></tr></thead>
+  <tbody>
+  {% for o in review %}
+    <tr>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>{{ o.ship_name }}{% if o.ship_company %}, {{ o.ship_company }}{% endif %}<br>
+          <span class="sub">{{ o.ship_street1 }}{% if o.ship_street2 %} {{ o.ship_street2 }}{% endif %}, {{ o.ship_city }}, {{ o.ship_state }} {{ o.ship_postal_code }}</span>
+          {% if o.address_suggested %}<div class="sugg">FedEx: {{ o.address_suggested.ship_street1 }}{% if o.address_suggested.ship_street2 %} {{ o.address_suggested.ship_street2 }}{% endif %}, {{ o.address_suggested.ship_city }}, {{ o.address_suggested.ship_state }} {{ o.address_suggested.ship_postal_code }}</div>{% endif %}</td>
+      <td><ul class="issues">{% for i in o.address_issues %}<li>{{ i }}</li>{% endfor %}</ul></td>
+      <td>{{ o.address_classification|default:"—"|lower }}</td>
+      <td class="acts">
+        {% if can_sync %}
+        {% if o.address_suggested %}<form method="post" action="{% url 'shipping-order-action' o.pk 'accept' %}">{% csrf_token %}<button class="btn sm">Use FedEx</button></form>{% endif %}
+        <form method="post" action="{% url 'shipping-order-action' o.pk 'keep' %}">{% csrf_token %}<button class="btn ghost sm">Keep as is</button></form>
+        <a class="btn ghost sm" href="{% url 'shipping-address' o.pk %}">Edit</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="verify" style="color:var(--muted)">Nothing to review.</p>{% endif %}
+
+<div class="ship-sec"><h2>Held <span class="n">{{ held|length|add:manual_holds.count }}</span></h2></div>
+{% if held or manual_holds %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Order</th><th>Ship to</th><th>Why</th><th>C7 compliance</th><th></th></tr></thead>
+  <tbody>
+  {% for o, reasons in held %}
+    <tr>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>{{ o.ship_name }} <span class="sub">{{ o.ship_state }}</span></td>
+      <td>{{ reasons|join:"; " }}</td>
+      <td>{{ o.compliance_status|default:"—" }}</td>
+      <td class="acts">
+        {% if gate_on and can_override and o.compliance_status != "Compliant" and not o.compliance_override_at %}
+        <form method="post" action="{% url 'shipping-order-action' o.pk 'override' %}">{% csrf_token %}<input type="text" name="note" placeholder="why it can ship" required><button class="btn ghost sm">Release</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  {% for o in manual_holds %}
+    <tr>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}</td>
+      <td>{{ o.ship_name }} <span class="sub">{{ o.ship_state }}</span></td>
+      <td>On hold: {{ o.hold_note }}</td>
+      <td>{{ o.compliance_status|default:"—" }}</td>
+      <td class="acts">{% if can_sync %}<form method="post" action="{% url 'shipping-order-action' o.pk 'release' %}">{% csrf_token %}<button class="btn ghost sm">Release</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="verify" style="color:var(--muted)">Nothing held.</p>{% endif %}
+
+<div class="ship-sec"><h2>Ready to pool <span class="n">{{ ready|length }}</span></h2></div>
+{% if ready %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Order</th><th>Ship to</th><th>Bottles</th><th>Residential</th><th>C7 compliance</th><th></th></tr></thead>
+  <tbody>
+  {% for o in ready %}
+    <tr>
+      <td>#{{ o.c7_order_number }}{% if o.is_club %} <span class="badge live">Club</span>{% endif %}<br><span class="sub">{{ o.club_package }}</span></td>
+      <td>{{ o.ship_name }} <span class="sub">{{ o.ship_city }}, {{ o.ship_state }}</span></td>
+      <td>{{ o.bottle_count }}</td>
+      <td>
+        {% if can_sync %}<form method="post" class="inline" action="{% url 'shipping-order-action' o.pk 'residential' %}">{% csrf_token %}
+          <select name="value" onchange="this.form.submit()">
+            <option value="yes" {% if o.ship_residential == True %}selected{% endif %}>Home</option>
+            <option value="no" {% if o.ship_residential == False %}selected{% endif %}>Business</option>
+            <option value="" {% if o.ship_residential == None %}selected{% endif %}>Unknown</option>
+          </select></form>{% else %}{{ o.ship_residential|yesno:"Home,Business,Unknown" }}{% endif %}
+      </td>
+      <td>{{ o.compliance_status|default:"—" }}</td>
+      <td class="acts">{% if can_sync %}<form method="post" action="{% url 'shipping-order-action' o.pk 'hold' %}">{% csrf_token %}<input type="text" name="note" placeholder="hold note"><button class="btn ghost sm">Hold</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<div class="ship-sec"><h2>Pools if built now</h2></div>
+{% for p in preview %}
+  <div class="card pool"><h3>{{ p.name }} — {{ p.package_count }} package{{ p.package_count|pluralize }}</h3>
+  {% for s in p.shipments %}<div class="contents">{% for o in s.orders %}#{{ o.number }}{% if not forloop.last %}/{% endif %}{% endfor %} {{ s.orders.0.state }}{% if s.carrier_reason %} · {{ s.carrier_reason }}{% endif %}: {% for pk in s.packages %}{{ pk.box.name }} ({{ pk.bottle_count }}){% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endfor %}
+  </div>
+{% endfor %}
+{% for number, msg in problems %}<div class="msg err">#{{ number }}: {{ msg }}</div>{% endfor %}
+{% else %}<p class="verify" style="color:var(--muted)">Nothing ready.</p>{% endif %}
+
+<div class="ship-sec"><h2>Open pools <span class="n">{{ open_pools|length }}</span></h2></div>
+{% for pool in open_pools %}
+  <div class="card pool">
+    <h3>{{ pool.name }} <span class="badge live">{{ pool.get_carrier_display }}</span>
+      {% if can_build %}<form class="inline" method="post" action="{% url 'shipping-dissolve' pool.pk %}">{% csrf_token %}<button class="btn ghost sm">Dissolve</button></form>{% endif %}</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Box</th><th>Bottles</th><th>Weight</th><th>Orders</th><th>Contents</th></tr></thead>
+      <tbody>
+      {% for pk in pool.packages.all %}
+        <tr><td>{{ pk.sequence }}</td><td>{{ pk.box.name }}</td><td>{{ pk.bottle_count }}</td><td>{{ pk.weight_lb }} lb</td>
+          <td>{% for o in pk.orders.all %}#{{ o.c7_order_number }} {{ o.ship_name }} ({{ o.ship_state }}){% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+          <td class="contents">{% for c in pk.contents %}{{ c.sku }}×{{ c.qty }}{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+{% empty %}<p class="verify" style="color:var(--muted)">No open pools.</p>
+{% endfor %}
+{% endblock %}

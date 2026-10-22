@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% block title %}#{{ order.c7_order_number }} address{% endblock %}
+{% block content %}
+<style>
+  .field { margin-bottom:12px }
+  .errorlist { color:var(--red-ink); font-size:12px; margin:4px 0 0; padding:0; list-style:none }
+</style>
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{% url 'shipping' %}">Shipping</a></p>
+    <h1>#{{ order.c7_order_number }} ship-to</h1></div>
+</div>
+<form method="post" class="card" style="max-width:560px">
+  {% csrf_token %}
+  {% if order.address_issues %}<ul class="errorlist" style="margin-bottom:12px">{% for i in order.address_issues %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+  {% for field in form %}
+    <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>
+  {% endfor %}
+  <p class="verify">Saving re-checks the address with FedEx. The C7 original is kept on the order.</p>
+  <div class="row" style="justify-content:flex-end">
+    <div style="flex:0 0 auto"><a class="btn ghost" style="display:inline-block" href="{% url 'shipping' %}">Cancel</a></div>
+    <div style="flex:0 0 auto"><button class="btn" type="submit">Save &amp; re-check</button></div>
+  </div>
+</form>
+{% endblock %}

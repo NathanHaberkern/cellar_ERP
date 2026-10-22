@@ -17,6 +17,7 @@ BUILD_POOLS = "build_pools"
 PRINT_LABELS = "print_labels"
 VOID_LABELS = "void_labels"
 MANAGE_SETTINGS = "manage_shipping_settings"
+OVERRIDE_COMPLIANCE = "override_compliance"
 
 # (codename, human label) -- order is the order shown on the Users page.
 CUSTOM_PERMISSIONS = [
@@ -25,6 +26,9 @@ CUSTOM_PERMISSIONS = [
     (PRINT_LABELS, "Can buy and print shipping labels"),
     (VOID_LABELS, "Can void shipping labels"),
     (MANAGE_SETTINGS, "Can manage box sizes, bottle weights and shipping settings"),
+    # Only matters once SHIPPING["COMPLIANCE_GATE"] is "on": releases an order C7
+    # hasn't marked Compliant. Deliberately not in Packer.
+    (OVERRIDE_COMPLIANCE, "Can release orders held for compliance"),
 ]
 
 
@@ -35,7 +39,8 @@ def perm(codename):
 
 DEFAULT_GROUPS = {
     "Packer": [SYNC_ORDERS, BUILD_POOLS, PRINT_LABELS],
-    "Shipping Admin": [SYNC_ORDERS, BUILD_POOLS, PRINT_LABELS, VOID_LABELS, MANAGE_SETTINGS],
+    "Shipping Admin": [SYNC_ORDERS, BUILD_POOLS, PRINT_LABELS, VOID_LABELS, MANAGE_SETTINGS,
+                       OVERRIDE_COMPLIANCE],
 }
 
 

@@ -201,5 +201,26 @@ SHIPPING = {
         "phone": os.environ.get("SHIP_FROM_PHONE", ""),
         "email": os.environ.get("SHIP_FROM_EMAIL", ""),
     },
+
+    # --- Tranche 2: order intake and packing rules ---------------------------
+    # Compliance gate. "off" (2026): every open ship order comes through; the C7
+    # compliance status is shown but never blocks. "on" (planned for 2027): only
+    # orders C7 marks Compliant pool automatically; anything else is held until
+    # someone with the override permission releases it with a note.
+    "COMPLIANCE_GATE": os.environ.get("SHIP_COMPLIANCE_GATE", "off").strip().lower(),
+    # How far back "Pull orders" looks for unfulfilled ship orders (by paid date).
+    "SYNC_LOOKBACK_DAYS": int(os.environ.get("SHIP_SYNC_LOOKBACK_DAYS", "120")),
+    # FedEx won't deliver wine to these states for us; they always go UPS, in
+    # their own pool. Nate's list, Oct 2026.
+    "FEDEX_RESTRICTED_STATES": ["WV", "VT", "SC", "OR", "ND", "NH", "MO", "MD", "ME", "IN",
+                                "ID", "CO"],
+    # The identical default club shipment (1 each). Orders with exactly these
+    # lines go to the single "Default" pool. Update when the default changes.
+    "DEFAULT_CLUB_SKUS": [s.strip() for s in os.environ.get(
+        "SHIP_DEFAULT_CLUB_SKUS", "23RTEMP,24SOUZ,24IRED,24TN").split(",") if s.strip()],
+    # Pool size in packages (boxes): aim for ~20, 18-22 is fine.
+    "POOL_TARGET_PACKAGES": 20,
+    "POOL_MIN_PACKAGES": 18,
+    "POOL_MAX_PACKAGES": 22,
 }
 

@@ -1,6 +1,6 @@
 # Shipping app — session handoff
 
-As of **Oct 21, 2026**. Read this, then `HANDOFF.md` (whole-ERP context), then the
+As of **Oct 21, 2026 (evening)** — Tranche 2 built. Read this, then `HANDOFF.md` (whole-ERP context), then the
 build plan: https://claude.ai/artifact/NSpwCYVU7tNbdcfh7XFA4k
 
 ## 1. What this is
@@ -19,8 +19,8 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 
 | Tranche | Scope | State |
 |---|---|---|
-| 1 | App skeleton, models, users/permissions page, FedEx adapter, box seed | **Built.** 50 shipping tests / 177 total pass. Sandbox label printed (2-Day, no alcohol). |
-| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Next.** Not started. |
+| 1 | App skeleton, models, users/permissions page, FedEx adapter, box seed | **Built.** Sandbox label printed (2-Day, no alcohol). |
+| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Built** (236 tests pass). Exit gate pending: Nate runs `shipping_replay`. |
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Queue/pool/print pages, void, C7 fulfillment writeback, low-volume live test | — |
 | 5 | UPS adapter; daily tracking sync + delivery-exception queue (both carriers) | — |
@@ -38,6 +38,38 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
     account (ending **2488**) has the alcohol agreement and API shipping enabled.
   - Then: `python manage.py fedex_test_label --box "4 Bottle" --bottles 4` (Ground + alcohol
     by default) = the certification label.
+
+### Tranche 2 — what was built and decided
+- **C7 fields confirmed** by `c7_probe` on the live tenant (Oct 21): `complianceStatus`
+  (Compliant / Not Checked / Quarantined seen), order-level `club` {clubTitle,
+  clubPackageTitle, shipmentBuildStatus}, `items[].volumeInML` + `weight`,
+  `selectedShippingOptions.requestedShipDate`, `shipTo.stateCode/zipCode/address/address2`.
+  `shipping[].carrier` is just C7's shipping-method label ("UPS Ground") — ignored.
+  The C7 app has NO club-membership route permission; not needed (club is on the order).
+- **Compliance gate** `SHIP_COMPLIANCE_GATE=off` (2026): all orders flow, status shown.
+  Nate plans `on` for 2027: only "Compliant" pools; everything else (incl. Forced) held
+  until released with a note by someone with `shipping.override_compliance`.
+- **Requested ship date** = computed hold until that date. `services/todo.daily_items()`
+  produces Daily-checklist items (due/late ships, address reviews, open pools); **not yet
+  wired** into `cellar/services/daily_plan.draft_items` — one line, Nate said "eventually".
+- **Combining:** same recipient name + exact same address (normalized: case, St/Street,
+  ZIP+4) → one shipment, boxes combined. Same address, different name → separate, same pool.
+- **Box fit:** magnum alone; "Port Club Volume" items in Port box; rest fills 12s then closest.
+- **Pools:** carrier first; Default pool = exactly 1 each of `SHIP_DEFAULT_CLUB_SKUS`;
+  rest sorted by box/SKU signature, split evenly near 20 **packages** (assumption: Nate's
+  "~20 cases" = boxes — confirm). Address units never split across pools.
+- **Bottle size** order of trust: SkuShippingProfile → C7 volumeInML → ERP BottleFormat → hold.
+- **Address validation:** FedEx `/address/v1/addresses/resolve`. Formatting-only changes
+  pass; real changes / unresolved / suite missing → review queue (Use FedEx / Keep / Edit).
+  Response parsing written from FedEx docs + defensive defaults — **verify on first live
+  pull** (sandbox may return canned data).
+- **Exit gate:** `python manage.py shipping_replay` re-packs fulfilled Club orders since
+  Sep 1 (read-only), compares box counts to C7 tracking numbers, combining (shared
+  tracking) and carrier; prints proposed pools → `label_output/shipping_replay.txt`.
+- **UI:** `/shipping/` (nav "Shipping" for sync/build perms): Pull orders, address review,
+  held, ready + residential override, pool preview, Build pools, open pools, Dissolve.
+- New perm `override_compliance` (in Shipping Admin defaults for NEW installs only — existing
+  groups unchanged; Nate is superuser).
 
 ## 3. Files (all new unless noted)
 
@@ -57,6 +89,11 @@ shipping/
   migrations/0001_initial.py, 0002_seed_boxes_and_bottle_weights.py
   tests/  fakes.py, test_fedex.py, test_models_and_labels.py, test_users_page.py
 cellar/web/users.py + templates/web/users.html, user_form.html   Users page (needs auth.change_user)
+T2: integrations/commerce7.py (shared C7 client), shipping/services/{packing,intake,pools,todo}.py,
+    shipping/views.py, urls.py, templates/shipping/*, migrations/0003, management/commands/
+    {c7_check,c7_probe,shipping_pull,shipping_replay}.py, tests/{test_c7_probe,test_packing,
+    test_intake_and_pools}.py; MODIFIED carriers/{base,fedex,__init__}.py, models.py,
+    permissions.py, config/urls.py, base.html nav
 MODIFIED: config/settings.py (INSTALLED_APPS + SHIPPING block), cellar/web/urls.py (users routes),
           cellar/web/templates/web/base.html (Users nav link), requirements.txt (+requests),
           .env.example (shipping keys), .gitignore (+label_output/)
@@ -122,7 +159,9 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
   (session has read-only; Nate commits/pushes himself). Before building, compare the folder
   with GitHub HEAD.
 - The device link moves files only (no shell on Nate's laptop). Build + test in the cloud
-  clone, then write files into the folder. **Gotcha:** re-staging a file at the same
+  clone, then write files into the folder. The session CAN push to GitHub now (Claude
+  GitHub app has write access as of Oct 21); push, then Nate runs `git fetch; git reset
+  origin/main` so his git matches the files already written into his folder. **Gotcha:** re-staging a file at the same
   `/mnt/user-data/outputs/...` path can deliver a stale copy — stage each revision under a
   new filename and verify sizes with `device_list_dir` after writing.
 - Nate runs commands in PowerShell 7 inside `.venv` (Python 3.12). Avoid one-liners with
@@ -134,9 +173,12 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 
 ## 6. First steps for the next session
 
-1. Connect the folder; confirm Nate has committed Tranche 1 (if not, diff folder vs GitHub).
-2. Ask whether FedEx enabled alcohol + Ground; if yes, have him run the full certification
-   label and check it prints with the alcohol/adult-signature markings.
-3. Start Tranche 2: shared C7 client (needs `C7_*` in `.env`), order sync → `ShipOrder`,
-   FedEx Address Validation API + review queue, routing, pooling, box fit. Exit gate: Nate's
-   most recent club run, re-pooled by the app, matches what he packed by hand.
+1. `git pull`; confirm Nate ran `migrate` and `shipping_replay`. Read
+   `label_output/shipping_replay.txt` (stage it from his folder) — box-count, combining and
+   carrier differences are the Tranche 2 exit gate. Fix rule gaps it shows.
+2. Confirm "~20 cases" means 20 boxes (packages), or switch pool sizing to bottles/12.
+3. First live **Pull orders**: check FedEx address-validation results look sane (review
+   queue not flooded by formatting); adjust `_material_differences` / parse if needed.
+4. FedEx sandbox alcohol + Ground still blocked (Nate to call FedEx) → Tranche 3 cert label.
+5. Then Tranche 4: pack/print pages, buy labels per package, void, C7 fulfillment writeback
+   (`POST /order/{id}/fulfillment`; a combined box posts the same tracking to every order in it).

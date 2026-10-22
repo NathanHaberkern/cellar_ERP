@@ -33,6 +33,7 @@
       <a href="{% url 'ledger' %}" class="{% if nav == 'ledger' %}on{% endif %}">Ledger</a>
       <a href="{% url 'stock-index' %}" class="{% if nav == 'inventory' %}on{% endif %}">Inventory</a>
       <a href="{% url 'reference-index' %}" class="{% if nav == 'reference' %}on{% endif %}">Reference</a>
+      {% if perms.shipping.sync_orders or perms.shipping.build_pools %}<a href="{% url 'shipping' %}" class="{% if nav == 'shipping' %}on{% endif %}">Shipping</a>{% endif %}
       {% if perms.auth.change_user %}<a href="{% url 'users' %}" class="{% if nav == 'users' %}on{% endif %}">Users</a>{% endif %}
     </nav>
     <form class="signout" method="post" action="{% url 'logout' %}">

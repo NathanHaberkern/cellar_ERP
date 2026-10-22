@@ -7,6 +7,9 @@ urlpatterns = [
     # JSON API (iOS later): token + session auth
     path("api/", include("cellar.api.urls")),
 
+    # Shipping (C7 -> FedEx/UPS labels)
+    path("shipping/", include("shipping.urls")),
+
     # HTMX front end (browser now): session auth, server-rendered
     path("", include("cellar.web.urls")),
 

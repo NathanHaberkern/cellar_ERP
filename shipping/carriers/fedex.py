@@ -4,6 +4,7 @@ Endpoints (sandbox / production share paths):
     POST /oauth/token                 client_credentials
     POST /ship/v1/shipments           create shipment, labels inline (base64)
     PUT  /ship/v1/shipments/cancel    void
+    POST /address/v1/addresses/resolve  address validation + residential/business
 
 Alcohol: FedEx puts it at PACKAGE level --
     packageSpecialServices.specialServiceTypes += ["ALCOHOL", "SIGNATURE_OPTION"]
@@ -25,8 +26,8 @@ from decimal import Decimal, InvalidOperation
 import requests
 from django.core.cache import cache
 
-from .base import (CarrierAdapter, CarrierConfigError, CarrierError, LabelDocumentData,
-                   LabelRequest, LabelResult)
+from .base import (Address, AddressValidation, CarrierAdapter, CarrierConfigError,
+                   CarrierError, LabelDocumentData, LabelRequest, LabelResult)
 
 log = logging.getLogger(__name__)
 
@@ -205,6 +206,84 @@ class FedExAdapter(CarrierAdapter):
         if not (body.get("output") or {}).get("cancelledShipment"):
             raise CarrierError(f"FedEx did not cancel {tracking_number}", details=body)
         return body
+
+
+    # --- address validation -------------------------------------------------
+
+    def validate_address(self, address: Address) -> AddressValidation:
+        body = self._call("POST", "/address/v1/addresses/resolve", {
+            "addressesToValidate": [{"address": {
+                "streetLines": [s for s in (address.street1, address.street2) if s],
+                "city": address.city, "stateOrProvinceCode": address.state,
+                "postalCode": address.postal_code, "countryCode": address.country or "US",
+            }}]})
+        return parse_address_response(body, address)
+
+
+def _squash(v):
+    return "".join(ch for ch in (v or "").upper() if ch.isalnum())
+
+
+def _truthy(v):
+    return v is True or str(v).strip().lower() == "true"
+
+
+# FedEx attribute -> problem shown to the reviewer when it's true.
+_BAD_ATTRS = {
+    "SuiteRequiredButMissing": "Suite/apt number required but missing",
+    "InvalidSuiteNumber": "Suite/apt number not valid for this building",
+    "InterpolatedStreetAddress": "Street number estimated, not confirmed",
+    "MultipleMatches": "Matches more than one address",
+    "POBox": "PO Box (carriers can't deliver wine there)",
+}
+
+
+def parse_address_response(body: dict, original: Address) -> AddressValidation:
+    """Turn FedEx's resolve response into an AddressValidation.
+
+    Defensive by design: FedEx returns attribute values as "true"/"false"
+    strings, sometimes omits parsedPostalCode, and the sandbox returns canned
+    data. Anything missing is treated as "not confirmed", which sends the order
+    to review rather than letting a bad address through.
+    """
+    resolved_list = (body.get("output") or {}).get("resolvedAddresses") or []
+    if not resolved_list:
+        return AddressValidation(resolved=False, suggested=None,
+                                 issues=["FedEx returned no match"], raw=body)
+    r = resolved_list[0]
+    attrs = r.get("attributes") or {}
+    issues = [msg for key, msg in _BAD_ATTRS.items() if _truthy(attrs.get(key))]
+    resolved = _truthy(attrs.get("Resolved", "false"))
+    if not resolved:
+        issues.insert(0, "FedEx could not resolve this address")
+    elif "DPV" in attrs and not _truthy(attrs.get("DPV")):
+        issues.insert(0, "Not a confirmed delivery point")
+    for m in r.get("customerMessages") or []:
+        code = m.get("code") or m.get("message")
+        if code and code not in issues and "STANDARDIZED" not in str(code).upper():
+            issues.append(str(code))
+
+    parsed = r.get("parsedPostalCode") or {}
+    postal = parsed.get("base") or r.get("postalCode") or original.postal_code
+    lines = r.get("streetLinesToken") or r.get("streetLines") or []
+    if len(lines) > 1:
+        street2 = " ".join(lines[1:])
+    elif lines and original.street2 and _squash(original.street2) in _squash(lines[0]):
+        street2 = ""             # FedEx folded the apt/suite into line 1
+    else:
+        street2 = original.street2
+    suggested = Address(
+        name=original.name, company=original.company, phone=original.phone,
+        email=original.email,
+        street1=(lines[0] if lines else original.street1),
+        street2=street2,
+        city=r.get("city") or original.city,
+        state=r.get("stateOrProvinceCode") or original.state,
+        postal_code=postal, country=r.get("countryCode") or original.country,
+    )
+    return AddressValidation(resolved=resolved, suggested=suggested,
+                             classification=(r.get("classification") or "UNKNOWN").upper(),
+                             issues=issues, raw=body)
 
 
 # --- helpers ----------------------------------------------------------------
