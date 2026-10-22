@@ -46,6 +46,9 @@ from decimal import Decimal
 
 PORT_CLUB_RE = re.compile(r"port\s+club\s+volume", re.I)
 UPS_STORE_RE = re.compile(r"\bups\s+store\b|\bthe\s+ups\s+store\b", re.I)
+# "PMB 123" (private mailbox) is how UPS Store and other mailbox-store addresses
+# are written when the store name is left off -- e.g. #60869 (Oct 2026).
+PMB_RE = re.compile(r"\bP\.?\s*M\.?\s*B\b", re.I)
 MAGNUM_MIN_ML = 1500
 
 FEDEX = "fedex"
@@ -91,6 +94,7 @@ class OrderData:
     compliance_status: str = ""
     requested_ship_date: date | None = None
     customer_id: str = ""
+    carrier_override: str = ""       # "", "fedex" or "ups" -- set by hand on the order
 
     @property
     def bottles(self) -> int:
@@ -249,16 +253,26 @@ def recipient_key(o) -> tuple:
 # --- carrier routing -------------------------------------------------------------
 
 def is_ups_store(o) -> bool:
-    return any(UPS_STORE_RE.search(v or "") for v in (o.company, o.street1, o.street2, o.name))
+    fields = (o.company, o.street1, o.street2, o.name)
+    return any(UPS_STORE_RE.search(v or "") or PMB_RE.search(v or "") for v in fields)
 
 
 def route(o, restricted_states) -> tuple[str, str]:
-    """(carrier, reason). The reason is shown to the packer."""
+    """(carrier, reason). The reason is shown to the packer.
+
+    A hand-set override wins, except that FedEx can never be forced into a
+    FedEx-restricted state.
+    """
     state = (o.state or "").upper()
     if state in set(restricted_states):
         return UPS, f"FedEx-restricted state ({state})"
+    override = getattr(o, "carrier_override", "")
+    if override == UPS:
+        return UPS, "set to UPS by hand"
+    if override == FEDEX:
+        return FEDEX, "set to FedEx by hand"
     if is_ups_store(o):
-        return UPS, "UPS Store address"
+        return UPS, "UPS Store / mailbox address"
     return FEDEX, ""
 
 

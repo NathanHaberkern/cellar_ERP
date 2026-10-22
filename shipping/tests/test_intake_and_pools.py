@@ -369,6 +369,16 @@ class ShippingPageTests(TestCase):
         self.assertContains(resp, "Built 1 pool")
         self.assertEqual(PackPool.objects.count(), 1)
 
+    def test_ship_via_override(self):
+        sync([c7_order(1)])
+        o = ShipOrder.objects.get()
+        intake.validate_order(o, FakeAV())
+        self.client.force_login(self.packer)
+        self.assertContains(self.client.get(reverse("shipping")), "Ship via")
+        self.client.post(reverse("shipping-order-action", args=[o.pk, "carrier"]), {"value": "ups"})
+        made, _ = pools.build_pools(today=date(2026, 10, 21))
+        self.assertEqual(made[0].carrier, "ups")
+
     def test_address_edit_form(self):
         sync([c7_order(1)])
         o = ShipOrder.objects.get()

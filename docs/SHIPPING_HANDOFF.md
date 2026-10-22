@@ -20,7 +20,7 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | Tranche | Scope | State |
 |---|---|---|
 | 1 | App skeleton, models, users/permissions page, FedEx adapter, box seed | **Built.** Sandbox label printed (2-Day, no alcohol). |
-| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Built** (236 tests pass). Exit gate pending: Nate runs `shipping_replay`. |
+| 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Done.** Exit gate passed Oct 21 (replay). 241 tests. |
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Queue/pool/print pages, void, C7 fulfillment writeback, low-volume live test | — |
 | 5 | UPS adapter; daily tracking sync + delivery-exception queue (both carriers) | — |
@@ -54,6 +54,12 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   wired** into `cellar/services/daily_plan.draft_items` — one line, Nate said "eventually".
 - **Combining:** same recipient name + exact same address (normalized: case, St/Street,
   ZIP+4) → one shipment, boxes combined. Same address, different name → separate, same pool.
+- **UPS Store:** routed UPS when "UPS Store" or a "PMB" line appears in name/company/street;
+  plus a per-order "Ship via" override (Auto/FedEx/UPS) — FedEx never forced into a
+  restricted state. (#60869 was a UPS Store with no store name.)
+- **Exit gate passed (Oct 21):** replay of 270 Fall club orders — boxes 260/269, the 9 "misses"
+  were C7 tracking-number mix-ups (other orders' tracking pasted in); combining all match;
+  carrier 1 miss (#60869, UPS Store → fixed above). Default pool at 29 cases is OK (no split).
 - **Box fit:** magnum alone; "Port Club Volume" items in Port box; rest fills 12s then closest.
 - **Pools:** carrier first; Default pool = exactly 1 each of `SHIP_DEFAULT_CLUB_SKUS`;
   rest sorted by box/SKU signature, split evenly near 20 **12-bottle cases** (~240 bottles,
@@ -173,9 +179,8 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 
 ## 6. First steps for the next session
 
-1. `git pull`; confirm Nate ran `migrate` and `shipping_replay`. Read
-   `label_output/shipping_replay.txt` (stage it from his folder) — box-count, combining and
-   carrier differences are the Tranche 2 exit gate. Fix rule gaps it shows.
+1. Tranche 2 done except a live check: first real Pull orders. FedEx keys are SANDBOX, so
+   address validation results may be canned until production keys (Tranche 3).
 3. First live **Pull orders**: check FedEx address-validation results look sane (review
    queue not flooded by formatting); adjust `_material_differences` / parse if needed.
 4. FedEx sandbox alcohol + Ground still blocked (Nate to call FedEx) → Tranche 3 cert label.

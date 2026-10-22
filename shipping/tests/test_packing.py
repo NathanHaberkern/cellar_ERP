@@ -92,7 +92,26 @@ class RoutingTests(SimpleTestCase):
         o = order(1, 4, street="123 Main St", state="TX")
         o.company = "The UPS Store #1234"
         self.assertTrue(is_ups_store(o))
-        self.assertEqual(route(o, RESTRICTED), ("ups", "UPS Store address"))
+        self.assertEqual(route(o, RESTRICTED), ("ups", "UPS Store / mailbox address"))
+
+
+class OverrideTests(SimpleTestCase):
+    def test_pmb_address_goes_ups(self):
+        o = order(1, 4, street="2425 W Kettleman Ln Ste 4 PMB 123")
+        self.assertEqual(route(o, RESTRICTED), ("ups", "UPS Store / mailbox address"))
+
+    def test_hand_override(self):
+        o = order(1, 4)
+        o.carrier_override = "ups"
+        self.assertEqual(route(o, RESTRICTED)[0], "ups")
+        o = order(2, 4, street="1 Main St PMB 9")
+        o.carrier_override = "fedex"
+        self.assertEqual(route(o, RESTRICTED)[0], "fedex")
+
+    def test_fedex_never_forced_into_restricted_state(self):
+        o = order(1, 4, state="CO")
+        o.carrier_override = "fedex"
+        self.assertEqual(route(o, RESTRICTED)[0], "ups")
 
 
 class CombiningTests(SimpleTestCase):

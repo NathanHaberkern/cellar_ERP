@@ -97,6 +97,9 @@ def order_action(request, pk, action):
         elif action == "override":
             _need(request, OVERRIDE_COMPLIANCE)
             intake.override_compliance(order, request.user, note)
+        elif action == "carrier":
+            _need(request, SYNC_ORDERS)
+            intake.set_carrier_override(order, request.POST.get("value", ""))
         elif action == "residential":
             _need(request, SYNC_ORDERS)
             value = {"yes": True, "no": False}.get(request.POST.get("value"))

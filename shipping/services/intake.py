@@ -344,6 +344,13 @@ def edit_address(order: ShipOrder, user, fields: dict, adapter=None):
     return validate_order(order, adapter)
 
 
+def set_carrier_override(order: ShipOrder, value: str):
+    if value not in ("", "fedex", "ups"):
+        raise ValueError(f"Unknown carrier {value!r}")
+    order.carrier_override = value
+    order.save(update_fields=["carrier_override", "synced_at"])
+
+
 def set_residential(order: ShipOrder, value: bool | None):
     order.ship_residential = value
     order.save(update_fields=["ship_residential", "synced_at"])
@@ -413,5 +420,6 @@ def to_order_data(order: ShipOrder) -> OrderData:
         country=order.ship_country, is_club=order.is_club, club_name=order.club_name,
         club_package=order.club_package, compliance_status=order.compliance_status,
         requested_ship_date=order.requested_ship_date, customer_id=order.c7_customer_id,
+        carrier_override=order.carrier_override,
         lines=[LineData(sku=ln.sku, title=ln.title, quantity=ln.quantity, ml=ln.ml,
                         bottles_per_unit=ln.bottles_per_unit) for ln in order.lines.all()])

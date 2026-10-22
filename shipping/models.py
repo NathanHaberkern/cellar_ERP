@@ -195,6 +195,10 @@ class ShipOrder(models.Model):
     carrier = models.CharField(max_length=10, choices=Carrier.choices, blank=True)
     carrier_reason = models.CharField(max_length=120, blank=True,
                                       help_text="why this carrier, e.g. 'FedEx-restricted state'")
+    carrier_override = models.CharField(
+        max_length=10, choices=Carrier.choices, blank=True,
+        help_text="force a carrier when the rules can't tell (e.g. a UPS Store address "
+                  "with no store name). FedEx is never forced into a restricted state.")
 
     c7_payload = models.JSONField(default=dict, blank=True,
                                   help_text="raw C7 order as last synced, for audit")
