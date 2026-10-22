@@ -382,6 +382,36 @@ class QBOClientTests(TestCase):
         with self.assertRaises(qbo.QBOConfigError):
             qbo.QBOClient()
 
+    def _live(self):
+        QBOConnection.objects.update(access_token="at-live",
+                                     access_expires_at=timezone.now() + timedelta(minutes=30))
+
+    def test_throttled_then_ok_retries_with_backoff(self):
+        self._live()
+        replies = iter([FakeResponse(429, {}), FakeResponse(503, {}),
+                        FakeResponse(200, {"Invoice": {"Id": "5"}})])
+        s = FakeSession({("GET", "/invoice/5"): lambda: next(replies)})
+        with mock.patch("integrations.qbo._sleep") as sleep:
+            self.assertEqual(qbo.QBOClient(session=s).read("Invoice", "5"), {"Id": "5"})
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [2, 5])
+
+    def test_error_carries_intuit_tid_and_gives_up_after_retries(self):
+        self._live()
+        resp = FakeResponse(500, {"Fault": {"Error": [{"Message": "boom"}]}})
+        resp.headers = {"intuit_tid": "1-abc"}
+        s = FakeSession({("GET", "/invoice/5"): resp})
+        with mock.patch("integrations.qbo._sleep"), \
+                self.assertRaisesMessage(qbo.QBOError, "intuit_tid 1-abc") as cm:
+            qbo.QBOClient(session=s).read("Invoice", "5")
+        self.assertEqual(cm.exception.intuit_tid, "1-abc")
+        self.assertEqual(len(s.calls), 1 + len(qbo.RETRY_DELAYS_S))
+
+    def test_disconnect_revokes_and_forgets(self):
+        s = FakeSession({("POST", "/tokens/revoke"): FakeResponse(200, {})})
+        self.assertTrue(qbo.disconnect(session=s))
+        self.assertEqual(s.calls[0][2]["json"], {"token": "rt-1"})
+        self.assertFalse(QBOConnection.objects.exists())
+
 
 @override_settings(QBO=QBO_CONF, **WEB)
 class QBOConnectPageTests(TestCase):
@@ -412,6 +442,15 @@ class QBOConnectPageTests(TestCase):
             resp = self.client.get(reverse("qbo-callback"),
                                    {"state": state, "code": "c", "realmId": "9130"}, follow=True)
         self.assertContains(resp, "Connected to St. Amant Winery")
+
+    def test_disconnect_page(self):
+        QBOConnection.objects.create(environment="sandbox", realm_id="9130", refresh_token="rt")
+        self.client.force_login(self.owner)
+        self.assertContains(self.client.get(reverse("qbo-status")), "Disconnect")
+        with mock.patch("integrations.qbo.disconnect", return_value=True) as dc:
+            resp = self.client.post(reverse("qbo-disconnect"), follow=True)
+        dc.assert_called_once()
+        self.assertContains(resp, "revoked")
 
     def test_complete_connect_saves_tokens(self):
         s = FakeSession({("GET", "/companyinfo/9130"): FakeResponse(

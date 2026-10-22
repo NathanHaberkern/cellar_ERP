@@ -6,4 +6,5 @@ urlpatterns = [
     path("qbo/", views.qbo_status, name="qbo-status"),
     path("qbo/connect/", views.qbo_connect, name="qbo-connect"),
     path("qbo/callback/", views.qbo_callback, name="qbo-callback"),
+    path("qbo/disconnect/", views.qbo_disconnect, name="qbo-disconnect"),
 ]

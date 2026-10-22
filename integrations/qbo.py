@@ -11,6 +11,11 @@ API facts this relies on (developer.intuit.com):
                 https://sandbox-quickbooks.api.intuit.com). Query: GET query?query=SELECT...
                 paged with STARTPOSITION / MAXRESULTS (max 1000).
                 Sparse update: POST invoice {"Id", "SyncToken", "sparse": true, ...}.
+    Revoke      POST https://developer.api.intuit.com/v2/oauth2/tokens/revoke {"token": ...}
+    Errors      every response carries an `intuit_tid` header; it goes into each error
+                and log line so Intuit support can trace a failed call. 429 (throttled)
+                and 500/502/503/504 are retried with backoff; a write with a stale
+                SyncToken fails rather than applying twice, so retrying writes is safe.
 
 App credentials come only from settings.QBO (the environment). The Connect page
 (integrations/views.py) does the one-time consent and saves the first tokens.
@@ -19,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -31,19 +37,24 @@ log = logging.getLogger(__name__)
 
 AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2"
 TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
 API_BASE = {"sandbox": "https://sandbox-quickbooks.api.intuit.com",
             "production": "https://quickbooks.api.intuit.com"}
 SCOPE = "com.intuit.quickbooks.accounting"
 MINOR_VERSION = "75"
 TIMEOUT_S = 30
 PAGE = 1000
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+RETRY_DELAYS_S = (2, 5, 15)
+_sleep = time.sleep                      # patched in tests
 
 
 class QBOError(Exception):
-    def __init__(self, message, status_code=None, body=None):
+    def __init__(self, message, status_code=None, body=None, intuit_tid=""):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+        self.intuit_tid = intuit_tid
 
 
 class QBOConfigError(QBOError):
@@ -121,6 +132,33 @@ def complete_connect(code: str, realm_id: str, session=None):
     return conn
 
 
+def disconnect(session=None) -> bool:
+    """Revoke the tokens at Intuit and forget the connection. Returns True if
+    Intuit confirmed the revoke; the local row is deleted either way."""
+    conn = connection()
+    if conn is None:
+        return False
+    c = _conf()
+    revoked = False
+    try:
+        resp = (session or requests).post(
+            REVOKE_URL, json={"token": conn.refresh_token}, timeout=TIMEOUT_S,
+            auth=(c["CLIENT_ID"], c["CLIENT_SECRET"]),
+            headers={"Accept": "application/json", "Content-Type": "application/json"})
+        revoked = resp.status_code == 200
+        if not revoked:
+            log.warning("QBO revoke returned HTTP %s (intuit_tid %s)", resp.status_code,
+                        _tid(resp))
+    except requests.RequestException as e:
+        log.warning("QBO revoke failed: %s", e)
+    conn.delete()
+    return revoked
+
+
+def _tid(resp) -> str:
+    return (getattr(resp, "headers", None) or {}).get("intuit_tid", "")
+
+
 def connection():
     from integrations.models import QBOConnection
     return QBOConnection.objects.filter(environment=settings.QBO["ENV"]).first()
@@ -156,14 +194,23 @@ class QBOClient:
 
     def request(self, method, path, *, params=None, json=None):
         params = dict(params or {}, minorversion=MINOR_VERSION)
-        for attempt in (1, 2):
+        refreshed, delays = False, iter(RETRY_DELAYS_S)
+        while True:
             resp = self.session.request(
                 method, f"{self.base}/{path.lstrip('/')}", params=params, json=json,
                 timeout=TIMEOUT_S,
-                headers={"Authorization": f"Bearer {self._access_token(force=attempt == 2)}",
+                headers={"Authorization": f"Bearer {self._access_token(force=refreshed)}",
                          "Accept": "application/json", "Content-Type": "application/json"})
-            if resp.status_code == 401 and attempt == 1:
-                continue                     # token revoked early: refresh once and retry
+            if resp.status_code == 401 and not refreshed:
+                refreshed = True             # token revoked early: refresh once and retry
+                continue
+            if resp.status_code in RETRY_STATUSES:
+                delay = next(delays, None)
+                if delay is not None:
+                    log.warning("QBO %s %s -> %s (intuit_tid %s), retrying in %ss", method,
+                                path, resp.status_code, _tid(resp), delay)
+                    _sleep(delay)
+                    continue
             break
         try:
             body = resp.json()
@@ -172,8 +219,12 @@ class QBOClient:
         if resp.status_code >= 400 or body.get("Fault"):
             errs = ((body.get("Fault") or {}).get("Error") or [{}])
             msg = errs[0].get("Detail") or errs[0].get("Message") or f"HTTP {resp.status_code}"
-            raise QBOError(f"QBO {method} {path} -> {resp.status_code}: {msg}",
-                           resp.status_code, body)
+            tid = _tid(resp)
+            log.error("QBO %s %s -> %s: %s (intuit_tid %s)", method, path, resp.status_code,
+                      msg, tid)
+            raise QBOError(f"QBO {method} {path} -> {resp.status_code}: {msg}"
+                           + (f" (intuit_tid {tid})" if tid else ""),
+                           resp.status_code, body, intuit_tid=tid)
         return body
 
     def get(self, path, params=None):

@@ -152,16 +152,17 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 - **QBO client** `integrations/qbo.py` (shared, like commerce7.py) + app `integrations`
   with `QBOConnection` (the one DB row holding the rotating refresh token — Intuit
   replaces it on every refresh, so it can't live in env). Connect once at
-  `/integrations/qbo/` (superuser): Intuit consent → callback saves tokens.
+  `/integrations/qbo/` (superuser): Intuit consent → callback saves tokens. Disconnect
+  there revokes the tokens at Intuit. 429/5xx retried with backoff (2s, 5s, 15s); every
+  error carries Intuit's `intuit_tid`. **Sandbox connect + pull verified by Nate 2026-10-22.**
 - **GLS adapter** `shipping/carriers/gls.py` — **written ahead of GLS's API guide**
   (no public docs; GSO-era REST shape). Every path/field is in that one file.
   `gls_test_label --check`, then `gls_test_label` (12 Bottle to a Lodi test business).
   Service CPS, adult signature, label PDF (image labels converted to 4x6).
 - **Nate's actions:** (1) GLS account + API guide + web-services user/password →
   `GLS_ACCOUNT_NUMBER/USERNAME/PASSWORD` (send me the guide to correct field names);
-  (2) Intuit developer app (developer.intuit.com, Accounting scope) →
-  `QBO_CLIENT_ID/QBO_CLIENT_SECRET`, add redirect URI
-  `http://localhost:8000/integrations/qbo/callback/`, then Connect; (3) add "GLS" to
+  (2) ~~Intuit developer app + sandbox connect~~ done 2026-10-22; production keys need
+  the app hosted on https (App URLs, redirect URI) plus public EULA/privacy pages; (3) add "GLS" to
   QBO Shipping methods and use it on wholesale invoices.
 
 ## 3. Files (all new unless noted)

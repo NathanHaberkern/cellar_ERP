@@ -65,3 +65,20 @@ def qbo_callback(request):
         return redirect("qbo-status")
     messages.success(request, f"Connected to {conn.company_name or 'QuickBooks'} ({conn.realm_id}).")
     return redirect("qbo-status")
+
+
+@login_required
+@require_POST
+def qbo_disconnect(request):
+    _superuser(request)
+    try:
+        revoked = qbo.disconnect()
+    except qbo.QBOConfigError as e:
+        messages.error(request, str(e))
+        return redirect("qbo-status")
+    if revoked:
+        messages.success(request, "Disconnected from QuickBooks and revoked the app's access.")
+    else:
+        messages.error(request, "Disconnected here, but Intuit didn't confirm the revoke -- "
+                                "also remove the app under QuickBooks > Apps > My apps.")
+    return redirect("qbo-status")
