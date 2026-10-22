@@ -23,7 +23,7 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
 | 2 | C7 order sync, FedEx address validation + review queue, carrier routing, pooling, box fit | **Done.** Exit gate passed Oct 21 (replay). |
 | 3 | FedEx label certification | Blocked on FedEx (below). |
 | 4 | Pool page: buy labels, print 4x6 PDFs, void, post tracking to C7 | **Built Oct 22** (271 tests). Needs a live test. |
-| 5 | UPS adapter ✓ built Oct 22 (needs UPS keys + `ups_test_label`); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
+| 5 | UPS adapter ✓ built Oct 22, CIE test label verified Oct 22 (prints upright, 4x6); daily tracking sync + delivery-exception queue (both carriers) — not started | Half |
 | 6 | Later: freight cost → QBO export, ZPL direct print, hold-at-location (same-state only) | — |
 
 ### Tranche 1 exit gate — partly met
@@ -120,15 +120,13 @@ cost (~$200–250/yr saved) and so labels, tracking and freight cost live in our
   UPS alcohol contract on the account); adult signature = package
   `DeliveryConfirmation.DCISType 3`; negotiated rate preferred over published.
 - UPS has no PDF labels: we ask for **GIF and convert to a 4x6 PDF** (crop the doc
-  tab, rotate to portrait). **Check orientation on the first test label**; flip
-  `GIF_ROTATE` in `ups.py` if it prints upside down.
+  tab, rotate to portrait). Verified Oct 22 on the first CIE label: formatted
+  correctly, so `GIF_ROTATE = -90` is right.
 - `python manage.py ups_test_label --check` (token only), then `ups_test_label`
   (1 Bottle, alcohol + adult sig), `--box "4 Bottle" --bottles 4 --home`,
   `--no-alcohol`, `--void 1Z...`. Refuses unless UPS_ENV=sandbox.
-- **Nate's action:** create a UPS developer app (developer.ups.com) with the
-  Shipping + OAuth products on account, put `UPS_CLIENT_ID / UPS_CLIENT_SECRET /
-  UPS_ACCOUNT_NUMBER` in `.env`, and confirm the account has the UPS alcohol
-  shipping agreement.
+- UPS developer app keys are in Nate's `.env` (Oct 22). Still to confirm before going
+  live: the production UPS account has the UPS alcohol shipping agreement.
 
 ## 3. Files (all new unless noted)
 
@@ -239,8 +237,8 @@ A magnum ships alone in its Magnum box; the rest of the order boxes normally (2 
 1. **FedEx:** sandbox alcohol + Ground still blocked (Nate to call FedEx, section 2) →
    Tranche 3 certification label → production keys. With production keys, also
    verify real address validation on a Pull (sandbox returned canned Chilean data).
-2. **UPS:** Nate adds UPS keys → `ups_test_label --check`, then a test label; check
-   the 4x6 orientation and that it scans.
+2. **UPS:** keys in Nate's `.env`; CIE test label verified Oct 22. Next: production
+   UPS keys (`UPS_ENV=production`) for the live test.
 3. **Live test (cutover rehearsal), low-volume week:** production keys, Pull →
    Build pools → open a pool → Buy labels → Print all → pack → Post tracking to C7.
    Check in C7 that the order shows Fulfilled with the right carrier name and
